@@ -34,6 +34,7 @@ class ClipboardQuickPanel(QWidget):
         self._refresh_entries()
 
     def _build_ui(self) -> None:
+        palette = self.services.theme_manager.current_palette()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
@@ -65,7 +66,7 @@ class ClipboardQuickPanel(QWidget):
         layout.addWidget(shell, 1)
 
         hint = QLabel("Enter or double-click to copy. Esc hides the panel.")
-        hint.setStyleSheet("font-size: 12px; color: palette(mid);")
+        hint.setStyleSheet(f"font-size: 12px; color: {palette.text_muted};")
         layout.addWidget(hint)
 
     def toggle(self) -> None:

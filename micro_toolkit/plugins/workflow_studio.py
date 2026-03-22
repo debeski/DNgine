@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
 
 
 class WorkflowStudioPlugin(QtPlugin):
@@ -56,6 +57,7 @@ class WorkflowStudioPage(QWidget):
         self._reload_workflows()
         self._apply_texts()
         self.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -81,11 +83,16 @@ class WorkflowStudioPage(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
 
+        self.list_card = QFrame()
+        list_card_layout = QVBoxLayout(self.list_card)
+        list_card_layout.setContentsMargins(18, 16, 18, 16)
+        list_card_layout.setSpacing(10)
+
         self.list_label = QLabel()
-        left_layout.addWidget(self.list_label)
+        list_card_layout.addWidget(self.list_label)
         self.workflow_list = QListWidget()
         self.workflow_list.currentTextChanged.connect(self._load_selected_workflow)
-        left_layout.addWidget(self.workflow_list, 1)
+        list_card_layout.addWidget(self.workflow_list, 1)
 
         list_buttons = QHBoxLayout()
         self.reload_button = QPushButton()
@@ -94,7 +101,8 @@ class WorkflowStudioPage(QWidget):
         self.delete_button = QPushButton()
         self.delete_button.clicked.connect(self._delete_current_workflow)
         list_buttons.addWidget(self.delete_button)
-        left_layout.addLayout(list_buttons)
+        list_card_layout.addLayout(list_buttons)
+        left_layout.addWidget(self.list_card, 1)
         splitter.addWidget(left_panel)
 
         right_panel = QWidget()
@@ -145,10 +153,15 @@ class WorkflowStudioPage(QWidget):
 
         self.reference_label = QLabel()
         right_layout.addWidget(self.reference_label)
+        self.reference_card = QFrame()
+        reference_layout = QVBoxLayout(self.reference_card)
+        reference_layout.setContentsMargins(18, 16, 18, 16)
+        reference_layout.setSpacing(10)
         self.command_reference = QPlainTextEdit()
         self.command_reference.setReadOnly(True)
         self.command_reference.setMaximumBlockCount(500)
-        right_layout.addWidget(self.command_reference, 1)
+        reference_layout.addWidget(self.command_reference, 1)
+        right_layout.addWidget(self.reference_card, 1)
 
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 0)
@@ -278,6 +291,7 @@ class WorkflowStudioPage(QWidget):
         self.command_reference.setPlainText("\n\n".join(lines))
 
     def _apply_texts(self) -> None:
+        self._apply_theme_styles()
         self.title_label.setText(self._pt("title", "Workflows"))
         self.description_label.setText(
             self._pt(
@@ -303,3 +317,18 @@ class WorkflowStudioPage(QWidget):
         self.run_button.setText(self._pt("run", "Run workflow"))
         self.reference_label.setText(self._pt("reference", "Available commands"))
         self._refresh_command_reference()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        for frame in (self.list_card, self.meta_card, self.reference_card):
+            frame.setStyleSheet(card_style(palette))
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.list_label.setStyleSheet(section_title_style(palette))
+        self.name_label.setStyleSheet(section_title_style(palette, size=14))
+        self.description_meta_label.setStyleSheet(section_title_style(palette, size=14))
+        self.steps_label.setStyleSheet(section_title_style(palette))
+        self.reference_label.setStyleSheet(section_title_style(palette))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()

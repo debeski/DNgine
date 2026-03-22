@@ -29,7 +29,9 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.clipboard_store import ClipboardEntry, ClipboardStore
+from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 
 
 TYPE_LABELS = {
@@ -61,7 +63,7 @@ def build_preview(text: str, length: int = 88) -> str:
 
 
 class ClipboardTableModel(QAbstractTableModel):
-    HEADERS = ["Type", "Label", "Preview", "Captured"]
+    HEADERS = ["Type", "Label", "Preview", "Captured", "Actions"]
 
     def __init__(self):
         super().__init__()
@@ -95,6 +97,8 @@ class ClipboardTableModel(QAbstractTableModel):
                 return row.preview
             if index.column() == 3:
                 return row.created_at
+            if index.column() == 4:
+                return ""
         if role == Qt.ItemDataRole.UserRole:
             return row
         return None
@@ -109,6 +113,12 @@ class ClipboardTableModel(QAbstractTableModel):
     def row_at(self, row_index: int) -> ClipboardRow | None:
         if 0 <= row_index < len(self._rows):
             return self._rows[row_index]
+        return None
+
+    def row_for_entry(self, entry_id: int) -> ClipboardRow | None:
+        for row in self._rows:
+            if row.entry_id == entry_id:
+                return row
         return None
 
 
@@ -203,28 +213,24 @@ class ClipboardManagerPage(QWidget):
         self._wire_events()
         self._refresh_entries()
         self._bootstrap_existing_clipboard()
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 28, 28, 28)
         outer.setSpacing(16)
 
-        title = QLabel("Clipboard Manager")
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
-        outer.addWidget(title)
+        self.title_label = QLabel("Clipboard Manager")
+        outer.addWidget(self.title_label)
 
-        description = QLabel(
+        self.description_label = QLabel(
             "This clipboard workspace uses native clipboard signals, a persistent SQLite store, label management, and a table/detail layout instead of an ad-hoc row pool."
         )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #43535c;")
-        outer.addWidget(description)
+        self.description_label.setWordWrap(True)
+        outer.addWidget(self.description_label)
 
-        toolbar_card = QFrame()
-        toolbar_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        toolbar = QGridLayout(toolbar_card)
+        self.toolbar_card = QFrame()
+        toolbar = QGridLayout(self.toolbar_card)
         toolbar.setContentsMargins(16, 14, 16, 14)
         toolbar.setHorizontalSpacing(10)
         toolbar.setVerticalSpacing(10)
@@ -255,7 +261,7 @@ class ClipboardManagerPage(QWidget):
         self.clear_history_button = QPushButton("Clear History")
         toolbar.addWidget(self.clear_history_button, 1, 3)
 
-        outer.addWidget(toolbar_card)
+        outer.addWidget(self.toolbar_card)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         outer.addWidget(splitter, 1)
@@ -277,6 +283,7 @@ class ClipboardManagerPage(QWidget):
         self.table_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table_view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table_view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         left_layout.addWidget(self.table_view, 1)
 
@@ -287,28 +294,13 @@ class ClipboardManagerPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(12)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel("Select a clipboard item to inspect and act on it.")
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        right_layout.addWidget(summary_card)
-
-        detail_actions = QHBoxLayout()
-        detail_actions.setSpacing(10)
-        self.copy_button = QPushButton("Copy Selected")
-        detail_actions.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.label_button = QPushButton("Set Label")
-        detail_actions.addWidget(self.label_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.delete_button = QPushButton("Delete Selected")
-        detail_actions.addWidget(self.delete_button, 0, Qt.AlignmentFlag.AlignLeft)
-        detail_actions.addStretch(1)
-        right_layout.addLayout(detail_actions)
+        right_layout.addWidget(self.summary_card)
 
         self.detail_view = QPlainTextEdit()
         self.detail_view.setReadOnly(True)
@@ -318,6 +310,7 @@ class ClipboardManagerPage(QWidget):
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
+        self._apply_theme_styles()
 
     def _wire_events(self) -> None:
         self.search_input.textChanged.connect(self._refresh_entries)
@@ -327,12 +320,20 @@ class ClipboardManagerPage(QWidget):
         self.capture_button.clicked.connect(self._capture_current_clipboard)
         self.manage_labels_button.clicked.connect(self._manage_labels)
         self.clear_history_button.clicked.connect(self._clear_history)
-        self.copy_button.clicked.connect(self._copy_selected)
-        self.label_button.clicked.connect(self._set_label_for_selected)
-        self.delete_button.clicked.connect(self._delete_selected)
         self.table_view.selectionModel().selectionChanged.connect(self._update_detail_panel)
         self.table_view.customContextMenuRequested.connect(self._show_context_menu)
         self.clipboard.dataChanged.connect(self._handle_clipboard_changed)
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        for frame in (self.toolbar_card, self.summary_card):
+            frame.setStyleSheet(card_style(palette))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _bootstrap_existing_clipboard(self) -> None:
         # Capture the current clipboard text once at startup without duplicating future self-copies.
@@ -374,6 +375,47 @@ class ClipboardManagerPage(QWidget):
         self.model.set_rows(rows)
         self._refresh_label_filter()
         self._update_detail_panel()
+        QTimer.singleShot(0, self._rebuild_row_action_widgets)
+
+    def _rebuild_row_action_widgets(self) -> None:
+        for proxy_row in range(self.proxy_model.rowCount()):
+            proxy_index = self.proxy_model.index(proxy_row, 0)
+            source_index = self.proxy_model.mapToSource(proxy_index)
+            row = self.model.row_at(source_index.row())
+            if row is None:
+                continue
+            action_index = self.proxy_model.index(proxy_row, 4)
+            self.table_view.setIndexWidget(action_index, self._row_action_widget(row))
+
+    def _row_action_widget(self, row: ClipboardRow) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        copy_button = QToolButton()
+        copy_button.setAutoRaise(True)
+        copy_button.setIcon(icon_from_name("copy", self) or self.style().standardIcon(self.style().StandardPixmap.SP_FileIcon))
+        copy_button.setToolTip("Copy item")
+        copy_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._copy_entry(entry_id))
+        layout.addWidget(copy_button)
+
+        label_button = QToolButton()
+        label_button.setAutoRaise(True)
+        label_button.setIcon(icon_from_name("tag", self) or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogDetailedView))
+        label_button.setToolTip("Set label")
+        label_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._set_label_for_entry(entry_id))
+        layout.addWidget(label_button)
+
+        delete_button = QToolButton()
+        delete_button.setAutoRaise(True)
+        delete_button.setIcon(icon_from_name("trash", self) or self.style().standardIcon(self.style().StandardPixmap.SP_TrashIcon))
+        delete_button.setToolTip("Delete item")
+        delete_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._delete_entry(entry_id))
+        layout.addWidget(delete_button)
+
+        layout.addStretch(1)
+        return container
 
     def _refresh_label_filter(self) -> None:
         current_label = self.label_filter.currentData()
@@ -427,6 +469,12 @@ class ClipboardManagerPage(QWidget):
         row = self._selected_row()
         if row is None:
             return
+        self._copy_entry(row.entry_id)
+
+    def _copy_entry(self, entry_id: int) -> None:
+        row = self.model.row_for_entry(entry_id)
+        if row is None:
+            return
         self._suspend_capture_once = True
         self.clipboard.setText(row.content)
         self._last_seen_text = row.content.strip()
@@ -434,6 +482,12 @@ class ClipboardManagerPage(QWidget):
 
     def _set_label_for_selected(self) -> None:
         row = self._selected_row()
+        if row is None:
+            return
+        self._set_label_for_entry(row.entry_id)
+
+    def _set_label_for_entry(self, entry_id: int) -> None:
+        row = self.model.row_for_entry(entry_id)
         if row is None:
             return
         labels = [""] + self.store.list_labels()
@@ -455,6 +509,12 @@ class ClipboardManagerPage(QWidget):
 
     def _delete_selected(self) -> None:
         row = self._selected_row()
+        if row is None:
+            return
+        self._delete_entry(row.entry_id)
+
+    def _delete_entry(self, entry_id: int) -> None:
+        row = self.model.row_for_entry(entry_id)
         if row is None:
             return
         self.store.delete_entry(row.entry_id)

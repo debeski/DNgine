@@ -126,7 +126,10 @@ class HotkeyHelperManager(QObject):
             self._helper_enabled_for_session = True
             return False, "No global hotkey bindings are currently configured."
         self._helper_enabled_for_session = True
-        return self._launch_helper(bindings)
+        success, message = self._launch_helper(bindings)
+        if not success:
+            self._helper_enabled_for_session = False
+        return success, message
 
     def disable_for_session(self) -> None:
         self._helper_enabled_for_session = False
@@ -197,12 +200,17 @@ class HotkeyHelperManager(QObject):
 
         command = [
             pkexec_path,
+            *self._elevated_env_prefix(),
             *self._helper_command(),
         ]
         try:
-            self._process = subprocess.Popen(command)
+            self._process = subprocess.Popen(
+                command,
+                cwd=str(self._project_root()) if not getattr(sys, "frozen", False) else None,
+            )
         except Exception as exc:
             message = f"Unable to start the hotkey helper: {exc}"
+            self._helper_enabled_for_session = False
             self._set_active(False, message)
             return False, message
 
@@ -216,11 +224,13 @@ class HotkeyHelperManager(QObject):
                 return True, message
             if self._process.poll() is not None:
                 message = "The hotkey helper did not start. Authentication may have been cancelled."
+                self._helper_enabled_for_session = False
                 self._set_active(False, message)
                 return False, message
             time.sleep(0.1)
 
         message = "Timed out while waiting for the hotkey helper to start."
+        self._helper_enabled_for_session = False
         self._set_active(False, message)
         return False, message
 
@@ -257,6 +267,28 @@ class HotkeyHelperManager(QObject):
             "--parent-pid",
             str(os.getpid()),
         ]
+
+    def _elevated_env_prefix(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return []
+        pythonpath = self._pythonpath_value()
+        if not pythonpath:
+            return []
+        return ["env", f"PYTHONPATH={pythonpath}"]
+
+    def _pythonpath_value(self) -> str:
+        project_root = str(self._project_root())
+        existing = str(os.environ.get("PYTHONPATH") or "").strip()
+        if not existing:
+            return project_root
+        parts = [part for part in existing.split(os.pathsep) if part]
+        if project_root not in parts:
+            parts.insert(0, project_root)
+        return os.pathsep.join(parts)
+
+    @staticmethod
+    def _project_root() -> Path:
+        return Path(__file__).resolve().parents[2]
 
     def _helper_pid(self) -> int | None:
         if not self.pid_path.exists():

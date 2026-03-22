@@ -20,6 +20,7 @@ from micro_toolkit.core.plugin_manager import PluginManager
 from micro_toolkit.core.plugin_packages import PluginPackageManager
 from micro_toolkit.core.plugin_state import PluginStateManager
 from micro_toolkit.core.session_manager import SessionManager
+from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, NON_SIDEBAR_PLUGIN_IDS
 from micro_toolkit.core.shortcuts import ShortcutManager
 from micro_toolkit.core.theme import ThemeManager
 from micro_toolkit.core.tray import TrayManager
@@ -50,6 +51,9 @@ class AppLogger(QObject):
 
 
 class AppServices(QObject):
+    quick_access_changed = Signal()
+    plugin_visuals_changed = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.app_root = Path(__file__).resolve().parents[1]
@@ -117,6 +121,70 @@ class AppServices(QObject):
     def plugin_text(self, plugin_id: str, key: str, default: str | None = None, **kwargs) -> str:
         return self.plugin_manager.plugin_text(plugin_id, self.i18n.current_language(), key, default, **kwargs)
 
+    def plugin_display_name(self, spec_or_plugin_id) -> str:
+        spec = spec_or_plugin_id if hasattr(spec_or_plugin_id, "plugin_id") else self.plugin_manager.get_spec(str(spec_or_plugin_id))
+        if spec is None:
+            return str(spec_or_plugin_id)
+        default_name = spec.localized_name(self.i18n.current_language())
+        if not spec.allow_name_override:
+            return default_name
+        overrides = self.config.get("plugin_overrides") or {}
+        if not isinstance(overrides, dict):
+            return default_name
+        plugin_override = overrides.get(spec.plugin_id, {})
+        if not isinstance(plugin_override, dict):
+            return default_name
+        custom_name = str(plugin_override.get("display_name", "")).strip()
+        return custom_name or default_name
+
+    def plugin_icon_override(self, spec: PluginSpec) -> str:
+        if not spec.allow_icon_override:
+            return ""
+        overrides = self.config.get("plugin_overrides") or {}
+        if not isinstance(overrides, dict):
+            return ""
+        plugin_override = overrides.get(spec.plugin_id, {})
+        if not isinstance(plugin_override, dict):
+            return ""
+        return str(plugin_override.get("icon", "")).strip()
+
+    def plugin_override(self, plugin_id: str) -> dict[str, str]:
+        overrides = self.config.get("plugin_overrides") or {}
+        if not isinstance(overrides, dict):
+            return {"display_name": "", "icon": ""}
+        plugin_override = overrides.get(plugin_id, {})
+        if not isinstance(plugin_override, dict):
+            return {"display_name": "", "icon": ""}
+        return {
+            "display_name": str(plugin_override.get("display_name", "")).strip(),
+            "icon": str(plugin_override.get("icon", "")).strip(),
+        }
+
+    def set_plugin_override(self, plugin_id: str, *, display_name: str = "", icon: str = "") -> dict[str, str]:
+        overrides = self.config.get("plugin_overrides") or {}
+        if not isinstance(overrides, dict):
+            overrides = {}
+        current = dict(overrides.get(plugin_id, {})) if isinstance(overrides.get(plugin_id, {}), dict) else {}
+        display_name = str(display_name).strip()
+        icon = str(icon).strip()
+        if display_name:
+            current["display_name"] = display_name
+        else:
+            current.pop("display_name", None)
+        if icon:
+            current["icon"] = icon
+        else:
+            current.pop("icon", None)
+        if current:
+            overrides[plugin_id] = current
+        else:
+            overrides.pop(plugin_id, None)
+        self.config.set("plugin_overrides", overrides)
+        self.plugin_visuals_changed.emit(plugin_id)
+        if self.main_window is not None:
+            self.main_window.refresh_plugin_visuals(plugin_id)
+        return self.plugin_override(plugin_id)
+
     def attach_application(self, application) -> None:
         self.application = application
         self.i18n.apply(application)
@@ -164,6 +232,58 @@ class AppServices(QObject):
     def set_plugin_hidden(self, plugin_id: str, hidden: bool) -> None:
         self.plugin_state_manager.set_hidden(plugin_id, hidden)
         self.reload_plugins()
+
+    def pinnable_plugin_specs(self):
+        return [
+            spec
+            for spec in self.plugin_manager.sidebar_plugins()
+            if spec.plugin_id not in NON_SIDEBAR_PLUGIN_IDS
+            and spec.plugin_id != DASHBOARD_PLUGIN_ID
+        ]
+
+    def quick_access_ids(self) -> list[str]:
+        raw = self.config.get("quick_access") or []
+        if not isinstance(raw, list):
+            raw = []
+        allowed = {spec.plugin_id for spec in self.pinnable_plugin_specs()}
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for plugin_id in raw:
+            normalized = str(plugin_id).strip()
+            if not normalized or normalized not in allowed or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        return ordered
+
+    def set_quick_access_ids(self, plugin_ids: list[str]) -> list[str]:
+        normalized: list[str] = []
+        allowed = {spec.plugin_id for spec in self.pinnable_plugin_specs()}
+        seen: set[str] = set()
+        for plugin_id in plugin_ids:
+            value = str(plugin_id).strip()
+            if not value or value not in allowed or value in seen:
+                continue
+            seen.add(value)
+            normalized.append(value)
+        self.config.set("quick_access", normalized)
+        self.quick_access_changed.emit()
+        if self.main_window is not None:
+            self.main_window.refresh_sidebar()
+        return normalized
+
+    def toggle_quick_access(self, plugin_id: str) -> bool:
+        current = self.quick_access_ids()
+        if plugin_id in current:
+            updated = [item for item in current if item != plugin_id]
+            self.set_quick_access_ids(updated)
+            return False
+        current.append(plugin_id)
+        self.set_quick_access_ids(current)
+        return True
+
+    def is_quick_access(self, plugin_id: str) -> bool:
+        return plugin_id in self.quick_access_ids()
 
     def reset_command_registry(self) -> None:
         self.command_registry.clear()
@@ -435,9 +555,9 @@ class AppServices(QObject):
     def _start_hotkey_helper(self):
         bindings = self.shortcut_manager.global_binding_sequences()
         success, message = self.hotkey_helper_manager.enable_for_session(bindings)
-        self.shortcut_manager.apply()
         if not success:
             raise RuntimeError(message)
+        self.shortcut_manager.apply()
         return {"started": True, "message": message}
 
     def _stop_hotkey_helper(self):

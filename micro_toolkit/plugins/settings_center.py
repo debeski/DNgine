@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -19,10 +19,14 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
+    QStyle,
 )
 
+from micro_toolkit.core.icon_registry import icon_choices, icon_from_name
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 
 
@@ -57,10 +61,13 @@ class SettingsCenterPage(QWidget):
         self.shortcut_action_ids: list[str] = []
         self.plugin_row_map: dict[str, int] = {}
         self._building_plugin_table = False
+        self._editing_plugin_id: str | None = None
+        self._editing_snapshot: dict[str, str] = {}
         self._build_ui()
         self._populate_values()
         self._apply_texts()
         self.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -76,26 +83,20 @@ class SettingsCenterPage(QWidget):
 
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 14px; color: palette(mid);")
+        self.description_label.setStyleSheet("font-size: 14px;")
         outer.addWidget(self.description_label)
 
         self.tabs = QTabWidget()
         outer.addWidget(self.tabs, 1)
 
         self.general_tab = QWidget()
-        self.appearance_tab = QWidget()
-        self.automation_tab = QWidget()
         self.shortcuts_tab = QWidget()
         self.plugins_tab = QWidget()
         self.tabs.addTab(self.general_tab, "")
-        self.tabs.addTab(self.appearance_tab, "")
-        self.tabs.addTab(self.automation_tab, "")
         self.tabs.addTab(self.shortcuts_tab, "")
         self.tabs.addTab(self.plugins_tab, "")
 
         self._build_general_tab()
-        self._build_appearance_tab()
-        self._build_automation_tab()
         self._build_shortcuts_tab()
         self._build_plugins_tab()
 
@@ -131,12 +132,6 @@ class SettingsCenterPage(QWidget):
         self.general_note = QLabel()
         self.general_note.setWordWrap(True)
         layout.addWidget(self.general_note)
-        layout.addStretch(1)
-
-    def _build_appearance_tab(self) -> None:
-        layout = QVBoxLayout(self.appearance_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(14)
 
         self.appearance_card = QFrame()
         form = QFormLayout(self.appearance_card)
@@ -165,12 +160,6 @@ class SettingsCenterPage(QWidget):
         self.appearance_note = QLabel()
         self.appearance_note.setWordWrap(True)
         layout.addWidget(self.appearance_note)
-        layout.addStretch(1)
-
-    def _build_automation_tab(self) -> None:
-        layout = QVBoxLayout(self.automation_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(14)
 
         self.automation_card = QFrame()
         card_layout = QVBoxLayout(self.automation_card)
@@ -230,41 +219,31 @@ class SettingsCenterPage(QWidget):
         self.plugins_note.setWordWrap(True)
         layout.addWidget(self.plugins_note)
 
-        self.plugins_table = QTableWidget(0, 10)
+        self.plugins_table = QTableWidget(0, 11)
         self.plugins_table.setAlternatingRowColors(True)
         self.plugins_table.verticalHeader().setVisible(False)
         self.plugins_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.plugins_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.plugins_table, 1)
 
-        row_one = QHBoxLayout()
-        self.import_file_button = QPushButton()
-        self.import_file_button.clicked.connect(self._import_plugin_file)
-        row_one.addWidget(self.import_file_button)
-        self.import_folder_button = QPushButton()
-        self.import_folder_button.clicked.connect(self._import_plugin_folder)
-        row_one.addWidget(self.import_folder_button)
-        self.import_backup_button = QPushButton()
-        self.import_backup_button.clicked.connect(self._import_backup)
-        row_one.addWidget(self.import_backup_button)
-        row_one.addStretch(1)
-        layout.addLayout(row_one)
-
-        row_two = QHBoxLayout()
-        self.export_selected_button = QPushButton()
-        self.export_selected_button.clicked.connect(self._export_selected_plugins)
-        row_two.addWidget(self.export_selected_button)
-        self.export_all_button = QPushButton()
-        self.export_all_button.clicked.connect(self._export_all_plugins)
-        row_two.addWidget(self.export_all_button)
-        self.apply_plugin_state_button = QPushButton()
-        self.apply_plugin_state_button.clicked.connect(self._apply_plugin_states)
-        row_two.addWidget(self.apply_plugin_state_button)
-        self.refresh_plugins_button = QPushButton()
-        self.refresh_plugins_button.clicked.connect(self._populate_plugin_table)
-        row_two.addWidget(self.refresh_plugins_button)
-        row_two.addStretch(1)
-        layout.addLayout(row_two)
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        self.import_file_button = self._make_action_button("open", self._import_plugin_file)
+        actions.addWidget(self.import_file_button)
+        self.import_folder_button = self._make_action_button("folder-open", self._import_plugin_folder)
+        actions.addWidget(self.import_folder_button)
+        self.import_backup_button = self._make_action_button("download", self._import_backup)
+        actions.addWidget(self.import_backup_button)
+        self.export_selected_button = self._make_action_button("save", self._export_selected_plugins)
+        actions.addWidget(self.export_selected_button)
+        self.export_all_button = self._make_action_button("database", self._export_all_plugins)
+        actions.addWidget(self.export_all_button)
+        self.apply_plugin_state_button = self._make_action_button("check", self._apply_plugin_states)
+        actions.addWidget(self.apply_plugin_state_button)
+        self.refresh_plugins_button = self._make_action_button("sync", self._populate_plugin_table)
+        actions.addWidget(self.refresh_plugins_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
 
     def _populate_values(self) -> None:
         self.output_dir_input.setText(str(self.services.default_output_path()))
@@ -313,7 +292,8 @@ class SettingsCenterPage(QWidget):
             self.plugins_table.setRowCount(len(specs))
             self.plugins_table.setHorizontalHeaderLabels(
                 [
-                    self._pt("plugins.export", "Export"),
+                    self._pt("plugins.manage", "Select"),
+                    self._pt("plugins.icon", "Icon"),
                     self._pt("plugins.name", "Plugin"),
                     self._pt("plugins.category", "Category"),
                     self._pt("plugins.source", "Source"),
@@ -329,23 +309,24 @@ class SettingsCenterPage(QWidget):
             for row_index, spec in enumerate(specs):
                 self.plugin_row_map[spec.plugin_id] = row_index
 
-                export_item = QTableWidgetItem()
-                export_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
-                export_item.setCheckState(Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 0, export_item)
+                self.plugins_table.setCellWidget(row_index, 0, self._row_action_widget(spec, selected=False))
 
-                name_item = QTableWidgetItem(spec.localized_name(language))
+                icon_item = QTableWidgetItem(self._icon_display_text(spec))
+                icon_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self.plugins_table.setItem(row_index, 1, icon_item)
+
+                name_item = QTableWidgetItem(self.services.plugin_display_name(spec))
                 name_item.setData(Qt.ItemDataRole.UserRole, spec.plugin_id)
                 name_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self.plugins_table.setItem(row_index, 1, name_item)
+                self.plugins_table.setItem(row_index, 2, name_item)
 
                 category_item = QTableWidgetItem(spec.localized_category(language) or self._pt("plugins.standalone", "Standalone"))
                 category_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self.plugins_table.setItem(row_index, 2, category_item)
+                self.plugins_table.setItem(row_index, 3, category_item)
 
                 source_item = QTableWidgetItem(spec.source_type.title())
                 source_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self.plugins_table.setItem(row_index, 3, source_item)
+                self.plugins_table.setItem(row_index, 4, source_item)
 
                 trusted_item = QTableWidgetItem()
                 trusted_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
@@ -354,7 +335,7 @@ class SettingsCenterPage(QWidget):
                 else:
                     trusted_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 trusted_item.setCheckState(Qt.CheckState.Checked if spec.trusted else Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 4, trusted_item)
+                self.plugins_table.setItem(row_index, 5, trusted_item)
 
                 enabled_item = QTableWidgetItem()
                 enabled_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
@@ -364,7 +345,7 @@ class SettingsCenterPage(QWidget):
                 else:
                     enabled_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 enabled_item.setCheckState(Qt.CheckState.Checked if spec.enabled else Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 5, enabled_item)
+                self.plugins_table.setItem(row_index, 6, enabled_item)
 
                 hidden_item = QTableWidgetItem()
                 if spec.plugin_id != "settings_center":
@@ -372,26 +353,157 @@ class SettingsCenterPage(QWidget):
                 else:
                     hidden_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 hidden_item.setCheckState(Qt.CheckState.Checked if spec.hidden else Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 6, hidden_item)
+                self.plugins_table.setItem(row_index, 7, hidden_item)
 
                 risk_item = QTableWidgetItem(spec.risk_level.title())
                 risk_item.setToolTip(self._plugin_review_details(spec))
                 risk_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._style_risk_item(risk_item, spec.risk_level)
-                self.plugins_table.setItem(row_index, 7, risk_item)
+                self.plugins_table.setItem(row_index, 8, risk_item)
 
                 status_text = self._plugin_status_text(spec)
                 status_item = QTableWidgetItem(status_text)
                 status_item.setToolTip(self._plugin_review_details(spec))
                 status_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._style_risk_item(status_item, spec.risk_level)
-                self.plugins_table.setItem(row_index, 8, status_item)
+                self.plugins_table.setItem(row_index, 9, status_item)
 
                 path_item = QTableWidgetItem(str(spec.file_path))
                 path_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self.plugins_table.setItem(row_index, 9, path_item)
+                self.plugins_table.setItem(row_index, 10, path_item)
         finally:
             self._building_plugin_table = False
+        self.plugins_table.resizeColumnsToContents()
+
+    def _make_action_button(self, icon_name: str, handler) -> QToolButton:
+        button = QToolButton()
+        button.setAutoRaise(False)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        button.setIcon(icon_from_name(icon_name, self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+        button.setIconSize(QSize(18, 18))
+        button.setFixedSize(34, 34)
+        button.clicked.connect(handler)
+        return button
+
+    def _row_action_widget(self, spec, *, selected: bool) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        export_check = QCheckBox()
+        export_check.setChecked(selected)
+        export_check.setToolTip(self._pt("plugins.export", "Select for export"))
+        layout.addWidget(export_check)
+
+        if self._editing_plugin_id == spec.plugin_id:
+            save_button = QToolButton()
+            save_button.setAutoRaise(True)
+            save_button.setText("✓")
+            save_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            save_button.setToolTip(self._pt("plugins.row.save", "Save row edits"))
+            save_button.setStyleSheet("QToolButton { color: #1f6f46; font-weight: 800; font-size: 16px; }")
+            save_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._save_row_edit(pid))
+            layout.addWidget(save_button)
+
+            cancel_button = QToolButton()
+            cancel_button.setAutoRaise(True)
+            cancel_button.setText("✕")
+            cancel_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            cancel_button.setToolTip(self._pt("plugins.row.cancel", "Cancel row edits"))
+            cancel_button.setStyleSheet("QToolButton { color: #8a3324; font-weight: 800; font-size: 15px; }")
+            cancel_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._cancel_row_edit(pid))
+            layout.addWidget(cancel_button)
+        else:
+            edit_button = QToolButton()
+            edit_button.setAutoRaise(True)
+            edit_button.setIcon(icon_from_name("wrench", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            edit_button.setToolTip(self._pt("plugins.row.edit", "Edit plugin row"))
+            edit_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._begin_row_edit(pid))
+            layout.addWidget(edit_button)
+        layout.addStretch(1)
+        return container
+
+    def _begin_row_edit(self, plugin_id: str) -> None:
+        if self._editing_plugin_id and self._editing_plugin_id != plugin_id:
+            self._cancel_row_edit(self._editing_plugin_id, repopulate=False)
+        self._editing_plugin_id = plugin_id
+        self._editing_snapshot = dict(self.services.plugin_override(plugin_id))
+        self._set_row_editing(plugin_id, True)
+
+    def _save_row_edit(self, plugin_id: str) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        row = self.plugin_row_map.get(plugin_id)
+        if spec is None or row is None:
+            return
+        name_item = self.plugins_table.item(row, 2)
+        name_override = ""
+        if spec.allow_name_override and name_item is not None:
+            typed_name = name_item.text().strip()
+            if typed_name and typed_name != spec.localized_name(self.i18n.current_language()):
+                name_override = typed_name
+
+        icon_override = self._editing_snapshot.get("icon", "")
+        if spec.allow_icon_override:
+            icon_widget = self.plugins_table.cellWidget(row, 1)
+            if isinstance(icon_widget, QComboBox):
+                icon_override = str(icon_widget.currentData() or "").strip()
+
+        self.services.set_plugin_override(plugin_id, display_name=name_override, icon=icon_override)
+        self._editing_plugin_id = None
+        self._editing_snapshot = {}
+        self._populate_plugin_table()
+
+    def _cancel_row_edit(self, plugin_id: str, *, repopulate: bool = True) -> None:
+        self._editing_plugin_id = None
+        self._editing_snapshot = {}
+        if repopulate:
+            self._populate_plugin_table()
+
+    def _set_row_editing(self, plugin_id: str, editing: bool) -> None:
+        row = self.plugin_row_map.get(plugin_id)
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if row is None or spec is None:
+            return
+
+        selected = self._is_row_selected_for_export(row)
+        self.plugins_table.setCellWidget(row, 0, self._row_action_widget(spec, selected=selected))
+
+        name_item = self.plugins_table.item(row, 2)
+        if name_item is not None:
+            flags = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+            if editing and spec.allow_name_override:
+                flags |= Qt.ItemFlag.ItemIsEditable
+                if not name_item.text().strip():
+                    name_item.setText(spec.localized_name(self.i18n.current_language()))
+            name_item.setFlags(flags)
+
+        if editing and spec.allow_icon_override:
+            combo = QComboBox()
+            combo.addItem(self._pt("plugins.icon.default", "Default"), "")
+            for icon_id, label, icon in self._icon_options():
+                combo.addItem(icon, label, icon_id)
+            self._set_combo_value(combo, self._editing_snapshot.get("icon", ""))
+            self.plugins_table.setCellWidget(row, 1, combo)
+        else:
+            self.plugins_table.removeCellWidget(row, 1)
+            icon_item = self.plugins_table.item(row, 1)
+            if icon_item is not None:
+                icon_item.setText(self._icon_display_text(spec))
+
+    def _is_row_selected_for_export(self, row: int) -> bool:
+        widget = self.plugins_table.cellWidget(row, 0)
+        if widget is None:
+            return False
+        checkbox = widget.findChild(QCheckBox)
+        return bool(checkbox is not None and checkbox.isChecked())
+
+    def _icon_display_text(self, spec) -> str:
+        override = self.services.plugin_icon_override(spec)
+        if not override:
+            return self._pt("plugins.icon.default", "Default")
+        options = {icon_id: label for icon_id, label, _icon in self._icon_options()}
+        return options.get(override, Path(override).name or override)
 
     def _browse_output_dir(self) -> None:
         current = self.output_dir_input.text().strip() or str(self.services.default_output_path())
@@ -511,6 +623,13 @@ class SettingsCenterPage(QWidget):
         self.services.command_registry.execute("app.stop_hotkey_helper")
         self._refresh_shortcut_status()
 
+    def _icon_options(self) -> list[tuple[str, str, object]]:
+        rows: list[tuple[str, str, object]] = []
+        for icon_id, fallback_label, icon in icon_choices(self):
+            label = self._pt(f"plugins.icon.{icon_id.replace('-', '_')}", fallback_label)
+            rows.append((icon_id, label, icon))
+        return rows
+
     def _plugin_status_text(self, spec) -> str:
         if spec.quarantined:
             return self._pt("plugins.status.quarantined", "Quarantined")
@@ -557,9 +676,9 @@ class SettingsCenterPage(QWidget):
             row_index = self.plugin_row_map.get(spec.plugin_id)
             if row_index is None:
                 continue
-            trusted_item = self.plugins_table.item(row_index, 4)
-            enabled_item = self.plugins_table.item(row_index, 5)
-            hidden_item = self.plugins_table.item(row_index, 6)
+            trusted_item = self.plugins_table.item(row_index, 5)
+            enabled_item = self.plugins_table.item(row_index, 6)
+            hidden_item = self.plugins_table.item(row_index, 7)
             trusted = trusted_item.checkState() == Qt.CheckState.Checked if trusted_item is not None else spec.trusted
             enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else True
             hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else False
@@ -728,11 +847,10 @@ class SettingsCenterPage(QWidget):
         }
         selected = []
         for row_index in range(self.plugins_table.rowCount()):
-            export_item = self.plugins_table.item(row_index, 0)
-            name_item = self.plugins_table.item(row_index, 1)
-            if export_item is None or name_item is None:
+            name_item = self.plugins_table.item(row_index, 2)
+            if name_item is None:
                 continue
-            if export_item.checkState() != Qt.CheckState.Checked:
+            if not self._is_row_selected_for_export(row_index):
                 continue
             plugin_id = name_item.data(Qt.ItemDataRole.UserRole)
             spec = specs_by_id.get(plugin_id)
@@ -746,6 +864,8 @@ class SettingsCenterPage(QWidget):
         self.autostart_status_label.setText(self._pt(key, "Autostart is disabled."))
 
     def _apply_texts(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self._apply_theme_styles()
         self.title_label.setText(self._pt("title", "Settings"))
         self.description_label.setText(
             self._pt(
@@ -753,11 +873,10 @@ class SettingsCenterPage(QWidget):
                 "Control appearance, language, startup behavior, tray behavior, shortcuts, and plugin management from one place.",
             )
         )
+        self.description_label.setStyleSheet(f"font-size: 14px; color: {palette.text_muted};")
         self.tabs.setTabText(0, self._pt("tab.general", "General"))
-        self.tabs.setTabText(1, self._pt("tab.appearance", "Appearance"))
-        self.tabs.setTabText(2, self._pt("tab.automation", "Automation"))
-        self.tabs.setTabText(3, self._pt("tab.shortcuts", "Shortcuts"))
-        self.tabs.setTabText(4, self._pt("tab.plugins", "Plugins"))
+        self.tabs.setTabText(1, self._pt("tab.shortcuts", "Shortcuts"))
+        self.tabs.setTabText(2, self._pt("tab.plugins", "Plugins"))
 
         self.output_label.setText(self._pt("output.label", "Default output folder"))
         self.output_browse_button.setText(self._pt("output.browse_button", "Browse"))
@@ -782,16 +901,16 @@ class SettingsCenterPage(QWidget):
         self.plugins_note.setText(
             self._pt(
                 "plugins.note",
-                "Manage built-in and custom plugins here. Import standalone plugin files, plugin folders, or backup archives. Export selected plugins or the full set into a reusable backup zip.",
+                "Manage built-in and custom plugins here. Edit display name and icon inline per row, then trust, enable, hide, import, export, or review plugins from one place.",
             )
         )
-        self.import_file_button.setText(self._pt("plugins.import_file_button", "Import File"))
-        self.import_folder_button.setText(self._pt("plugins.import_folder_button", "Import Folder"))
-        self.import_backup_button.setText(self._pt("plugins.import_backup_button", "Import Backup"))
-        self.export_selected_button.setText(self._pt("plugins.export_selected", "Export Selected"))
-        self.export_all_button.setText(self._pt("plugins.export_all", "Export All"))
-        self.apply_plugin_state_button.setText(self._pt("plugins.apply", "Apply Plugin Changes"))
-        self.refresh_plugins_button.setText(self._pt("plugins.refresh", "Refresh"))
+        self.import_file_button.setToolTip(self._pt("plugins.import_file_button", "Import File"))
+        self.import_folder_button.setToolTip(self._pt("plugins.import_folder_button", "Import Folder"))
+        self.import_backup_button.setToolTip(self._pt("plugins.import_backup_button", "Import Backup"))
+        self.export_selected_button.setToolTip(self._pt("plugins.export_selected", "Export Selected"))
+        self.export_all_button.setToolTip(self._pt("plugins.export_all", "Export All"))
+        self.apply_plugin_state_button.setToolTip(self._pt("plugins.apply", "Apply Plugin Changes"))
+        self.refresh_plugins_button.setToolTip(self._pt("plugins.refresh", "Refresh"))
 
         self.reset_button.setText(self._pt("reset", "Reset"))
         self.save_button.setText(self._pt("save", "Save settings"))
@@ -804,3 +923,27 @@ class SettingsCenterPage(QWidget):
             if combo.itemData(index) == value:
                 combo.setCurrentIndex(index)
                 return
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
+        self._populate_plugin_table()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        for frame in (
+            self.output_card,
+            self.appearance_card,
+            self.automation_card,
+        ):
+            frame.setStyleSheet(card_style(palette))
+        for label in (
+            self.general_note,
+            self.appearance_note,
+            self.autostart_status_label,
+            self.shortcut_note,
+            self.shortcut_status_label,
+            self.plugins_note,
+        ):
+            label.setStyleSheet(muted_text_style(palette))

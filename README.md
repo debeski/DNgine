@@ -2,7 +2,7 @@
 
 Micro Toolkit is a fast, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
-Current app version: `1.1.0`
+Current app version: `1.2.0`
 
 ## Overview
 
@@ -25,9 +25,11 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - English and Arabic support with RTL-aware layout direction
 - Light, dark, and system theme modes
 - Tray integration for all-day companion use
+- Dashboard shell with quick access management and usage/system snapshots
 - Workflow engine and CLI command surface
 - Importable/exportable custom plugin packaging
 - Plugin-local translations through sidecar locale files
+- Opt-in plugin display name and icon customization
 - Headless tool commands for workflows and automation
 - Capability-based elevated broker for future admin/root operations
 - Dedicated elevated hotkey helper for Linux global shortcuts
@@ -148,7 +150,7 @@ Important limit:
 
 - this is not a full OS sandbox
 
-Trusted plugins still run Python code in the app process. The review and quarantine system reduces accidental breakage and raises the bar against obviously unsafe plugins, but users should still install plugins only from authors they trust.
+Trusted plugins still run Python code in the app process. The review and quarantine system reduces accidental breakage and raises the bar against obviously unsafe plugins, but users should still only install plugins they trust.
 
 ### Plugin Origins
 
@@ -179,6 +181,7 @@ The shell handles:
 - RTL-aware app chrome
 - plugin metadata localization
 - plugin UI strings through `services.plugin_text(...)`
+- global Dubai-based font stack with fallbacks
 
 ## Performance Model
 
@@ -378,6 +381,8 @@ Use:
 - `services.plugin_text(...)` for localized plugin strings
 - `services.request_elevated(...)` only when a capability-based elevated operation is truly required
 - `register_elevated_capabilities(...)` only for narrow, explicit elevated operations
+- `allow_name_override` and `allow_icon_override` when the plugin should permit user-side display customization
+- `preferred_icon` when the plugin wants a default app icon without shipping a custom `.ico`
 
 Avoid:
 
@@ -457,6 +462,43 @@ title = QLabel(services.plugin_text("my_plugin", "ui.title", "My Plugin"))
 ```
 
 You can also keep a tiny inline `translations = {...}` fallback in the plugin class, but sidecar files are the preferred pattern.
+
+### Display Name and Icon Customization
+
+Plugins can opt into user-side display customization from `Settings -> Plugins`.
+
+Available metadata flags:
+
+- `allow_name_override = True`
+- `allow_icon_override = True`
+- `preferred_icon = "analytics"`
+
+Example:
+
+```python
+class MyPlugin(QtPlugin):
+    plugin_id = "my_plugin"
+    name = "My Plugin"
+    description = "Example plugin."
+    category = "General"
+    allow_name_override = True
+    allow_icon_override = True
+    preferred_icon = "search"
+```
+
+How it works:
+
+- if allowed, the user can override the display name without changing the plugin code
+- if allowed, the user can choose an icon from the app icon library or provide a custom `.ico` path
+- if no override is set, the shell falls back to plugin-provided icons or Qt defaults
+- if a plugin sets either flag to `False`, the UI keeps that aspect locked
+
+Current icon sources are used in this order:
+
+1. user override from settings
+2. sidecar plugin icon such as `my_plugin.ico` or `plugin.ico`
+3. plugin `preferred_icon`
+4. shell fallback icon by tool/category
 
 ### Headless Commands
 
@@ -670,7 +712,8 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Version | Status | Highlights |
 | --- | --- | --- |
-| 1.1.0 | Current | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
+| 1.2.0 | Current | Added the dashboard shell, sidebar quick access management, global Dubai font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. |
+| 1.1.0 | Stable milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
 | 1.0.0 | Stable milestone | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
 | 0.9.0 | Internal milestone | Completed migration of the core tool suite into the new plugin engine and made the desktop shell self-contained. |
 | 0.8.0 | Internal milestone | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |

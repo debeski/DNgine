@@ -51,7 +51,6 @@ def register_builtin_tool_commands(registry, services) -> None:
         "sys_audit",
         "micro_toolkit.plugins.it_tools.system_audit",
         "gather_system_audit",
-        result_adapter=lambda result: json.loads(result),
     )
     register_task_command(
         "tool.quick_analytics.run",

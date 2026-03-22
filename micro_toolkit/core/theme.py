@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QPalette, Qt
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,8 @@ class ThemeManager(QObject):
         super().__init__()
         self.config = config
         self.assets_root = assets_root
-        self._font_family = "DejaVu Sans"
-        self._loaded_font_family = None
+        self._font_family = "Dubai"
+        self._loaded_font_families: list[str] = []
 
     def available_modes(self) -> list[tuple[str, str]]:
         return [
@@ -101,10 +101,20 @@ class ThemeManager(QObject):
     def apply(self, app) -> None:
         self._ensure_font_loaded(app)
         scale = self._normalized_scale()
-        base_font = QFont(self._loaded_font_family or self._font_family, max(10, round(11 * scale)))
+        palette = self.current_palette()
+        base_font = QFont()
+        if self._loaded_font_families:
+            try:
+                base_font.setFamilies(self._loaded_font_families)
+            except Exception:
+                base_font.setFamily(self._loaded_font_families[0])
+        else:
+            base_font.setFamily(self._font_family)
+        base_font.setPointSize(max(10, round(11 * scale)))
         app.setFont(base_font)
-        app.setStyleSheet(self._build_stylesheet(self.current_palette(), scale))
-        self.theme_changed.emit(self.current_mode())
+        app.setPalette(self._build_qpalette(palette))
+        app.setStyleSheet(self._build_stylesheet(palette, scale))
+        self.theme_changed.emit(palette.mode)
 
     def refresh_system_mode(self, app) -> None:
         if self.current_mode() == "system":
@@ -119,19 +129,26 @@ class ThemeManager(QObject):
         return "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
 
     def _ensure_font_loaded(self, app) -> None:
-        font_path = self.assets_root / "fonts" / "DejaVuSans-Bold.ttf"
-        regular_path = self.assets_root / "fonts" / "DejaVuSans.ttf"
-        for candidate in (regular_path, font_path):
+        preferred: list[str] = []
+        font_candidates = [
+            self.assets_root / "fonts" / "dubai-VF.ttf",
+            self.assets_root / "fonts" / "DejaVuSans.ttf",
+            self.assets_root / "fonts" / "DejaVuSans-Bold.ttf",
+        ]
+        for candidate in font_candidates:
             if not candidate.exists():
                 continue
             font_id = QFontDatabase.addApplicationFont(str(candidate))
             if font_id == -1:
                 continue
-            families = QFontDatabase.applicationFontFamilies(font_id)
-            if families:
-                self._loaded_font_family = families[0]
-                return
-        self._loaded_font_family = self._font_family
+            for family in QFontDatabase.applicationFontFamilies(font_id):
+                if family and family not in preferred:
+                    preferred.append(family)
+        fallback_families = ["Dubai", "DejaVu Sans", "Noto Sans Arabic", "Sans Serif"]
+        for family in fallback_families:
+            if family not in preferred:
+                preferred.append(family)
+        self._loaded_font_families = preferred
 
     def _normalized_scale(self) -> float:
         try:
@@ -139,6 +156,46 @@ class ThemeManager(QObject):
         except Exception:
             return 1.0
         return min(1.6, max(0.85, scale))
+
+    def _build_qpalette(self, palette: ThemePalette) -> QPalette:
+        qt_palette = QPalette()
+        window = QColor(palette.window_bg)
+        surface = QColor(palette.surface_bg)
+        surface_alt = QColor(palette.surface_alt_bg)
+        input_bg = QColor(palette.input_bg)
+        border = QColor(palette.border)
+        text = QColor(palette.text_primary)
+        muted = QColor(palette.text_muted)
+        accent = QColor(palette.accent)
+        highlighted = QColor("#0f2b34" if palette.mode == "light" else "#081317")
+
+        qt_palette.setColor(QPalette.ColorRole.Window, window)
+        qt_palette.setColor(QPalette.ColorRole.WindowText, text)
+        qt_palette.setColor(QPalette.ColorRole.Base, input_bg)
+        qt_palette.setColor(QPalette.ColorRole.AlternateBase, surface_alt)
+        qt_palette.setColor(QPalette.ColorRole.ToolTipBase, surface)
+        qt_palette.setColor(QPalette.ColorRole.ToolTipText, text)
+        qt_palette.setColor(QPalette.ColorRole.Text, text)
+        qt_palette.setColor(QPalette.ColorRole.Button, surface)
+        qt_palette.setColor(QPalette.ColorRole.ButtonText, text)
+        qt_palette.setColor(QPalette.ColorRole.BrightText, QColor("#ffffff"))
+        qt_palette.setColor(QPalette.ColorRole.PlaceholderText, muted)
+        qt_palette.setColor(QPalette.ColorRole.Highlight, accent)
+        qt_palette.setColor(QPalette.ColorRole.HighlightedText, QColor(highlighted))
+        qt_palette.setColor(QPalette.ColorRole.Light, surface_alt.lighter(106))
+        qt_palette.setColor(QPalette.ColorRole.Midlight, surface_alt)
+        qt_palette.setColor(QPalette.ColorRole.Mid, border)
+        qt_palette.setColor(QPalette.ColorRole.Dark, border.darker(120))
+        qt_palette.setColor(QPalette.ColorRole.Shadow, QColor("#10161a" if palette.mode == "dark" else "#90847a"))
+        qt_palette.setColor(QPalette.ColorRole.Link, accent)
+        qt_palette.setColor(QPalette.ColorRole.LinkVisited, accent.darker(110))
+
+        qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, muted)
+        qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, muted)
+        qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, muted)
+        qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Highlight, border)
+        qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, text)
+        return qt_palette
 
     def _build_stylesheet(self, palette: ThemePalette, scale: float) -> str:
         title_size = max(24, round(26 * scale))
@@ -151,8 +208,11 @@ class ThemeManager(QObject):
         QWidget {{
             background: {palette.window_bg};
             color: {palette.text_primary};
-            font-family: "{self._loaded_font_family or self._font_family}";
+            font-family: "{self._loaded_font_families[0] if self._loaded_font_families else self._font_family}";
             font-size: {body_size}px;
+        }}
+        QLabel, QCheckBox, QRadioButton {{
+            background: transparent;
         }}
         QMainWindow {{
             background: {palette.window_bg};
@@ -168,6 +228,14 @@ class ThemeManager(QObject):
             color: {palette.text_primary};
         }}
         QLabel#PageTitle {{
+            font-size: {page_title_size}px;
+            font-weight: 700;
+            color: {palette.text_primary};
+        }}
+        QLabel#PageDescription, QLabel#PlaceholderBody {{
+            color: {palette.text_muted};
+        }}
+        QLabel#PlaceholderTitle {{
             font-size: {page_title_size}px;
             font-weight: 700;
             color: {palette.text_primary};
@@ -199,12 +267,36 @@ class ThemeManager(QObject):
             alternate-background-color: {palette.surface_alt_bg};
             gridline-color: {palette.border};
         }}
+        QTreeWidget {{
+            padding: 10px;
+        }}
         QTreeWidget::item, QListWidget::item {{
-            padding: 8px 6px;
-            border-radius: 8px;
+            padding: 10px 10px;
+            border-radius: 12px;
+            margin: 3px 0px;
         }}
         QTreeWidget::item:selected, QListWidget::item:selected {{
             background: {palette.accent_soft};
+            color: {palette.text_primary};
+        }}
+        QTreeWidget::branch:selected {{
+            background: transparent;
+        }}
+        QToolButton {{
+            background: transparent;
+            color: {palette.text_primary};
+            border: 1px solid transparent;
+            border-radius: {input_radius}px;
+            padding: 8px 10px;
+            font-weight: 600;
+        }}
+        QToolButton:hover {{
+            background: {palette.surface_alt_bg};
+            border-color: {palette.border};
+        }}
+        QToolButton:checked {{
+            background: {palette.accent_soft};
+            border-color: {palette.accent};
             color: {palette.text_primary};
         }}
         QPushButton {{
@@ -225,6 +317,30 @@ class ThemeManager(QObject):
         QCheckBox, QRadioButton {{
             color: {palette.text_primary};
             spacing: 8px;
+        }}
+        QCheckBox::indicator, QRadioButton::indicator {{
+            width: 18px;
+            height: 18px;
+            background: {palette.input_bg};
+            border: 1px solid {palette.border};
+        }}
+        QCheckBox::indicator {{
+            border-radius: 4px;
+        }}
+        QRadioButton::indicator {{
+            border-radius: 9px;
+        }}
+        QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
+            border-color: {palette.accent};
+            background: {palette.surface_alt_bg};
+        }}
+        QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+            background: {palette.accent};
+            border-color: {palette.accent};
+        }}
+        QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+            background: {palette.surface_alt_bg};
+            border-color: {palette.border};
         }}
         QTabWidget::pane {{
             border: 1px solid {palette.border};
@@ -259,6 +375,31 @@ class ThemeManager(QObject):
         QStatusBar {{
             background: {palette.status_bg};
             border-top: 1px solid {palette.border};
+            min-height: 20px;
+        }}
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 12px;
+            margin: 8px 0px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {palette.border};
+            min-height: 36px;
+            border-radius: 6px;
+        }}
+        QScrollBar:horizontal {{
+            background: transparent;
+            height: 12px;
+            margin: 0px 8px;
+        }}
+        QScrollBar::handle:horizontal {{
+            background: {palette.border};
+            min-width: 36px;
+            border-radius: 6px;
+        }}
+        QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{
+            background: transparent;
+            border: none;
         }}
         QDockWidget::title {{
             background: {palette.surface_alt_bg};

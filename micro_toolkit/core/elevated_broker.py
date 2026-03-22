@@ -353,7 +353,10 @@ class ElevatedBrokerManager(QObject):
                 script = f"do shell script {json.dumps(command_text)} with administrator privileges"
                 subprocess.Popen(["osascript", "-e", script])
             else:
-                self._process = subprocess.Popen([shutil.which("pkexec") or "pkexec", *command])
+                self._process = subprocess.Popen(
+                    [shutil.which("pkexec") or "pkexec", *self._elevated_env_prefix(), *command],
+                    cwd=str(self._project_root()) if not getattr(sys, "frozen", False) else None,
+                )
         except Exception as exc:
             message = f"Unable to start the elevated broker: {exc}"
             self._set_active(False, message)
@@ -487,6 +490,28 @@ class ElevatedBrokerManager(QObject):
             "--plugin-state-path",
             str(self.plugin_state_path),
         ]
+
+    def _elevated_env_prefix(self) -> list[str]:
+        if getattr(sys, "frozen", False):
+            return []
+        pythonpath = self._pythonpath_value()
+        if not pythonpath:
+            return []
+        return ["env", f"PYTHONPATH={pythonpath}"]
+
+    def _pythonpath_value(self) -> str:
+        project_root = str(self._project_root())
+        existing = str(os.environ.get("PYTHONPATH") or "").strip()
+        if not existing:
+            return project_root
+        parts = [part for part in existing.split(os.pathsep) if part]
+        if project_root not in parts:
+            parts.insert(0, project_root)
+        return os.pathsep.join(parts)
+
+    @staticmethod
+    def _project_root() -> Path:
+        return Path(__file__).resolve().parents[2]
 
     def _set_active(self, active: bool, message: str) -> None:
         state_changed = self._active != active

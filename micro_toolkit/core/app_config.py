@@ -18,6 +18,9 @@ DEFAULT_CONFIG = {
     "default_output_path": "",
     "language": "en",
     "hotkeys": {},
+    "quick_access": [],
+    "collapsed_groups": {},
+    "plugin_overrides": {},
 }
 
 _BOOL_KEYS = {
@@ -31,7 +34,8 @@ _BOOL_KEYS = {
 }
 _STR_KEYS = {"default_output_path", "language", "appearance_mode"}
 _NUM_KEYS = {"ui_scaling"}
-_DICT_KEYS = {"hotkeys"}
+_DICT_KEYS = {"hotkeys", "collapsed_groups", "plugin_overrides"}
+_LIST_KEYS = {"quick_access"}
 
 
 class AppConfig:
@@ -112,6 +116,9 @@ class AppConfig:
                 continue
             if key in _DICT_KEYS and not isinstance(value, dict):
                 warnings.append(f"Invalid type for '{key}' - expected dict, using default.")
+                continue
+            if key in _LIST_KEYS and not isinstance(value, list):
+                warnings.append(f"Invalid type for '{key}' - expected list, using default.")
                 continue
             if key in _NUM_KEYS and not isinstance(value, (int, float)):
                 warnings.append(f"Invalid type for '{key}' - expected numeric, using default.")

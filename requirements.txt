@@ -8,3 +8,4 @@ keyboard
 PyPDF2
 psutil
 python-docx
+qtawesome

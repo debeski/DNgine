@@ -21,6 +21,9 @@ class PluginSpec:
     category: str
     version: str
     standalone: bool
+    allow_name_override: bool
+    allow_icon_override: bool
+    preferred_icon: str
     file_path: Path
     module_name: str
     class_name: str
@@ -61,6 +64,10 @@ PLUGIN_DEFAULTS = {
     "category": "General",
     "version": "0.1.0",
     "standalone": False,
+    "allow_name_override": True,
+    "allow_icon_override": True,
+    "preferred_icon": "",
+    "preferred_qt_icon": "",
 }
 
 
@@ -158,9 +165,15 @@ def _parse_plugin_specs(
                         if extracted_translations is not None:
                             inline_translations = extracted_translations
                         continue
+                    if target.id == "preferred_qt_icon":
+                        extracted = _extract_string(item.value)
+                        if extracted is not None:
+                            values["preferred_icon"] = extracted
+                            values["preferred_qt_icon"] = extracted
+                        continue
                     if target.id not in values:
                         continue
-                    if target.id == "standalone":
+                    if target.id in {"standalone", "allow_name_override", "allow_icon_override"}:
                         extracted_bool = _extract_bool(item.value)
                         if extracted_bool is not None:
                             values[target.id] = extracted_bool
@@ -176,9 +189,15 @@ def _parse_plugin_specs(
                     if extracted_translations is not None:
                         inline_translations = extracted_translations
                     continue
+                if item.target.id == "preferred_qt_icon":
+                    extracted = _extract_string(item.value)
+                    if extracted is not None:
+                        values["preferred_icon"] = extracted
+                        values["preferred_qt_icon"] = extracted
+                    continue
                 if item.target.id not in values:
                     continue
-                if item.target.id == "standalone":
+                if item.target.id in {"standalone", "allow_name_override", "allow_icon_override"}:
                     extracted_bool = _extract_bool(item.value)
                     if extracted_bool is not None:
                         values[item.target.id] = extracted_bool
@@ -237,6 +256,9 @@ def _parse_plugin_specs(
                 category=values["category"],
                 version=values["version"],
                 standalone=values["standalone"],
+                allow_name_override=values["allow_name_override"],
+                allow_icon_override=values["allow_icon_override"],
+                preferred_icon=values["preferred_icon"] or values["preferred_qt_icon"],
                 file_path=file_path,
                 module_name=module_name,
                 class_name=node.name,

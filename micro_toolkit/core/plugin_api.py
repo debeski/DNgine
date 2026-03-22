@@ -14,6 +14,9 @@ class PluginMetadata:
     category: str
     version: str = "0.1.0"
     standalone: bool = False
+    allow_name_override: bool = False
+    allow_icon_override: bool = False
+    preferred_icon: str = ""
 
 
 class QtPlugin(abc.ABC):
@@ -23,6 +26,9 @@ class QtPlugin(abc.ABC):
     category = "General"
     version = "0.1.0"
     standalone = False
+    allow_name_override = True
+    allow_icon_override = True
+    preferred_icon = ""
     translations: dict[str, dict[str, str]] = {}
 
     @classmethod
@@ -34,6 +40,9 @@ class QtPlugin(abc.ABC):
             category=cls.category,
             version=cls.version,
             standalone=cls.standalone,
+            allow_name_override=cls.allow_name_override,
+            allow_icon_override=cls.allow_icon_override,
+            preferred_icon=getattr(cls, "preferred_icon", getattr(cls, "preferred_qt_icon", "")),
         )
 
     def register_commands(self, registry, services) -> None:
