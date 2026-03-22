@@ -24,14 +24,14 @@ from micro_toolkit.core.plugin_state import PluginStateManager
 
 
 @dataclass(frozen=True)
-class PrivilegedCapabilitySpec:
+class ElevatedCapabilitySpec:
     capability_id: str
     title: str
     description: str
     provider: str = "core"
 
 
-class PrivilegedCapabilityContext:
+class ElevatedCapabilityContext:
     def __init__(self, runtime, capability_id: str):
         self.runtime = runtime
         self.capability_id = capability_id
@@ -43,7 +43,7 @@ class PrivilegedCapabilityContext:
         self.runtime.log(text)
 
 
-class PrivilegedBrokerRuntime:
+class ElevatedBrokerRuntime:
     def __init__(self, data_root: Path, output_root: Path, assets_root: Path):
         self.data_root = Path(data_root)
         self.output_root = Path(output_root)
@@ -58,13 +58,13 @@ class PrivilegedBrokerRuntime:
         print(f"[broker] {message}", file=sys.stderr)
 
 
-class PrivilegedCapabilityRegistry:
+class ElevatedCapabilityRegistry:
     def __init__(self):
-        self._capabilities: dict[str, tuple[PrivilegedCapabilitySpec, object]] = {}
+        self._capabilities: dict[str, tuple[ElevatedCapabilitySpec, object]] = {}
 
     def register(self, capability_id: str, title: str, description: str, handler, *, provider: str = "core") -> None:
         self._capabilities[capability_id] = (
-            PrivilegedCapabilitySpec(
+            ElevatedCapabilitySpec(
                 capability_id=capability_id,
                 title=title,
                 description=description,
@@ -73,15 +73,15 @@ class PrivilegedCapabilityRegistry:
             handler,
         )
 
-    def list_capabilities(self) -> list[PrivilegedCapabilitySpec]:
+    def list_capabilities(self) -> list[ElevatedCapabilitySpec]:
         return [self._capabilities[key][0] for key in sorted(self._capabilities)]
 
-    def execute(self, capability_id: str, payload: dict[str, object], runtime: PrivilegedBrokerRuntime) -> dict[str, object]:
+    def execute(self, capability_id: str, payload: dict[str, object], runtime: ElevatedBrokerRuntime) -> dict[str, object]:
         spec_and_handler = self._capabilities.get(capability_id)
         if spec_and_handler is None:
-            raise KeyError(f"Unknown privileged capability: {capability_id}")
+            raise KeyError(f"Unknown elevated capability: {capability_id}")
         spec, handler = spec_and_handler
-        context = PrivilegedCapabilityContext(runtime, capability_id)
+        context = ElevatedCapabilityContext(runtime, capability_id)
         result = handler(context, dict(payload))
         return {
             "capability_id": spec.capability_id,
@@ -91,11 +91,11 @@ class PrivilegedCapabilityRegistry:
         }
 
 
-def _register_core_capabilities(registry: PrivilegedCapabilityRegistry) -> None:
+def _register_core_capabilities(registry: ElevatedCapabilityRegistry) -> None:
     registry.register(
         "system.identity",
         "System Identity",
-        "Return effective privilege and platform details from the broker process.",
+        "Return effective elevation and platform details from the broker process.",
         _system_identity_capability,
         provider="core",
     )
@@ -108,7 +108,7 @@ def _register_core_capabilities(registry: PrivilegedCapabilityRegistry) -> None:
     )
 
 
-def _system_identity_capability(context: PrivilegedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
+def _system_identity_capability(context: ElevatedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
     geteuid = getattr(os, "geteuid", None)
     context.log("Collecting broker identity details.")
     return {
@@ -120,7 +120,7 @@ def _system_identity_capability(context: PrivilegedCapabilityContext, payload: d
     }
 
 
-def _filesystem_stat_capability(context: PrivilegedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
+def _filesystem_stat_capability(context: ElevatedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
     raw_path = str(payload.get("path") or "").strip()
     if not raw_path:
         raise ValueError("payload.path is required")
@@ -138,30 +138,38 @@ def _filesystem_stat_capability(context: PrivilegedCapabilityContext, payload: d
     }
 
 
-def load_privileged_capability_registry(
+def load_elevated_capability_registry(
     plugins_root: Path,
     custom_plugins_root: Path,
     plugin_state_path: Path,
     data_root: Path,
     output_root: Path,
     assets_root: Path,
-) -> PrivilegedCapabilityRegistry:
-    runtime = PrivilegedBrokerRuntime(data_root, output_root, assets_root)
-    registry = PrivilegedCapabilityRegistry()
+    builtin_manifest_path: Path | None = None,
+    enforce_builtin_manifest: bool = False,
+) -> ElevatedCapabilityRegistry:
+    runtime = ElevatedBrokerRuntime(data_root, output_root, assets_root)
+    registry = ElevatedCapabilityRegistry()
     _register_core_capabilities(registry)
 
     state_manager = PluginStateManager(plugin_state_path)
-    plugin_manager = PluginManager(plugins_root, custom_plugins_root, state_manager)
+    plugin_manager = PluginManager(
+        plugins_root,
+        custom_plugins_root,
+        state_manager,
+        builtin_manifest_path=builtin_manifest_path,
+        enforce_builtin_manifest=enforce_builtin_manifest,
+    )
     for spec in plugin_manager.discover_plugins():
         try:
             plugin = plugin_manager.load_plugin(spec.plugin_id)
-            plugin.register_privileged_capabilities(registry, runtime)
+            plugin.register_elevated_capabilities(registry, runtime)
         except Exception as exc:
-            runtime.log(f"Skipping privileged capability registration for '{spec.plugin_id}': {exc}")
+            runtime.log(f"Skipping elevated capability registration for '{spec.plugin_id}': {exc}")
     return registry
 
 
-class _PrivilegedBrokerRequestHandler(socketserver.StreamRequestHandler):
+class _ElevatedBrokerRequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         server = self.server  # type: ignore[assignment]
         line = self.rfile.readline()
@@ -221,7 +229,7 @@ class _ThreadedBrokerServer(socketserver.ThreadingMixIn, socketserver.TCPServer)
     daemon_threads = True
 
 
-class PrivilegedBrokerManager(QObject):
+class ElevatedBrokerManager(QObject):
     status_changed = Signal(str)
     active_changed = Signal(bool)
 
@@ -231,6 +239,7 @@ class PrivilegedBrokerManager(QObject):
         output_root: Path,
         assets_root: Path,
         plugins_root: Path,
+        builtin_manifest_path: Path,
         custom_plugins_root: Path,
         plugin_state_path: Path,
         logger,
@@ -240,12 +249,13 @@ class PrivilegedBrokerManager(QObject):
         self.output_root = Path(output_root)
         self.assets_root = Path(assets_root)
         self.plugins_root = Path(plugins_root)
+        self.builtin_manifest_path = Path(builtin_manifest_path)
         self.custom_plugins_root = Path(custom_plugins_root)
         self.plugin_state_path = Path(plugin_state_path)
         self.logger = logger
         self.runtime_root = self.data_root / "runtime"
         self.runtime_root.mkdir(parents=True, exist_ok=True)
-        self.status_path = self.runtime_root / "privileged_broker_status.json"
+        self.status_path = self.runtime_root / "elevated_broker_status.json"
         self.token = secrets.token_hex(24)
         self._active = False
         self._last_status = ""
@@ -266,21 +276,23 @@ class PrivilegedBrokerManager(QObject):
             return "The broker can request administrator rights through UAC when a capability needs them."
         if sys.platform == "darwin":
             if shutil.which("osascript") is None:
-                return "osascript is not available, so the broker cannot request elevated privileges on this macOS session."
-            return "The broker can request administrator privileges through macOS authentication when a capability needs them."
+                return "osascript is not available, so the broker cannot request elevation on this macOS session."
+            return "The broker can request administrator elevation through macOS authentication when a capability needs it."
         if shutil.which("pkexec") is None:
-            return "pkexec is not installed, so the broker cannot request elevated privileges on this Linux session."
-        return "The broker can request elevated privileges through pkexec when a capability needs them."
+            return "pkexec is not installed, so the broker cannot request elevation on this Linux session."
+        return "The broker can request elevation through pkexec when a capability needs it."
 
     def list_capabilities(self) -> list[dict[str, object]]:
         if self._cached_capabilities is None:
-            registry = load_privileged_capability_registry(
+            registry = load_elevated_capability_registry(
                 self.plugins_root,
                 self.custom_plugins_root,
                 self.plugin_state_path,
                 self.data_root,
                 self.output_root,
                 self.assets_root,
+                self.builtin_manifest_path,
+                getattr(sys, "frozen", False),
             )
             self._cached_capabilities = [
                 {
@@ -308,7 +320,7 @@ class PrivilegedBrokerManager(QObject):
             timeout_seconds=timeout_seconds,
         )
         if not response.get("ok"):
-            raise RuntimeError(str(response.get("error") or "Privileged broker request failed."))
+            raise RuntimeError(str(response.get("error") or "Elevated broker request failed."))
         return response
 
     def start(self, *, timeout_seconds: float = 15.0) -> tuple[bool, str]:
@@ -317,7 +329,7 @@ class PrivilegedBrokerManager(QObject):
             self._set_active(False, message)
             return False, message
         if self.is_active():
-            message = "Privileged broker is already active for this session."
+            message = "Elevated broker is already active for this session."
             self._set_active(True, message)
             return True, message
 
@@ -351,7 +363,7 @@ class PrivilegedBrokerManager(QObject):
         while time.time() < deadline:
             status = self._read_status()
             if status is not None:
-                message = "Privileged broker is active for this session."
+                message = "Elevated broker is active for this session."
                 self._set_active(True, message)
                 return True, message
             time.sleep(0.1)
@@ -361,8 +373,8 @@ class PrivilegedBrokerManager(QObject):
 
     def stop(self, *, timeout_seconds: float = 5.0) -> tuple[bool, str]:
         if not self.status_path.exists():
-            self._set_active(False, "Privileged broker is not active.")
-            return True, "Privileged broker is not active."
+            self._set_active(False, "Elevated broker is not active.")
+            return True, "Elevated broker is not active."
         try:
             self._send_request({"token": self.token, "action": "stop"}, timeout_seconds=timeout_seconds)
         except Exception:
@@ -378,8 +390,8 @@ class PrivilegedBrokerManager(QObject):
                 self.status_path.unlink()
             except Exception:
                 pass
-        self._set_active(False, "Privileged broker stopped.")
-        return True, "Privileged broker stopped."
+        self._set_active(False, "Elevated broker stopped.")
+        return True, "Elevated broker stopped."
 
     def ensure_running(self, *, timeout_seconds: float = 15.0) -> None:
         if self.is_active():
@@ -392,17 +404,17 @@ class PrivilegedBrokerManager(QObject):
         status = self._read_status()
         active = bool(status and status.get("port"))
         if active != self._active:
-            self._set_active(active, "Privileged broker is active for this session." if active else "Privileged broker is not active.")
+            self._set_active(active, "Elevated broker is active for this session." if active else "Elevated broker is not active.")
         return active
 
     def _send_request(self, payload: dict[str, object], *, timeout_seconds: float) -> dict[str, object]:
         status = self._read_status()
         if status is None:
-            raise RuntimeError("Privileged broker is not available.")
+            raise RuntimeError("Elevated broker is not available.")
         host = str(status.get("host") or "127.0.0.1")
         port = int(status.get("port") or 0)
         if port <= 0:
-            raise RuntimeError("Privileged broker did not expose a valid IPC port.")
+            raise RuntimeError("Elevated broker did not expose a valid IPC port.")
         with socket.create_connection((host, port), timeout=timeout_seconds) as connection:
             connection.sendall(json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n")
             connection.shutdown(socket.SHUT_WR)
@@ -413,7 +425,7 @@ class PrivilegedBrokerManager(QObject):
                     break
                 response += chunk
         if not response:
-            raise RuntimeError("Privileged broker returned an empty response.")
+            raise RuntimeError("Elevated broker returned an empty response.")
         return json.loads(response.decode("utf-8").strip())
 
     def _read_status(self) -> dict[str, object] | None:
@@ -444,6 +456,8 @@ class PrivilegedBrokerManager(QObject):
                 str(self.assets_root),
                 "--plugins-root",
                 str(self.plugins_root),
+                "--builtin-manifest-path",
+                str(self.builtin_manifest_path),
                 "--custom-plugins-root",
                 str(self.custom_plugins_root),
                 "--plugin-state-path",
@@ -466,6 +480,8 @@ class PrivilegedBrokerManager(QObject):
             str(self.assets_root),
             "--plugins-root",
             str(self.plugins_root),
+            "--builtin-manifest-path",
+            str(self.builtin_manifest_path),
             "--custom-plugins-root",
             str(self.custom_plugins_root),
             "--plugin-state-path",
@@ -483,7 +499,7 @@ class PrivilegedBrokerManager(QObject):
         self._last_status = message
 
 
-def build_broker_parser(subparsers) -> None:
+def build_elevated_broker_parser(subparsers) -> None:
     broker = subparsers.add_parser("elevated-broker", help=argparse.SUPPRESS)
     broker.add_argument("--status-file", required=True)
     broker.add_argument("--token", required=True)
@@ -491,23 +507,26 @@ def build_broker_parser(subparsers) -> None:
     broker.add_argument("--output-root", required=True)
     broker.add_argument("--assets-root", required=True)
     broker.add_argument("--plugins-root", required=True)
+    broker.add_argument("--builtin-manifest-path", required=True)
     broker.add_argument("--custom-plugins-root", required=True)
     broker.add_argument("--plugin-state-path", required=True)
 
 
-def run_broker_service(args) -> int:
-    runtime = PrivilegedBrokerRuntime(Path(args.data_root), Path(args.output_root), Path(args.assets_root))
-    registry = load_privileged_capability_registry(
+def run_elevated_broker_service(args) -> int:
+    runtime = ElevatedBrokerRuntime(Path(args.data_root), Path(args.output_root), Path(args.assets_root))
+    registry = load_elevated_capability_registry(
         Path(args.plugins_root),
         Path(args.custom_plugins_root),
         Path(args.plugin_state_path),
         Path(args.data_root),
         Path(args.output_root),
         Path(args.assets_root),
+        Path(args.builtin_manifest_path),
+        True,
     )
 
     try:
-        server = _ThreadedBrokerServer(("127.0.0.1", 0), _PrivilegedBrokerRequestHandler)
+        server = _ThreadedBrokerServer(("127.0.0.1", 0), _ElevatedBrokerRequestHandler)
     except OSError as exc:
         print(f"Unable to start elevated broker IPC server: {exc}", file=sys.stderr)
         return 2

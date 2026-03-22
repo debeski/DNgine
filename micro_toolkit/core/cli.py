@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 
+from micro_toolkit.core.elevated_broker import build_elevated_broker_parser, run_elevated_broker_service
 from micro_toolkit.core.hotkey_helper import build_helper_parser, run_hotkey_helper_service
-from micro_toolkit.core.privileged_broker import build_broker_parser, run_broker_service
 from micro_toolkit.core.services import AppServices
 
 
@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     broker_run.add_argument("--payload", default="{}", help="JSON object payload")
 
     build_helper_parser(subparsers)
-    build_broker_parser(subparsers)
+    build_elevated_broker_parser(subparsers)
 
     return parser
 
@@ -124,14 +124,14 @@ def execute_cli(args) -> int:
 
     if args.command == "broker" and args.broker_namespace == "elevated":
         if args.broker_command == "capabilities":
-            print(json.dumps(services.privileged_broker.list_capabilities(), indent=2, ensure_ascii=False))
+            print(json.dumps(services.elevated_broker.list_capabilities(), indent=2, ensure_ascii=False))
             return 0
         if args.broker_command == "start":
-            ok, message = services.privileged_broker.start()
+            ok, message = services.elevated_broker.start()
             print(message)
             return 0 if ok else 1
         if args.broker_command == "stop":
-            ok, message = services.privileged_broker.stop()
+            ok, message = services.elevated_broker.stop()
             print(message)
             return 0 if ok else 1
         if args.broker_command == "run":
@@ -141,7 +141,7 @@ def execute_cli(args) -> int:
                 raise SystemExit(f"Invalid JSON for --payload: {exc}") from exc
             if not isinstance(payload, dict):
                 raise SystemExit("Broker payload must be a JSON object.")
-            result = services.privileged_broker.request(args.capability_id, payload)
+            result = services.elevated_broker.request(args.capability_id, payload)
             print(json.dumps(services.serialize_result(result), indent=2, ensure_ascii=False))
             return 0
 
@@ -149,6 +149,6 @@ def execute_cli(args) -> int:
         return run_hotkey_helper_service(args)
 
     if args.command == "elevated-broker":
-        return run_broker_service(args)
+        return run_elevated_broker_service(args)
 
     raise SystemExit(2)

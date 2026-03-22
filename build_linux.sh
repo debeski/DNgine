@@ -20,6 +20,9 @@ echo "Installing build dependencies..."
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt pyinstaller
 
+echo "Generating builtin plugin manifest..."
+python tools/generate_builtin_plugin_manifest.py
+
 echo "Cleaning previous build artifacts..."
 rm -rf build dist
 

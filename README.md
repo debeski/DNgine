@@ -30,7 +30,7 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Plugin-local translations through sidecar locale files
 - Headless tool commands for workflows and automation
 - Capability-based elevated broker for future admin/root operations
-- Dedicated privileged hotkey helper for Linux global shortcuts
+- Dedicated elevated hotkey helper for Linux global shortcuts
 
 ## Included Tools
 
@@ -112,8 +112,10 @@ The plugin engine is built around:
 - lazy widget creation
 - plugin-local `en/ar` sidecar locales
 - optional headless command registration
-- optional privileged capability registration
+- optional elevated capability registration
 - import/export of custom plugin bundles
+- manifest-verified builtin plugin discovery in packaged builds
+- custom plugin trust review and quarantine state
 
 That means a plugin can contribute:
 
@@ -121,9 +123,42 @@ That means a plugin can contribute:
 - a `QWidget` page
 - locale bundles
 - CLI/workflow commands
-- narrow privileged capabilities when truly needed
+- narrow elevated capabilities when truly needed
 
 without changing the core shell.
+
+In packaged `onedir` builds, bundled first-party plugins are verified against `builtin_plugin_manifest.json` before they are treated as builtin. Extra or modified files dropped into the shipped plugin folder do not automatically become first-class app plugins.
+
+### Custom Plugin Safety Model
+
+Custom plugins are supported, but they are not treated like built-in code.
+
+Micro Toolkit now applies several safety measures:
+
+- packaged first-party plugins are identified through a build-generated manifest
+- imported plugins start disabled and untrusted
+- manually dropped custom plugins are still discovered as untrusted
+- custom plugins stay out of the sidebar until explicitly trusted
+- static safety scans inspect plugin Python files for risky imports and calls
+- critical-risk imports are blocked during import and remain quarantined
+- repeated load or command-registration failures cause automatic quarantine
+- trust, risk, failure, and quarantine state are visible in `Settings -> Plugins`
+
+Important limit:
+
+- this is not a full OS sandbox
+
+Trusted plugins still run Python code in the app process. The review and quarantine system reduces accidental breakage and raises the bar against obviously unsafe plugins, but users should still install plugins only from authors they trust.
+
+### Plugin Origins
+
+Micro Toolkit is designed around three plugin origins:
+
+- `builtin`: shipped with the app and verified by the build manifest
+- `signed`: reserved for future signer-verified third-party distribution
+- `custom`: local or imported plugins that go through review and trust controls
+
+At the moment, `builtin` and `custom` are active. The `signed` tier is reserved in the architecture so a future trusted-signer flow can be added without redesigning the whole plugin model.
 
 ## Multilingual and RTL Support
 
@@ -155,13 +190,13 @@ Micro Toolkit is designed to stay responsive:
 - heavy work is expected to run in background tasks
 - headless command functions are separated from UI code where possible
 
-## Privileged Access Model
+## Elevated Access Model
 
 Micro Toolkit now has two separate elevated helpers, each with a narrow purpose:
 
 ### 1. Hotkey Helper
 
-The hotkey helper exists only for global shortcut capture on Linux sessions where the keyboard backend requires elevated input access. It is intentionally narrow and should not be reused for general privileged work.
+The hotkey helper exists only for global shortcut capture on Linux sessions where the keyboard backend requires elevated input access. It is intentionally narrow and should not be reused for general elevated work.
 
 ### 2. Elevated Broker
 
@@ -169,9 +204,9 @@ The elevated broker is the general capability-based elevation layer for future t
 
 Important design rules:
 
-- the main app stays unprivileged
+- the main app stays non-elevated
 - plugins do not get arbitrary root/admin command execution
-- privileged actions must be registered as named capabilities
+- elevated actions must be registered as named capabilities
 - each capability should do one narrow job
 - capabilities should accept structured payloads and return structured results
 
@@ -180,7 +215,7 @@ Examples of good broker capability shapes:
 - `filesystem.stat_path`
 - `filesystem.secure_delete`
 - `system.read_protected_info`
-- `network.bind_privileged_port`
+- `network.bind_elevated_port`
 
 Examples of bad designs to avoid:
 
@@ -341,14 +376,57 @@ Use:
 - `from micro_toolkit.core.app_utils import ...` for shared helpers where appropriate
 - `services.run_task(...)` for background work
 - `services.plugin_text(...)` for localized plugin strings
-- `services.request_privileged(...)` only when a capability-based privileged operation is truly required
+- `services.request_elevated(...)` only when a capability-based elevated operation is truly required
+- `register_elevated_capabilities(...)` only for narrow, explicit elevated operations
 
 Avoid:
 
-- imports from deprecated old app folders such as `.xpose`
-- imports from removed `tkinter`/`customtkinter` code paths
+- imports from non-existent folders
 - top-level heavy imports if they are only needed when the user actually runs the tool
 - doing large file/network/CPU work directly on the UI thread
+
+### How Custom Plugin Review Works
+
+When a plugin is imported through `Settings -> Plugins`, or even when it is copied manually into `data/plugins`, the app treats it as a custom plugin with review state.
+
+This review flow does not apply to packaged first-party plugins that were verified through the builtin manifest during app startup.
+
+Default behavior:
+
+- `trusted = false`
+- `enabled = false`
+- `hidden = false`
+- the plugin is not loaded into the main shell
+
+Review flow:
+
+1. Open `Settings -> Plugins`
+2. Inspect the plugin `Risk` and `Status` columns
+3. Review the plugin code and sidecar files yourself
+4. Mark the plugin as `Trusted` only if you accept running that code
+5. Enable it if you want it available in the main app
+
+Risk behavior:
+
+- `low`: no obvious risky patterns were found by the static scan
+- `medium` or `high`: the app asks for confirmation before trust is applied
+- `critical`: import is blocked or the plugin remains quarantined and disabled
+- direct elevation patterns such as `sudo`, `pkexec`, `runas`, or similar self-elevation code are treated as high risk
+- the broker-based `register_elevated_capabilities(...)` path is the approved exception and is not itself a risk marker
+
+Current protective scope:
+
+- static AST scanning
+- explicit trust review
+- disabled-by-default custom imports
+- load-time failure containment
+- automatic quarantine after repeated failures
+
+Current non-goals:
+
+- full sandboxing
+- arbitrary-code trust bypass
+- generic elevated execution
 
 ### Translations
 
@@ -431,14 +509,14 @@ self.services.run_task(
 )
 ```
 
-### Privileged Broker Capabilities
+### Elevated Broker Capabilities
 
 If a plugin really needs elevated access, do not shell out to `sudo`, `pkexec`, or platform elevation tools directly from the plugin page.
 
 Instead:
 
 1. Register a narrow capability
-2. Request it through `services.request_privileged(...)`
+2. Request it through `services.request_elevated(...)`
 
 Example capability registration:
 
@@ -457,7 +535,7 @@ class MyPlugin(QtPlugin):
     plugin_id = "my_plugin"
     name = "My Plugin"
 
-    def register_privileged_capabilities(self, registry, runtime) -> None:
+    def register_elevated_capabilities(self, registry, runtime) -> None:
         registry.register(
             "my_plugin.stat_sensitive_path",
             "Stat Sensitive Path",
@@ -470,7 +548,7 @@ class MyPlugin(QtPlugin):
 Example usage from the normal app process:
 
 ```python
-result = services.request_privileged(
+result = services.request_elevated(
     "my_plugin.stat_sensitive_path",
     {"path": "/some/protected/location"},
 )
@@ -514,11 +592,13 @@ Recommended split:
 - plugin class for metadata and widget creation
 - helper functions for data processing
 - command functions for workflows/CLI
-- privileged capability handlers only when absolutely required
+- elevated capability handlers only when absolutely required
 
 ## Build and Packaging
 
 Micro Toolkit uses `PyInstaller` in `onedir` mode.
+
+The build scripts regenerate the builtin plugin manifest before packaging so shipped first-party plugins can be verified at runtime in packaged builds.
 
 Why `onedir`:
 

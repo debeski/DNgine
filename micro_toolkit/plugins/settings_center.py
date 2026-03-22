@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -229,7 +230,7 @@ class SettingsCenterPage(QWidget):
         self.plugins_note.setWordWrap(True)
         layout.addWidget(self.plugins_note)
 
-        self.plugins_table = QTableWidget(0, 7)
+        self.plugins_table = QTableWidget(0, 10)
         self.plugins_table.setAlternatingRowColors(True)
         self.plugins_table.verticalHeader().setVisible(False)
         self.plugins_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -316,8 +317,11 @@ class SettingsCenterPage(QWidget):
                     self._pt("plugins.name", "Plugin"),
                     self._pt("plugins.category", "Category"),
                     self._pt("plugins.source", "Source"),
+                    self._pt("plugins.trusted", "Trusted"),
                     self._pt("plugins.enabled", "Enabled"),
                     self._pt("plugins.hidden", "Hidden"),
+                    self._pt("plugins.risk", "Risk"),
+                    self._pt("plugins.status", "Status"),
                     self._pt("plugins.path", "Path"),
                 ]
             )
@@ -343,6 +347,15 @@ class SettingsCenterPage(QWidget):
                 source_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 3, source_item)
 
+                trusted_item = QTableWidgetItem()
+                trusted_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+                if spec.source_type != "builtin" and spec.plugin_id != "settings_center":
+                    trusted_item.setFlags(trusted_flags)
+                else:
+                    trusted_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                trusted_item.setCheckState(Qt.CheckState.Checked if spec.trusted else Qt.CheckState.Unchecked)
+                self.plugins_table.setItem(row_index, 4, trusted_item)
+
                 enabled_item = QTableWidgetItem()
                 enabled_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
                 hidden_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
@@ -351,7 +364,7 @@ class SettingsCenterPage(QWidget):
                 else:
                     enabled_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 enabled_item.setCheckState(Qt.CheckState.Checked if spec.enabled else Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 4, enabled_item)
+                self.plugins_table.setItem(row_index, 5, enabled_item)
 
                 hidden_item = QTableWidgetItem()
                 if spec.plugin_id != "settings_center":
@@ -359,11 +372,24 @@ class SettingsCenterPage(QWidget):
                 else:
                     hidden_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 hidden_item.setCheckState(Qt.CheckState.Checked if spec.hidden else Qt.CheckState.Unchecked)
-                self.plugins_table.setItem(row_index, 5, hidden_item)
+                self.plugins_table.setItem(row_index, 6, hidden_item)
+
+                risk_item = QTableWidgetItem(spec.risk_level.title())
+                risk_item.setToolTip(self._plugin_review_details(spec))
+                risk_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self._style_risk_item(risk_item, spec.risk_level)
+                self.plugins_table.setItem(row_index, 7, risk_item)
+
+                status_text = self._plugin_status_text(spec)
+                status_item = QTableWidgetItem(status_text)
+                status_item.setToolTip(self._plugin_review_details(spec))
+                status_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                self._style_risk_item(status_item, spec.risk_level)
+                self.plugins_table.setItem(row_index, 8, status_item)
 
                 path_item = QTableWidgetItem(str(spec.file_path))
                 path_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
-                self.plugins_table.setItem(row_index, 6, path_item)
+                self.plugins_table.setItem(row_index, 9, path_item)
         finally:
             self._building_plugin_table = False
 
@@ -429,7 +455,7 @@ class SettingsCenterPage(QWidget):
             self.shortcut_status_label.setText(
                 self._pt(
                     "shortcuts.status.helper_active",
-                    "The privileged hotkey helper is active for this session. Global shortcuts will be routed through the helper process.",
+                    "The elevated hotkey helper is active for this session. Global shortcuts will be routed through the helper process.",
                 )
             )
             self.start_helper_button.setVisible(False)
@@ -485,25 +511,120 @@ class SettingsCenterPage(QWidget):
         self.services.command_registry.execute("app.stop_hotkey_helper")
         self._refresh_shortcut_status()
 
+    def _plugin_status_text(self, spec) -> str:
+        if spec.quarantined:
+            return self._pt("plugins.status.quarantined", "Quarantined")
+        if spec.source_type == "custom" and not spec.trusted:
+            return self._pt("plugins.status.review", "Pending Review")
+        if not spec.enabled:
+            return self._pt("plugins.status.disabled", "Disabled")
+        if spec.last_error:
+            return self._pt("plugins.status.error", "Error Recorded")
+        return self._pt("plugins.status.ready", "Ready")
+
+    def _plugin_review_details(self, spec) -> str:
+        details: list[str] = []
+        if spec.risk_summary:
+            details.append(spec.risk_summary)
+        if spec.last_error:
+            details.append(self._pt("plugins.error_detail", "Last error: {error}", error=spec.last_error))
+        if spec.failure_count:
+            details.append(
+                self._pt(
+                    "plugins.failure_detail",
+                    "Failure count: {count}",
+                    count=str(spec.failure_count),
+                )
+            )
+        return "\n".join(details)
+
+    def _style_risk_item(self, item: QTableWidgetItem, risk_level: str) -> None:
+        normalized = (risk_level or "low").lower()
+        if normalized in {"high", "critical"}:
+            item.setForeground(QColor("#c62828"))
+        elif normalized == "medium":
+            item.setForeground(QColor("#b26a00"))
+        else:
+            item.setForeground(QColor("#1b5e20"))
+
     def _apply_plugin_states(self) -> None:
         specs = self.services.plugin_manager.discover_plugins(include_disabled=True)
+        pending_risk_review: list[str] = []
+        forced_block: list[str] = []
+        updates: list[tuple[str, str, bool, bool, bool, bool]] = []
+        language = self.services.i18n.current_language()
         for spec in specs:
             row_index = self.plugin_row_map.get(spec.plugin_id)
             if row_index is None:
                 continue
-            enabled_item = self.plugins_table.item(row_index, 4)
-            hidden_item = self.plugins_table.item(row_index, 5)
+            trusted_item = self.plugins_table.item(row_index, 4)
+            enabled_item = self.plugins_table.item(row_index, 5)
+            hidden_item = self.plugins_table.item(row_index, 6)
+            trusted = trusted_item.checkState() == Qt.CheckState.Checked if trusted_item is not None else spec.trusted
             enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else True
             hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else False
             if spec.plugin_id == "settings_center":
+                trusted = True
                 enabled = True
                 hidden = False
-            self.services.plugin_state_manager.set_enabled(spec.plugin_id, enabled)
-            self.services.plugin_state_manager.set_hidden(spec.plugin_id, hidden)
+            if spec.source_type == "builtin":
+                trusted = True
+            if spec.source_type == "custom" and spec.risk_level == "critical":
+                trusted = False
+                enabled = False
+                forced_block.append(spec.localized_name(language))
+            elif spec.source_type == "custom" and trusted and not spec.trusted and spec.risk_level in {"medium", "high"}:
+                pending_risk_review.append(spec.localized_name(language))
+            if spec.source_type == "custom" and not trusted:
+                enabled = False
+            updates.append((spec.plugin_id, spec.source_type, trusted, enabled, hidden, spec.risk_level == "critical"))
+
+        if pending_risk_review:
+            response = QMessageBox.question(
+                self,
+                self._pt("plugins.review_prompt.title", "Trust custom plugins?"),
+                self._pt(
+                    "plugins.review_prompt.body",
+                    "The following custom plugins contain medium or high risk markers from the static safety scan:\n\n{plugins}\n\nTrusting them will allow the app to import and run their code. Only continue if you trust the author and reviewed the plugin contents.",
+                    plugins="\n".join(f"- {name}" for name in pending_risk_review),
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if response != QMessageBox.StandardButton.Yes:
+                for index, (plugin_id, source_type, trusted, enabled, hidden, force_quarantine) in enumerate(updates):
+                    if source_type == "custom" and trusted:
+                        updates[index] = (plugin_id, source_type, False, False, hidden, force_quarantine)
+
+        for plugin_id, source_type, trusted, enabled, hidden, force_quarantine in updates:
+            if force_quarantine:
+                self.services.plugin_state_manager.quarantine(
+                    plugin_id,
+                    self._pt(
+                        "plugins.blocked.reason",
+                        "The static safety scan detected critical-risk patterns. This plugin remains quarantined until removed or replaced.",
+                    ),
+                )
+                self.services.plugin_state_manager.set_hidden(plugin_id, hidden)
+                continue
+            self.services.plugin_state_manager.set_trusted(plugin_id, trusted)
+            self.services.plugin_state_manager.set_enabled(plugin_id, enabled)
+            self.services.plugin_state_manager.set_hidden(plugin_id, hidden)
+
+        if forced_block:
+            QMessageBox.warning(
+                self,
+                self._pt("plugins.blocked.title", "Plugins blocked"),
+                self._pt(
+                    "plugins.blocked.body",
+                    "These custom plugins remain blocked because the static scan detected critical-risk patterns:\n\n{plugins}",
+                    plugins="\n".join(f"- {name}" for name in forced_block),
+                ),
+            )
         QMessageBox.information(
             self,
             self._pt("plugins.applied.title", "Plugin settings updated"),
-            self._pt("plugins.applied.body", "Plugin visibility and enabled state were updated."),
+            self._pt("plugins.applied.body", "Plugin trust, visibility, and enabled state were updated."),
         )
         self.services.reload_plugins()
 
@@ -524,7 +645,7 @@ class SettingsCenterPage(QWidget):
         QMessageBox.information(
             self,
             self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}", plugins=", ".join(plugin_ids)),
+            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
         )
         self.services.reload_plugins()
 
@@ -540,7 +661,7 @@ class SettingsCenterPage(QWidget):
         QMessageBox.information(
             self,
             self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}", plugins=", ".join(plugin_ids)),
+            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
         )
         self.services.reload_plugins()
 
@@ -561,7 +682,7 @@ class SettingsCenterPage(QWidget):
         QMessageBox.information(
             self,
             self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}", plugins=", ".join(plugin_ids)),
+            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
         )
         self.services.reload_plugins()
 

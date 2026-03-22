@@ -106,11 +106,11 @@ class HotkeyHelperManager(QObject):
         if _keyboard_backend() is None:
             return "The global hotkey backend is not installed."
         if not sys.platform.startswith("linux"):
-            return "The privileged helper is only needed on Linux."
+            return "The elevated helper is only needed on Linux."
         if self.port is None:
             return f"The local IPC channel for the helper is unavailable in this session: {self._server_error or 'unknown error'}"
         if self._is_root():
-            return "The app already has elevated privileges, so a separate hotkey helper is unnecessary."
+            return "The app is already running elevated, so a separate hotkey helper is unnecessary."
         if shutil.which("pkexec") is None:
             return "pkexec is not installed, so the helper cannot request elevated input access."
         return "Global shortcuts on Linux need elevated access to input devices. The helper can request that access without elevating the main app."
@@ -174,7 +174,7 @@ class HotkeyHelperManager(QObject):
             return False, message
 
         if self.is_active() and bindings == self._running_bindings:
-            message = "Privileged hotkey helper is active for this session."
+            message = "Elevated hotkey helper is active for this session."
             self._set_active(True, message)
             return True, message
 
@@ -211,7 +211,7 @@ class HotkeyHelperManager(QObject):
             helper_pid = self._helper_pid()
             if helper_pid is not None:
                 self._running_bindings = dict(bindings)
-                message = "Privileged hotkey helper is active for this session."
+                message = "Elevated hotkey helper is active for this session."
                 self._set_active(True, message)
                 return True, message
             if self._process.poll() is not None:

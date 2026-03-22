@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "trusted_origins": [
+    "builtin",
+    "signed",
+    "custom"
+  ],
+  "files": {
+    "clipboard_manager.py": {
+      "sha256": "cc6f3d9aa6faf8ccd84b7acfd0b6c1a3b4f69787cc4f00209d9f4693c3f5443c",
+      "plugins": [
+        {
+          "plugin_id": "clip_manager",
+          "class_name": "ClipboardManagerPlugin"
+        }
+      ]
+    },
+    "core_tools/duplicate_finder.py": {
+      "sha256": "d32f6271a6f1fb78591c7ba00d2339c4aa4852bbaa367a3775ecfbe00f1aff74",
+      "plugins": [
+        {
+          "plugin_id": "dups",
+          "class_name": "DuplicateFinderPlugin"
+        }
+      ]
+    },
+    "core_tools/folder_exporter.py": {
+      "sha256": "bb80fb4e296db25380c8254250a65b7eca385564ffb9684fce38395256b7b4e5",
+      "plugins": [
+        {
+          "plugin_id": "exporter",
+          "class_name": "FolderExporterPlugin"
+        }
+      ]
+    },
+    "core_tools/quick_analytics.py": {
+      "sha256": "68f6dbf009aab0e0a566c5d4876819e97c87dcc4cfd5a9fbd38f02e6a5975697",
+      "plugins": [
+        {
+          "plugin_id": "quick_analytics",
+          "class_name": "QuickAnalyticsPlugin"
+        }
+      ]
+    },
+    "core_tools/sequence_finder.py": {
+      "sha256": "06ad127abcc82e5a098b225444830894009f824d5a3e658ff7ef1e0b4b01d6d6",
+      "plugins": [
+        {
+          "plugin_id": "seq",
+          "class_name": "SequenceFinderPlugin"
+        }
+      ]
+    },
+    "core_tools/validator.py": {
+      "sha256": "0e3696706af035170f94a290a9265891d4b9cc3dadf93f74f606145dd52342b8",
+      "plugins": [
+        {
+          "plugin_id": "validator",
+          "class_name": "ValidatorPlugin"
+        }
+      ]
+    },
+    "file_tools/batch_renamer.py": {
+      "sha256": "d63312004b81628921181fb30e53bd1155f8ae872ff609e1cc1bf158c42ee321",
+      "plugins": [
+        {
+          "plugin_id": "batch_renamer",
+          "class_name": "BatchRenamerPlugin"
+        }
+      ]
+    },
+    "file_tools/deep_searcher.py": {
+      "sha256": "03e615f1ef406300cfecbcd40494c02b348744bca83259b57b9ef075dbb99c3a",
+      "plugins": [
+        {
+          "plugin_id": "deep_searcher",
+          "class_name": "DeepSearcherPlugin"
+        }
+      ]
+    },
+    "file_tools/smart_organizer.py": {
+      "sha256": "5850a3a769a3a091fc00d9ac29d4e48711992e8e7740ca3ed8db776edb7dd466",
+      "plugins": [
+        {
+          "plugin_id": "smart_org",
+          "class_name": "SmartOrganizerPlugin"
+        }
+      ]
+    },
+    "file_tools/usage_analyzer.py": {
+      "sha256": "1a5697a99a0740296c5a398be7bfed094fdf9a3e25daa03f5fe4f37dd8e13cf4",
+      "plugins": [
+        {
+          "plugin_id": "usage_analyzer",
+          "class_name": "UsageAnalyzerPlugin"
+        }
+      ]
+    },
+    "general/welcome.py": {
+      "sha256": "79761688a751b1c130a4793aabd206a7292dc178d43e7775be46425cfa80a5bd",
+      "plugins": [
+        {
+          "plugin_id": "welcome_overview",
+          "class_name": "WelcomeOverviewPlugin"
+        }
+      ]
+    },
+    "it_tools/credential_scanner.py": {
+      "sha256": "81acfe4b73ac1edd7902a0e5fdb2db1532458d02807c58d4a767cc600fdd32ba",
+      "plugins": [
+        {
+          "plugin_id": "cred_scanner",
+          "class_name": "CredentialScannerPlugin"
+        }
+      ]
+    },
+    "it_tools/network_scanner.py": {
+      "sha256": "6980d019f97ee0429133cde1ab8920799daa0eef5a20692a2fb30c9cc30aa7d2",
+      "plugins": [
+        {
+          "plugin_id": "net_scan",
+          "class_name": "NetworkScannerPlugin"
+        }
+      ]
+    },
+    "it_tools/privacy_shredder.py": {
+      "sha256": "fde4c8be488f9c20748a736d70de7d34b1c34ff278c52842e138a1c13d713839",
+      "plugins": [
+        {
+          "plugin_id": "shredder",
+          "class_name": "PrivacyShredderPlugin"
+        }
+      ]
+    },
+    "it_tools/system_audit.py": {
+      "sha256": "63816bfa7dfcb6f9385df4f1264f38168fb8e77f40f78e14de256d62c049560b",
+      "plugins": [
+        {
+          "plugin_id": "sys_audit",
+          "class_name": "SystemAuditPlugin"
+        }
+      ]
+    },
+    "media_tools/image_tagger.py": {
+      "sha256": "d7a35d13c74a98269ac645c7877cd934259b15cea4067d9baa2770783367afb5",
+      "plugins": [
+        {
+          "plugin_id": "tagger",
+          "class_name": "ImageTaggerPlugin"
+        }
+      ]
+    },
+    "media_tools/image_transformer.py": {
+      "sha256": "8a32458f0988ab6f83000a0cbf105eda3fbe46fcf9cc5b73b761c813c66c8d6f",
+      "plugins": [
+        {
+          "plugin_id": "img_trans",
+          "class_name": "ImageTransformerPlugin"
+        }
+      ]
+    },
+    "office_tools/cross_joiner.py": {
+      "sha256": "b08756409d30532c708f61e79b4fd2902127d740d64eb7286d0d1048e945f566",
+      "plugins": [
+        {
+          "plugin_id": "cross_joiner",
+          "class_name": "CrossJoinerPlugin"
+        }
+      ]
+    },
+    "office_tools/data_cleaner.py": {
+      "sha256": "0617568b83d34a331c4053f2d35945d51a88ddc9d8f96b54f529471b7367652a",
+      "plugins": [
+        {
+          "plugin_id": "cleaner",
+          "class_name": "DataCleanerPlugin"
+        }
+      ]
+    },
+    "office_tools/document_bridge.py": {
+      "sha256": "55ece6b72e27f62d45e01aa3db87a383108edf3f6f5a436206b9e0444fdad59a",
+      "plugins": [
+        {
+          "plugin_id": "doc_bridge",
+          "class_name": "DocumentBridgePlugin"
+        }
+      ]
+    },
+    "office_tools/pdf_suite.py": {
+      "sha256": "cc465ad235496b7bd4d882f60864f880ed3dee52eeef9af1860a2ac8adc0bc7b",
+      "plugins": [
+        {
+          "plugin_id": "pdf_suite",
+          "class_name": "PDFSuitePlugin"
+        }
+      ]
+    },
+    "settings_center.py": {
+      "sha256": "06db476d36900a5bd0cea9ccf83440d11d445c7f76dd835ff992c7bf84e65e03",
+      "plugins": [
+        {
+          "plugin_id": "settings_center",
+          "class_name": "SettingsCenterPlugin"
+        }
+      ]
+    },
+    "workflow_studio.py": {
+      "sha256": "92415d611301533fd39756f60dbb119c4265fc332118522b026127e181061607",
+      "plugins": [
+        {
+          "plugin_id": "workflow_studio",
+          "class_name": "WorkflowStudioPlugin"
+        }
+      ]
+    }
+  }
+}

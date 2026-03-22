@@ -35,7 +35,7 @@ class ElevationManager:
 
     def relaunch_elevated(self) -> tuple[bool, str]:
         if self.is_elevated():
-            return False, "The app is already running with elevated privileges."
+            return False, "The app is already running elevated."
 
         command = self._launch_command()
         if sys.platform == "win32":
@@ -46,7 +46,7 @@ class ElevationManager:
                 return False, f"Unable to request elevation: {exc}"
             if result <= 32:
                 return False, "Windows declined the elevation request."
-            return True, "Restarting the app with administrator privileges."
+            return True, "Restarting the app with elevation."
 
         if sys.platform == "darwin":
             if shutil.which("osascript") is None:
@@ -57,7 +57,7 @@ class ElevationManager:
                 subprocess.Popen(["osascript", "-e", script])
             except Exception as exc:
                 return False, f"Unable to request elevation: {exc}"
-            return True, "Restarting the app with administrator privileges."
+            return True, "Restarting the app with elevation."
 
         pkexec_path = shutil.which("pkexec")
         if pkexec_path is None:
@@ -66,10 +66,9 @@ class ElevationManager:
             subprocess.Popen([pkexec_path, *command])
         except Exception as exc:
             return False, f"Unable to request elevation: {exc}"
-        return True, "Restarting the app with elevated privileges."
+        return True, "Restarting the app with elevation."
 
     def _launch_command(self) -> list[str]:
         if getattr(sys, "frozen", False):
             return [sys.executable, *sys.argv[1:]]
         return [sys.executable, "-m", "micro_toolkit", *sys.argv[1:]]
-

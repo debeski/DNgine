@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 from micro_toolkit.core.plugin_manager import PluginManager, PluginSpec
+from micro_toolkit.core.plugin_security import scan_plugin_path
 
 
 class PluginPackageManager:
@@ -20,6 +21,8 @@ class PluginPackageManager:
         source_file = Path(source_file)
         if not source_file.exists() or source_file.suffix != ".py":
             raise ValueError("Choose a valid Python plugin file.")
+        report = scan_plugin_path(source_file)
+        self._reject_critical_report(report)
         specs = self.plugin_manager.inspect_path(source_file)
         if not specs:
             raise ValueError("No compatible plugin class was found in the selected file.")
@@ -35,7 +38,7 @@ class PluginPackageManager:
                 shutil.copy2(sibling, target_dir / sibling.name)
             elif sibling.is_dir():
                 shutil.copytree(sibling, target_dir / sibling.name, dirs_exist_ok=True)
-        self._reset_states([spec.plugin_id for spec in specs])
+        self._initialize_imported_plugins([spec.plugin_id for spec in specs], report.as_dict())
         self.plugin_manager.invalidate_cache(clear_instances=True)
         return [spec.plugin_id for spec in specs]
 
@@ -43,6 +46,8 @@ class PluginPackageManager:
         source_dir = Path(source_dir)
         if not source_dir.is_dir():
             raise ValueError("Choose a valid plugin folder.")
+        report = scan_plugin_path(source_dir)
+        self._reject_critical_report(report)
         specs = self.plugin_manager.inspect_path(source_dir)
         if not specs:
             raise ValueError("No compatible plugins were found in the selected folder.")
@@ -51,7 +56,7 @@ class PluginPackageManager:
         if target_dir.exists():
             shutil.rmtree(target_dir)
         shutil.copytree(source_dir, target_dir)
-        self._reset_states([spec.plugin_id for spec in specs])
+        self._initialize_imported_plugins([spec.plugin_id for spec in specs], report.as_dict())
         self.plugin_manager.invalidate_cache(clear_instances=True)
         return [spec.plugin_id for spec in specs]
 
@@ -82,18 +87,28 @@ class PluginPackageManager:
                 target_dir = self.custom_plugins_root / package_name
                 if target_dir.exists():
                     shutil.rmtree(target_dir)
-                target_dir.mkdir(parents=True, exist_ok=True)
-                prefix = f"plugins/{package_name}/"
-                for name in archive.namelist():
-                    if not name.startswith(prefix) or name.endswith("/"):
-                        continue
-                    relative_name = name[len(prefix):]
-                    destination = target_dir / relative_name
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    with archive.open(name) as source_handle, destination.open("wb") as dest_handle:
-                        shutil.copyfileobj(source_handle, dest_handle)
-                imported_ids.append(plugin_id)
-        self._reset_states(imported_ids)
+                try:
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    prefix = f"plugins/{package_name}/"
+                    for name in archive.namelist():
+                        if not name.startswith(prefix) or name.endswith("/"):
+                            continue
+                        relative_name = name[len(prefix):]
+                        if not relative_name:
+                            continue
+                        destination = target_dir / relative_name
+                        self._ensure_within_root(destination, target_dir)
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(name) as source_handle, destination.open("wb") as dest_handle:
+                            shutil.copyfileobj(source_handle, dest_handle)
+                    report = scan_plugin_path(target_dir)
+                    self._reject_critical_report(report)
+                    self._initialize_imported_plugins([plugin_id], report.as_dict())
+                    imported_ids.append(plugin_id)
+                except Exception:
+                    if target_dir.exists():
+                        shutil.rmtree(target_dir)
+                    raise
         self.plugin_manager.invalidate_cache(clear_instances=True)
         return imported_ids
 
@@ -173,6 +188,24 @@ class PluginPackageManager:
                 continue
             raise ValueError(f"Cannot import '{spec.plugin_id}' because that plugin id already exists.")
 
-    def _reset_states(self, plugin_ids: list[str]) -> None:
+    def _initialize_imported_plugins(self, plugin_ids: list[str], report: dict[str, object]) -> None:
         for plugin_id in plugin_ids:
             self.state_manager.reset(plugin_id)
+            self.state_manager.set_enabled(plugin_id, False)
+            self.state_manager.set_hidden(plugin_id, False)
+            self.state_manager.set_trusted(plugin_id, False)
+            self.state_manager.set_scan_report(plugin_id, report)
+
+    def _reject_critical_report(self, report) -> None:
+        if report.risk_level != "critical":
+            return
+        raise ValueError(
+            "Plugin import was blocked because the static safety scan detected critical patterns. "
+            f"{report.summary}"
+        )
+
+    def _ensure_within_root(self, target_path: Path, root: Path) -> None:
+        resolved_target = target_path.resolve()
+        resolved_root = root.resolve()
+        if resolved_target != resolved_root and resolved_root not in resolved_target.parents:
+            raise ValueError("Backup archive contains an unsafe path.")

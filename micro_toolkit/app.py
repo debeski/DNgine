@@ -284,23 +284,29 @@ class MicroToolkitWindow(QMainWindow):
         if spec is None:
             return
 
-        if plugin_id not in self.page_indices:
-            plugin = self.plugin_manager.load_plugin(plugin_id)
-            plugin_widget = plugin.create_widget(self.services)
+        try:
+            if plugin_id not in self.page_indices:
+                plugin = self.plugin_manager.load_plugin(plugin_id)
+                plugin_widget = plugin.create_widget(self.services)
 
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-            scroll_area.setWidget(plugin_widget)
+                scroll_area = QScrollArea()
+                scroll_area.setWidgetResizable(True)
+                scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+                scroll_area.setWidget(plugin_widget)
 
-            page_index = self.page_stack.addWidget(scroll_area)
-            self.page_indices[plugin_id] = page_index
+                page_index = self.page_stack.addWidget(scroll_area)
+                self.page_indices[plugin_id] = page_index
+        except Exception as exc:
+            self._handle_plugin_open_error(spec, exc)
+            return
 
         self.page_stack.setCurrentIndex(self.page_indices[plugin_id])
         localized_name = spec.localized_name(self.services.i18n.current_language())
         self.page_title.setText(localized_name)
         self.page_description.setText(spec.localized_description(self.services.i18n.current_language()))
         self.services.logger.set_status(f"Loaded {localized_name}")
+        if spec.source_type == "custom":
+            self.services.plugin_state_manager.clear_failures(plugin_id)
 
     def _append_log(self, timestamp: str, level: str, message: str) -> None:
         self.log_output.appendPlainText(f"{timestamp} [{level}] {message}")
@@ -437,3 +443,22 @@ class MicroToolkitWindow(QMainWindow):
         current_item = self.sidebar_tree.currentItem()
         current_plugin_id = current_item.data(0, PLUGIN_ID_ROLE) if current_item is not None else None
         self.reload_plugin_catalog(preferred_plugin_id=current_plugin_id)
+
+    def _handle_plugin_open_error(self, spec: PluginSpec, exc: Exception) -> None:
+        message = str(exc)
+        self.services.log(f"Plugin '{spec.plugin_id}' failed to open: {message}", "ERROR")
+        if spec.source_type == "custom":
+            state = self.services.plugin_state_manager.record_failure(spec.plugin_id, message)
+            if state.get("quarantined"):
+                self.services.log(
+                    f"Custom plugin '{spec.plugin_id}' was quarantined after repeated failures.",
+                    "WARNING",
+                )
+                self.reload_plugin_catalog(preferred_plugin_id="settings_center")
+        self.page_stack.setCurrentIndex(0)
+        self.page_title.setText(spec.localized_name(self.services.i18n.current_language()))
+        self.page_description.setText(message)
+        self.placeholder_eyebrow.setText(self.services.i18n.tr("shell.activity", "Activity"))
+        self.placeholder_title.setText(f"Could not open {spec.localized_name(self.services.i18n.current_language())}")
+        self.placeholder_body.setText(message)
+        self.services.logger.set_status(message)

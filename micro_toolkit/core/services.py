@@ -12,13 +12,13 @@ from micro_toolkit.core.autostart import AutostartManager
 from micro_toolkit.core.clipboard_quick_panel import ClipboardQuickPanelController
 from micro_toolkit.core.commands import CommandRegistry
 from micro_toolkit.core.command_runtime import serialize_command_result
+from micro_toolkit.core.elevated_broker import ElevatedBrokerManager
 from micro_toolkit.core.elevation import ElevationManager
 from micro_toolkit.core.hotkey_helper import HotkeyHelperManager
 from micro_toolkit.core.i18n import TranslationManager
 from micro_toolkit.core.plugin_manager import PluginManager
 from micro_toolkit.core.plugin_packages import PluginPackageManager
 from micro_toolkit.core.plugin_state import PluginStateManager
-from micro_toolkit.core.privileged_broker import PrivilegedBrokerManager
 from micro_toolkit.core.session_manager import SessionManager
 from micro_toolkit.core.shortcuts import ShortcutManager
 from micro_toolkit.core.theme import ThemeManager
@@ -58,6 +58,7 @@ class AppServices(QObject):
         self.assets_root = self.app_root / "assets"
         self.locales_root = self.app_root / "i18n"
         self.plugins_root = self.app_root / "plugins"
+        self.builtin_manifest_path = self.app_root / "builtin_plugin_manifest.json"
         self.custom_plugins_root = self.data_root / "plugins"
         self.output_root = self.runtime_root / "output"
         self.workflows_root = self.data_root / "workflows"
@@ -75,17 +76,24 @@ class AppServices(QObject):
         self.application = None
         self.main_window = None
         self.hotkey_helper_manager = HotkeyHelperManager(self.data_root, self.logger)
-        self.privileged_broker = PrivilegedBrokerManager(
+        self.elevated_broker = ElevatedBrokerManager(
             self.data_root,
             self.output_root,
             self.assets_root,
             self.plugins_root,
+            self.builtin_manifest_path,
             self.custom_plugins_root,
             self.plugin_state_path,
             self.logger,
         )
         self.plugin_state_manager = PluginStateManager(self.plugin_state_path)
-        self.plugin_manager = PluginManager(self.plugins_root, self.custom_plugins_root, self.plugin_state_manager)
+        self.plugin_manager = PluginManager(
+            self.plugins_root,
+            self.custom_plugins_root,
+            self.plugin_state_manager,
+            builtin_manifest_path=self.builtin_manifest_path,
+            enforce_builtin_manifest=getattr(sys, "frozen", False),
+        )
         self.plugin_package_manager = PluginPackageManager(
             self.plugin_manager,
             self.custom_plugins_root,
@@ -125,8 +133,8 @@ class AppServices(QObject):
     def record_run(self, tool_id: str, status: str, details: str = "") -> None:
         self.session_manager.log_run(tool_id, status, details)
 
-    def request_privileged(self, capability_id: str, payload: dict[str, object] | None = None, *, timeout_seconds: float = 20.0):
-        return self.privileged_broker.request(capability_id, payload, timeout_seconds=timeout_seconds)
+    def request_elevated(self, capability_id: str, payload: dict[str, object] | None = None, *, timeout_seconds: float = 20.0):
+        return self.elevated_broker.request(capability_id, payload, timeout_seconds=timeout_seconds)
 
     def default_output_path(self) -> Path:
         configured = self.config.get("default_output_path")
@@ -175,6 +183,8 @@ class AppServices(QObject):
                 plugin = self.plugin_manager.load_plugin(spec.plugin_id)
                 plugin.register_commands(self.command_registry, self)
             except Exception as exc:
+                if spec.source_type == "custom":
+                    self.plugin_state_manager.record_failure(spec.plugin_id, str(exc))
                 self.log(f"Skipping command registration for plugin '{spec.plugin_id}': {exc}", "WARNING")
 
         self._plugin_commands_registered = True
@@ -245,7 +255,7 @@ class AppServices(QObject):
             "broker.elevated.capabilities",
             "Elevated Broker Capabilities",
             "Return the elevated broker capability catalog.",
-            lambda: self.privileged_broker.list_capabilities(),
+            lambda: self.elevated_broker.list_capabilities(),
         )
         self.command_registry.register(
             "history.show",
@@ -316,31 +326,31 @@ class AppServices(QObject):
         self.command_registry.register(
             "app.start_hotkey_helper",
             "Start Hotkey Helper",
-            "Start the privileged hotkey helper for this session.",
+            "Start the elevated hotkey helper for this session.",
             lambda: self._start_hotkey_helper(),
         )
         self.command_registry.register(
             "app.stop_hotkey_helper",
             "Stop Hotkey Helper",
-            "Stop the privileged hotkey helper for this session.",
+            "Stop the elevated hotkey helper for this session.",
             lambda: self._stop_hotkey_helper(),
         )
         self.command_registry.register(
             "app.start_elevated_broker",
             "Start Elevated Broker",
             "Start the capability-based elevated broker for this session.",
-            lambda: self._start_privileged_broker(),
+            lambda: self._start_elevated_broker(),
         )
         self.command_registry.register(
             "app.stop_elevated_broker",
             "Stop Elevated Broker",
             "Stop the capability-based elevated broker for this session.",
-            lambda: self._stop_privileged_broker(),
+            lambda: self._stop_elevated_broker(),
         )
         self.command_registry.register(
             "app.restart_elevated",
             "Restart Elevated",
-            "Relaunch the app with elevated privileges when the platform supports it.",
+            "Relaunch the app with elevation when the platform supports it.",
             lambda: self._restart_elevated(),
         )
 
@@ -392,6 +402,14 @@ class AppServices(QObject):
             "standalone": spec.standalone,
             "enabled": spec.enabled,
             "hidden": spec.hidden,
+            "trusted": spec.trusted,
+            "quarantined": spec.quarantined,
+            "signature_status": spec.signature_status,
+            "signer": spec.signer,
+            "risk_level": spec.risk_level,
+            "risk_summary": spec.risk_summary,
+            "last_error": spec.last_error,
+            "failure_count": spec.failure_count,
             "source_type": spec.source_type,
             "file_path": str(spec.file_path),
         }
@@ -427,14 +445,14 @@ class AppServices(QObject):
         self.shortcut_manager.apply()
         return {"stopped": True, "message": "Hotkey helper stopped."}
 
-    def _start_privileged_broker(self):
-        success, message = self.privileged_broker.start()
+    def _start_elevated_broker(self):
+        success, message = self.elevated_broker.start()
         if not success:
             raise RuntimeError(message)
         return {"started": True, "message": message}
 
-    def _stop_privileged_broker(self):
-        success, message = self.privileged_broker.stop()
+    def _stop_elevated_broker(self):
+        success, message = self.elevated_broker.stop()
         if not success:
             raise RuntimeError(message)
         return {"stopped": True, "message": message}

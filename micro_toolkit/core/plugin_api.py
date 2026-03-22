@@ -39,7 +39,7 @@ class QtPlugin(abc.ABC):
     def register_commands(self, registry, services) -> None:
         return None
 
-    def register_privileged_capabilities(self, registry, runtime) -> None:
+    def register_elevated_capabilities(self, registry, runtime) -> None:
         return None
 
     @abc.abstractmethod

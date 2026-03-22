@@ -8,7 +8,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from micro_toolkit.core.builtin_manifest import load_builtin_manifest, sha256_file
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.plugin_security import scan_plugin_path
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,14 @@ class PluginSpec:
     primary_relative_path: str
     enabled: bool = True
     hidden: bool = False
+    trusted: bool = True
+    quarantined: bool = False
+    signature_status: str = "none"
+    signer: str = ""
+    risk_level: str = "low"
+    risk_summary: str = ""
+    last_error: str = ""
+    failure_count: int = 0
     locale_bundles: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def localized_name(self, language: str) -> str:
@@ -117,7 +127,14 @@ def _load_sidecar_locales(file_path: Path) -> dict[str, dict[str, str]]:
     return locales
 
 
-def _parse_plugin_specs(file_path: Path, source_root: Path, *, source_type: str, state_manager=None) -> list[PluginSpec]:
+def _parse_plugin_specs(
+    file_path: Path,
+    source_root: Path,
+    *,
+    source_type: str,
+    state_manager=None,
+    scan_report: dict[str, object] | None = None,
+) -> list[PluginSpec]:
     try:
         tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
     except Exception:
@@ -180,7 +197,37 @@ def _parse_plugin_specs(file_path: Path, source_root: Path, *, source_type: str,
 
         rel_path = file_path.relative_to(source_root).with_suffix("")
         module_name = f"micro_toolkit_dynamic_plugins.{source_type}." + ".".join(rel_path.parts)
-        state = state_manager.get(values["plugin_id"]) if state_manager is not None else {"enabled": True, "hidden": False}
+        if state_manager is not None:
+            has_state = state_manager.has(values["plugin_id"])
+            state = state_manager.get(values["plugin_id"])
+            if source_type == "builtin":
+                state["trusted"] = True
+                state["quarantined"] = False
+                state["risk_level"] = "low"
+                state["risk_summary"] = ""
+            elif source_type == "custom" and not has_state:
+                state["enabled"] = False
+                state["hidden"] = False
+                state["trusted"] = False
+                state["quarantined"] = False
+        else:
+            state = {
+                "enabled": source_type != "custom",
+                "hidden": False,
+                "trusted": source_type != "custom",
+                "quarantined": False,
+                "risk_level": str((scan_report or {}).get("risk_level", "low")),
+                "risk_summary": str((scan_report or {}).get("summary", "")),
+                "last_error": "",
+                "failure_count": 0,
+            }
+        if source_type == "custom" and scan_report is not None:
+            state["risk_level"] = str(scan_report.get("risk_level", state.get("risk_level", "low")))
+            state["risk_summary"] = str(scan_report.get("summary", state.get("risk_summary", "")))
+            if state["risk_level"] == "critical":
+                state["enabled"] = False
+                state["trusted"] = False
+                state["quarantined"] = True
         container_path, package_name, primary_relative_path = _package_details(file_path, source_root, source_type)
         specs.append(
             PluginSpec(
@@ -200,6 +247,14 @@ def _parse_plugin_specs(file_path: Path, source_root: Path, *, source_type: str,
                 primary_relative_path=primary_relative_path,
                 enabled=state["enabled"],
                 hidden=state["hidden"],
+                trusted=bool(state.get("trusted", source_type != "custom")),
+                quarantined=bool(state.get("quarantined", False)),
+                signature_status="verified" if source_type == "builtin" else "none",
+                signer="micro-toolkit-bundle" if source_type == "builtin" else "",
+                risk_level=str(state.get("risk_level", "low")),
+                risk_summary=str(state.get("risk_summary", "")),
+                last_error=str(state.get("last_error", "")),
+                failure_count=int(state.get("failure_count", 0)),
                 locale_bundles=locale_bundles,
             )
         )
@@ -218,15 +273,32 @@ def _package_details(file_path: Path, source_root: Path, source_type: str) -> tu
 
 
 class PluginManager:
-    def __init__(self, builtin_root: Path, custom_root: Path | None = None, state_manager=None):
+    def __init__(
+        self,
+        builtin_root: Path,
+        custom_root: Path | None = None,
+        state_manager=None,
+        *,
+        builtin_manifest_path: Path | None = None,
+        enforce_builtin_manifest: bool | None = None,
+    ):
         self.builtin_root = Path(builtin_root)
         self.custom_root = Path(custom_root) if custom_root is not None else None
         self.state_manager = state_manager
+        self.builtin_manifest_path = Path(builtin_manifest_path) if builtin_manifest_path is not None else None
+        self.enforce_builtin_manifest = bool(enforce_builtin_manifest) if enforce_builtin_manifest is not None else False
+        self._builtin_manifest = (
+            load_builtin_manifest(self.builtin_manifest_path)
+            if self.builtin_manifest_path is not None
+            else {}
+        )
         self._specs: list[PluginSpec] | None = None
         self._instances: dict[str, QtPlugin] = {}
 
     def invalidate_cache(self, *, clear_instances: bool = False) -> None:
         self._specs = None
+        if self.builtin_manifest_path is not None:
+            self._builtin_manifest = load_builtin_manifest(self.builtin_manifest_path)
         if clear_instances:
             self._instances = {}
 
@@ -270,7 +342,7 @@ class PluginManager:
         return [spec for spec in self._specs if spec.enabled]
 
     def sidebar_plugins(self) -> list[PluginSpec]:
-        return [spec for spec in self.discover_plugins() if not spec.hidden]
+        return [spec for spec in self.discover_plugins() if not spec.hidden and spec.trusted and not spec.quarantined]
 
     def get_spec(self, plugin_id: str, *, include_disabled: bool = True) -> PluginSpec | None:
         for spec in self.discover_plugins(include_disabled=include_disabled):
@@ -310,6 +382,10 @@ class PluginManager:
             raise KeyError(f"Unknown plugin id: {plugin_id}")
         if not spec.enabled:
             raise RuntimeError(f"Plugin '{plugin_id}' is disabled.")
+        if spec.source_type == "custom" and not spec.trusted:
+            raise RuntimeError(f"Plugin '{plugin_id}' is not trusted yet. Review it in Settings before loading it.")
+        if spec.quarantined:
+            raise RuntimeError(f"Plugin '{plugin_id}' is quarantined because it previously failed or was flagged unsafe.")
 
         spec_obj = importlib.util.spec_from_file_location(spec.module_name, spec.file_path)
         if spec_obj is None or spec_obj.loader is None:
@@ -333,15 +409,36 @@ class PluginManager:
         specs: list[PluginSpec] = []
         if not root.exists():
             return specs
+        scan_cache: dict[Path, dict[str, object]] = {}
         for file_path in sorted(root.rglob("*.py")):
             if file_path.name.startswith("__"):
                 continue
+            effective_source_type = source_type
+            scan_report = None
+            if source_type == "builtin" and self.enforce_builtin_manifest and self._builtin_manifest:
+                relative_path = str(file_path.relative_to(root)).replace("\\", "/")
+                manifest_entry = self._builtin_manifest.get(relative_path)
+                if manifest_entry is None:
+                    continue
+                if sha256_file(file_path) != manifest_entry.sha256:
+                    continue
+                inspected_specs = _parse_plugin_specs(file_path, root, source_type="imported")
+                inspected_keys = sorted((spec.plugin_id, spec.class_name) for spec in inspected_specs)
+                if tuple(inspected_keys) != manifest_entry.plugins:
+                    continue
+            if effective_source_type == "custom":
+                rel_parts = file_path.relative_to(root).parts
+                container = root / rel_parts[0]
+                if container not in scan_cache:
+                    scan_cache[container] = scan_plugin_path(container).as_dict()
+                scan_report = scan_cache[container]
             specs.extend(
                 _parse_plugin_specs(
                     file_path,
                     root,
-                    source_type=source_type,
+                    source_type=effective_source_type,
                     state_manager=self.state_manager,
+                    scan_report=scan_report,
                 )
             )
         return specs
