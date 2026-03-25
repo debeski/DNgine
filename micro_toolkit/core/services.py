@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, QThreadPool, Signal, Slot
 
 from micro_toolkit.core.app_config import AppConfig
 from micro_toolkit.core.autostart import AutostartManager
+from micro_toolkit.core.backup_manager import BackupManager
 from micro_toolkit.core.clipboard_quick_panel import ClipboardQuickPanelController
 from micro_toolkit.core.commands import CommandRegistry
 from micro_toolkit.core.command_runtime import serialize_command_result
@@ -25,8 +26,17 @@ from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, NON_SIDEBAR_P
 from micro_toolkit.core.shortcuts import ShortcutManager
 from micro_toolkit.core.theme import ThemeManager
 from micro_toolkit.core.tray import TrayManager
+from micro_toolkit.core.ui_inspector import UIInspector
 from micro_toolkit.core.workflows import WorkflowManager
 from micro_toolkit.core.workers import Worker
+
+PLUGIN_ID_MIGRATIONS = {
+    "validator": "data_link_auditor",
+    "seq": "sequence_auditor",
+    "exporter": "folder_mapper",
+    "dups": "deep_scan_auditor",
+    "quick_analytics": "chart_builder",
+}
 
 
 class AppLogger(QObject):
@@ -88,6 +98,7 @@ class AppServices(QObject):
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.custom_plugins_root.mkdir(parents=True, exist_ok=True)
         self.config = AppConfig(self.config_path, self.output_root)
+        self.config.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
         self.session_manager = SessionManager(self.database_path)
         self.logger = AppLogger()
         self.thread_pool = QThreadPool.globalInstance()
@@ -105,6 +116,7 @@ class AppServices(QObject):
             self.logger,
         )
         self.plugin_state_manager = PluginStateManager(self.plugin_state_path)
+        self.plugin_state_manager.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
         self.plugin_manager = PluginManager(
             self.plugins_root,
             self.custom_plugins_root,
@@ -122,11 +134,14 @@ class AppServices(QObject):
         self.elevation_manager = ElevationManager()
         self.i18n = TranslationManager(self.config, self.locales_root)
         self.theme_manager = ThemeManager(self.config, self.assets_root)
+        self.backup_manager = BackupManager(self.config, self.runtime_root, self.app_root, self.data_root, self.output_root, self.logger)
         self.autostart_manager = AutostartManager()
         self.workflow_manager = WorkflowManager(self.workflows_root)
         self.shortcut_manager = ShortcutManager(self.config, self.logger, helper_manager=self.hotkey_helper_manager)
         self.clipboard_quick_panel = ClipboardQuickPanelController(self)
         self.tray_manager = TrayManager(self)
+        self.ui_inspector = UIInspector()
+        self.ui_inspector.set_enabled(self.developer_mode_enabled())
         self.reset_command_registry()
 
     def resource_path(self, relative_path: str) -> Path:
@@ -211,11 +226,17 @@ class AppServices(QObject):
         self.application = application
         self.i18n.apply(application)
         self.theme_manager.apply(application)
+        self.ui_inspector.attach_application(application)
+        try:
+            self.backup_manager.maybe_create_scheduled_backup()
+        except Exception as exc:
+            self.logger.log(f"Scheduled backup skipped: {exc}", "WARNING")
 
     def attach_main_window(self, main_window) -> None:
         self.main_window = main_window
         self.shortcut_manager.attach(main_window)
         self.tray_manager.attach(main_window)
+        self.ui_inspector.attach_main_window(main_window)
 
     def log(self, message: str, level: str = "INFO") -> None:
         self.logger.log(message, level)
@@ -226,6 +247,29 @@ class AppServices(QObject):
     def request_elevated(self, capability_id: str, payload: dict[str, object] | None = None, *, timeout_seconds: float = 20.0):
         return self.elevated_broker.request(capability_id, payload, timeout_seconds=timeout_seconds)
 
+    def developer_mode_enabled(self) -> bool:
+        env_value = str(os.environ.get("MICRO_TOOLKIT_DEV", "")).strip().lower()
+        if env_value in {"1", "true", "yes", "on"}:
+            return True
+        return bool(self.config.get("developer_mode"))
+
+    def set_developer_mode(self, enabled: bool) -> bool:
+        persisted = bool(enabled)
+        self.config.set("developer_mode", persisted)
+        active = self.developer_mode_enabled()
+        self.ui_inspector.set_enabled(active)
+        if self.main_window is not None:
+            refresh = getattr(self.main_window, "refresh_system_toolbar_visibility", None)
+            if callable(refresh):
+                refresh()
+        return active
+
+    def create_backup(self, *, reason: str = "manual") -> Path:
+        return self.backup_manager.create_backup(reason=reason)
+
+    def restore_backup(self, backup_path: Path) -> dict[str, object]:
+        return self.backup_manager.restore_backup(backup_path, elevated_requester=self.request_elevated)
+
     def default_output_path(self) -> Path:
         configured = self.config.get("default_output_path")
         if configured:
@@ -235,17 +279,79 @@ class AppServices(QObject):
         self.output_root.mkdir(parents=True, exist_ok=True)
         return self.output_root
 
-    def set_theme(self, mode: str) -> str:
-        self.theme_manager.set_mode(mode)
+    def set_theme(self, theme_name: str) -> str:
+        selected = self.theme_manager.set_color(theme_name)
         if self.application is not None:
-            self.theme_manager.apply(self.application)
-        return self.theme_manager.current_mode()
+            if self.main_window is not None:
+                self.main_window.begin_loading("Applying theme...")
+            try:
+                self.theme_manager.apply(self.application)
+            finally:
+                if self.main_window is not None:
+                    self.main_window.end_loading()
+        return selected
+
+    def set_theme_selection(self, color_key: str, dark_enabled: bool) -> str:
+        selected = self.theme_manager.theme_name_for(color_key, dark_enabled)
+        self.theme_manager.set_theme(selected)
+        if self.application is not None:
+            if self.main_window is not None:
+                self.main_window.begin_loading("Applying theme...")
+            try:
+                self.theme_manager.apply(self.application)
+            finally:
+                if self.main_window is not None:
+                    self.main_window.end_loading()
+        return selected
+
+    def set_dark_mode(self, enabled: bool) -> str:
+        selected = self.theme_manager.set_dark_mode(enabled)
+        if self.application is not None:
+            if self.main_window is not None:
+                self.main_window.begin_loading("Applying theme...")
+            try:
+                self.theme_manager.apply(self.application)
+            finally:
+                if self.main_window is not None:
+                    self.main_window.end_loading()
+        return selected
+
+    def set_density_scale(self, density: int) -> int:
+        selected = self.theme_manager.set_density_scale(density)
+        if self.application is not None:
+            if self.main_window is not None:
+                self.main_window.begin_loading("Refreshing layout...")
+            try:
+                self.theme_manager.apply(self.application)
+            finally:
+                if self.main_window is not None:
+                    self.main_window.end_loading()
+        return selected
+
+    def set_ui_scaling(self, scale: float) -> float:
+        normalized = self.theme_manager.set_ui_scaling(scale)
+        if self.application is not None:
+            if self.main_window is not None:
+                self.main_window.begin_loading("Refreshing layout...")
+            try:
+                self.theme_manager.apply(self.application)
+            finally:
+                if self.main_window is not None:
+                    self.main_window.end_loading()
+        return normalized
 
     def set_language(self, language: str) -> str:
         self.i18n.set_language(language)
         if self.application is not None:
             self.i18n.apply(self.application)
         return self.i18n.current_language()
+
+    def restore_live_preferences_from_config(self) -> None:
+        self.theme_manager.load_from_config()
+        self.i18n.load_from_config()
+        if self.application is not None:
+            self.theme_manager.apply(self.application)
+            self.i18n.apply(self.application)
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
         if is_system_component(plugin_id):
@@ -419,8 +525,20 @@ class AppServices(QObject):
         self.command_registry.register(
             "app.set_theme",
             "Set Theme",
-            "Switch theme mode.",
+            "Switch the active theme color family.",
             lambda mode: {"theme": self.set_theme(mode)},
+        )
+        self.command_registry.register(
+            "app.set_dark_mode",
+            "Set Dark Mode",
+            "Enable or disable dark mode.",
+            lambda enabled=False: {"theme": self.set_dark_mode(bool(enabled))},
+        )
+        self.command_registry.register(
+            "app.set_density",
+            "Set Density",
+            "Adjust Qt-Material density scale.",
+            lambda density=0: {"density_scale": self.set_density_scale(int(density))},
         )
         self.command_registry.register(
             "app.set_language",
@@ -439,6 +557,12 @@ class AppServices(QObject):
             "Toggle Activity",
             "Show or hide the activity dock.",
             lambda: self._require_window().toggle_activity_dock(),
+        )
+        self.command_registry.register(
+            "app.toggle_terminal",
+            "Toggle Terminal",
+            "Show or hide the terminal dock.",
+            lambda: self._require_window().toggle_terminal_dock(),
         )
         self.command_registry.register(
             "app.restore_window",

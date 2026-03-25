@@ -244,7 +244,7 @@ class AboutCenterPage(QWidget):
             ("Micro Toolkit", __version__),
             ("Python", platform.python_version()),
             ("PySide6", self._version("PySide6")),
-            ("qtawesome", self._version("qtawesome")),
+            ("Bundled SVG icons", "local assets"),
             ("pandas", self._version("pandas")),
             ("openpyxl", self._version("openpyxl")),
             ("Pillow", self._version("Pillow")),

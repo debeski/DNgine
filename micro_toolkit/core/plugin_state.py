@@ -97,3 +97,16 @@ class PluginStateManager:
         if plugin_id in self._state:
             del self._state[plugin_id]
             self._save()
+
+    def migrate_plugin_ids(self, mapping: dict[str, str]) -> bool:
+        changed = False
+        updated = {}
+        for plugin_id, state in self._state.items():
+            new_id = mapping.get(plugin_id, plugin_id)
+            updated[new_id] = state
+            if new_id != plugin_id:
+                changed = True
+        if changed:
+            self._state = updated
+            self._save()
+        return changed

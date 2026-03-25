@@ -18,6 +18,8 @@ class TranslationManager(QObject):
         self.config = config
         self.locales_root = Path(locales_root)
         self._catalogs = self._load_catalogs()
+        configured = str(self.config.get("language") or "en").strip().lower()
+        self._current_language = configured if configured in self._catalogs else "en"
 
     def available_languages(self) -> list[tuple[str, str]]:
         supported = []
@@ -26,16 +28,23 @@ class TranslationManager(QObject):
         return supported or [("en", "English")]
 
     def current_language(self) -> str:
-        language = str(self.config.get("language") or "en").strip().lower()
-        return language if language in self._catalogs else "en"
+        return self._current_language
 
     def set_language(self, language: str) -> None:
         normalized = (language or "en").strip().lower()
         if normalized not in self._catalogs:
             normalized = "en"
-        self.config.set("language", normalized)
+        self._current_language = normalized
         self.language_changed.emit(normalized)
         self.direction_changed.emit(self.layout_direction())
+
+    def save_to_config(self) -> None:
+        self.config.set("language", self._current_language)
+
+    def load_from_config(self) -> str:
+        configured = str(self.config.get("language") or "en").strip().lower()
+        self._current_language = configured if configured in self._catalogs else "en"
+        return self._current_language
 
     def tr(self, key: str, default: str | None = None, **kwargs) -> str:
         catalog = self._catalogs.get(self.current_language(), {})

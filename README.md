@@ -23,9 +23,10 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Native desktop UX built on `PySide6`
 - Lazy plugin discovery and lazy page creation for fast startup
 - English and Arabic support with RTL-aware layout direction
-- Light, dark, and system theme modes
+- Five curated theme colors with a dark-mode toggle
+- Live preview for language, direction, density, and UI scaling
 - Tray integration for all-day companion use
-- Dashboard shell with quick access management and usage/system snapshots
+- Dashboard shell with quick access management, welcome panel, usage snapshots, and recent activity
 - Workflow engine and CLI command surface
 - Importable/exportable custom plugin packaging
 - Plugin-local translations through sidecar locale files
@@ -33,16 +34,18 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Headless tool commands for workflows and automation
 - Capability-based elevated broker for future admin/root operations
 - Dedicated elevated hotkey helper for Linux global shortcuts
+- Developer inspector system page gated behind developer mode
+- Multi-format clipboard history with pinned snippets, labels, and categories
 
 ## Included Tools
 
 ### Validation and Analysis
 
-- Quick Analytics
-- Folder Exporter
-- Duplicate Finder
-- Sequence Finder
-- File Validator
+- Chart Builder
+- Folder Mapper
+- Deep-Scan Auditor
+- Sequence Auditor
+- Data-Link Auditor
 
 ### Office Utilities
 
@@ -60,22 +63,85 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 
 ### IT Utilities
 
-- System Hardware Audit
+- System Overview
 - Credential Scanner
 - Network Port Scanner
+- Wi-Fi Profiles
 - Privacy Data Shredder
 
 ### Media Utilities
 
 - Image Transformer
 - Image Tagger
+- Color Picker
 
 ### Standalone Companion Pages
 
+- Dashboard
 - Clipboard Manager
 - Settings
 - Workflow Studio
-- Welcome Overview
+- About
+- Inspector (`Developer mode`)
+
+## Built-In Tool Notes
+
+### Dashboard
+
+- Acts as the app landing page
+- Shows a welcome header, greeting, date, usage snapshots, and recent activity
+- Supports quick access pinning for frequently used tools
+
+### Clipboard Manager
+
+- Captures plain text, code, URLs, file lists, rich text / HTML, and images
+- Restores entries back to the system clipboard in their original supported format
+- Supports labels, categories, pinned snippets, quick history access, and persistent local storage
+- Pinned entries stay above normal history and are not removed when non-pinned history is trimmed
+
+### Folder Mapper
+
+- Maps a full folder tree into an Excel workbook with file metadata, paths, permissions, and dates
+- Useful as an inventory/export view before file operations or audits
+
+### Deep-Scan Auditor
+
+- Folder mode accepts multiple folders at once
+- Folder duplicate matching can use `Name`, `Size`, `Created Date`, and optional `Hash`
+- Excel mode accepts multiple workbook files
+- Each workbook can define its own one-or-more target column names, comma-separated
+
+### Sequence Auditor
+
+- Audits folder listings or workbook columns for missing numbered items
+- Exports a workbook that includes missing entries plus surrounding context rows
+
+### Data-Link Auditor
+
+- Audits filenames referenced in an Excel workbook against one or more source folders
+- Can optionally move confirmed matches into a destination structure while exporting missing-value and missing-file reports
+
+### System Overview
+
+- Replaces the earlier hardware audit view
+- Shows live CPU, memory, and disk visualization plus current runtime and system details
+
+### Wi-Fi Profiles
+
+- Lists saved Wi-Fi profiles and current network information when the platform backend allows it
+- Passwords are masked by default and can be revealed or copied on demand
+
+### Color Picker
+
+- Picks colors from anywhere on the screen
+- Shows a preview plus `HEX`, `RGB`, and `HSL`
+- Uses a virtual multi-screen picker surface so all connected displays can be sampled
+
+### Inspector
+
+- Hidden unless `Developer mode` is enabled
+- Lets you inspect live widgets, object names, hierarchy, palette roles, and stylesheet state
+- Useful for debugging layout, theming, and shell paint issues without external Qt tooling
 
 ## Architecture
 
@@ -489,7 +555,7 @@ class MyPlugin(QtPlugin):
 How it works:
 
 - if allowed, the user can override the display name without changing the plugin code
-- if allowed, the user can choose an icon from the app icon library or provide a custom `.ico` path
+- if allowed, the user can choose an icon from the app icon library
 - if no override is set, the shell falls back to plugin-provided icons or Qt defaults
 - if a plugin sets either flag to `False`, the UI keeps that aspect locked
 
@@ -712,10 +778,24 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Version | Status | Highlights |
 | --- | --- | --- |
-| 1.2.0 | Current | Added the dashboard shell, sidebar quick access management, global Dubai font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
-| 1.1.0 | Stable milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
-| 1.0.0 | Stable milestone | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
-| 0.9.0 | Internal milestone | Completed migration of the core tool suite into the new plugin engine and made the desktop shell self-contained. |
-| 0.8.0 | Internal milestone | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |
-| 0.7.0 | Internal milestone | Added custom plugin import/export, enable/disable/hide controls, and plugin-local locale sidecar support. |
-| 0.6.0 | Internal milestone | Introduced headless tool commands for workflows and CLI plus the quick clipboard panel with shortcut and tray access. |
+| 0.6.1 | Current | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
+| 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Dubai font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
+| 0.5.2 | Internal milestone | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
+| 0.5.1 | Internal milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
+| 0.5.0 | Stable milestone | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
+| 0.4.5 | Internal milestone | Added custom plugin import/export, enable/disable/hide controls, Introduced some pdf related plugins, and improved the plugin engine performance. |
+| 0.4.4 | Internal milestone | Introduced headless tool commands for workflows and CLI plus the quick clipboard panel with shortcut and tray access. |
+| 0.4.3 | Internal milestone | Rebuilding the rest of the discontinued toolkit's plugins for the new Plugin Engine built with Qt. |
+| 0.4.2 | Internal milestone | Rebuilding the system tools suite into the new plugin engine and made the desktop shell self-contained. |
+| 0.4.1 | Internal milestone | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |
+| 0.4.0 | **discontinued** | *Tkinter app was discontinued in favor of PySide6.*, Started development of the new plugin engine, and underlying architecture. |
+| 0.3.0 | Major update | Added new Clipboard plugin with Auto-Capture, Improved workflow studio, Improved overall app layout and style. |
+| 0.2.4 | Minor update | Introduced new Plugin Manager for managing plugins, New Hotkeys for global and application scoped shortcuts. |
+| 0.2.3 | Minor update | Added some Networks and IT plugins for port scanning, wifi info, etc. |
+| 0.2.2 | Minor update | Revamped Sidebr, added a dedicated system-bar inside it for system tools, Improved Animations, Added loading spinner, Added multiple new utility plugins |
+| 0.2.1 | Minor update | rebuilt and added Image-Tagger as a plugin, Embedded smart luminance rendering tags |
+| 0.2.0 | Major update | Rebranded to Micro Toolkit - a plugin script engine, introduced new plugins "e.g. Folder Exporter, Duplicate Finder, Missing Sequence Finder", added workflow studio, and command registry foundations. |
+| 0.1.3 | Minor update | Added dynamic UI alignment mirroring, Ensured single-app instance, Re-assigned Tray-clicks directly to Application |
+| 0.1.2 | Minor update | Added dynamic Real-Time Arabic/English Localization, Bound application translations directly to Options preferences, Upgraded the interface to a tabbed modern sidebar layout using `customtkinter` |
+| 0.1.1 | Minor update | Added "Open" buttons for seamless UX, Implemented robust Options menu, Default Paths, and System Tray toggleability |
+| 0.1.0 | Initial commit | Initial commit as "PDF/File Validator" |

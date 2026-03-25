@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSortFilterProxyModel, QTimer
-from PySide6.QtGui import QAction, QGuiApplication
+from PySide6.QtGui import QAction, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -22,7 +24,9 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QTableView,
+    QTextEdit,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -42,6 +46,8 @@ TYPE_LABELS = {
     "file_path": "Path",
     "table": "Table",
     "rich_text": "Rich",
+    "image": "Image",
+    "files": "Files",
 }
 
 
@@ -52,18 +58,38 @@ class ClipboardRow:
     preview: str
     content_type: str
     label: str
+    category: str
+    pinned: bool
     created_at: str
+    html_content: str
+    image_path: str
+    file_paths: list[str]
+    metadata: dict
 
 
-def build_preview(text: str, length: int = 88) -> str:
-    normalized = " ".join((text or "").replace("\t", "    ").split())
+def build_preview(entry: ClipboardEntry, length: int = 88) -> str:
+    if entry.content_type == "image":
+        width = entry.metadata.get("width")
+        height = entry.metadata.get("height")
+        if width and height:
+            return f"{width} x {height} image"
+        return "Captured image"
+    if entry.content_type == "files":
+        names = [Path(path).name for path in entry.file_paths]
+        if not names:
+            return "Copied files"
+        joined = ", ".join(names[:3])
+        if len(names) > 3:
+            joined += f" +{len(names) - 3}"
+        return joined
+    normalized = " ".join((entry.content or "").replace("\t", "    ").split())
     if len(normalized) <= length:
         return normalized
     return normalized[: length - 3] + "..."
 
 
 class ClipboardTableModel(QAbstractTableModel):
-    HEADERS = ["Type", "Label", "Preview", "Captured", "Actions"]
+    HEADERS = ["Pin", "Type", "Label", "Category", "Preview", "Captured", "Actions"]
 
     def __init__(self):
         super().__init__()
@@ -90,14 +116,18 @@ class ClipboardTableModel(QAbstractTableModel):
         row = self._rows[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
             if index.column() == 0:
-                return TYPE_LABELS.get(row.content_type, row.content_type.title())
+                return "Pinned" if row.pinned else ""
             if index.column() == 1:
-                return row.label
+                return TYPE_LABELS.get(row.content_type, row.content_type.title())
             if index.column() == 2:
-                return row.preview
+                return row.label
             if index.column() == 3:
-                return row.created_at
+                return row.category
             if index.column() == 4:
+                return row.preview
+            if index.column() == 5:
+                return row.created_at
+            if index.column() == 6:
                 return ""
         if role == Qt.ItemDataRole.UserRole:
             return row
@@ -122,12 +152,16 @@ class ClipboardTableModel(QAbstractTableModel):
         return None
 
 
-class LabelManagerDialog(QDialog):
-    def __init__(self, store: ClipboardStore, parent=None):
+class NameManagerDialog(QDialog):
+    def __init__(self, title: str, note: str, placeholder: str, values_getter, add_callback, delete_callback, parent=None):
         super().__init__(parent)
-        self.store = store
-        self.setWindowTitle("Manage Labels")
+        self._values_getter = values_getter
+        self._add_callback = add_callback
+        self._delete_callback = delete_callback
+        self.setWindowTitle(title)
         self.resize(360, 320)
+        self._placeholder = placeholder
+        self._note = note
         self._build_ui()
         self._refresh()
 
@@ -136,7 +170,7 @@ class LabelManagerDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        note = QLabel("Create reusable labels for clipboard items.")
+        note = QLabel(self._note)
         note.setWordWrap(True)
         layout.addWidget(note)
 
@@ -146,16 +180,16 @@ class LabelManagerDialog(QDialog):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.new_label_input = QLineEdit()
-        self.new_label_input.setPlaceholderText("New label name")
-        row.addWidget(self.new_label_input, 1)
+        self.new_input = QLineEdit()
+        self.new_input.setPlaceholderText(self._placeholder)
+        row.addWidget(self.new_input, 1)
         add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_label)
+        add_button.clicked.connect(self._add_value)
         row.addWidget(add_button)
         layout.addLayout(row)
 
-        delete_button = QPushButton("Delete Label")
-        delete_button.clicked.connect(self._delete_label)
+        delete_button = QPushButton("Delete")
+        delete_button.clicked.connect(self._delete_value)
         layout.addWidget(delete_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -163,31 +197,31 @@ class LabelManagerDialog(QDialog):
         layout.addWidget(buttons)
 
     def _refresh(self) -> None:
-        labels = self.store.list_labels()
-        self.list_box.setPlainText("\n".join(labels) if labels else "No labels yet.")
+        values = self._values_getter()
+        self.list_box.setPlainText("\n".join(values) if values else "No items yet.")
 
-    def _add_label(self) -> None:
-        label = self.new_label_input.text().strip()
-        if not label:
+    def _add_value(self) -> None:
+        value = self.new_input.text().strip()
+        if not value:
             return
-        self.store.add_label(label)
-        self.new_label_input.clear()
+        self._add_callback(value)
+        self.new_input.clear()
         self._refresh()
 
-    def _delete_label(self) -> None:
-        labels = self.store.list_labels()
-        if not labels:
+    def _delete_value(self) -> None:
+        values = self._values_getter()
+        if not values:
             return
-        label, accepted = QInputDialog.getItem(self, "Delete Label", "Label", labels, 0, False)
-        if accepted and label:
-            self.store.delete_label(label)
+        value, accepted = QInputDialog.getItem(self, "Delete", "Value", values, 0, False)
+        if accepted and value:
+            self._delete_callback(value)
             self._refresh()
 
 
 class ClipboardManagerPlugin(QtPlugin):
     plugin_id = "clip_manager"
     name = "Clipboard Manager"
-    description = "A standalone clipboard workspace with persistent history, labels, filtering, and live capture."
+    description = "A clipboard workspace with persistent history, pinned snippets, categories, and multi-format capture."
     category = ""
     standalone = True
 
@@ -208,7 +242,6 @@ class ClipboardManagerPage(QWidget):
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._auto_capture_enabled = True
         self._suspend_capture_once = False
-        self._last_seen_text = ""
         self._build_ui()
         self._wire_events()
         self._refresh_entries()
@@ -224,7 +257,7 @@ class ClipboardManagerPage(QWidget):
         outer.addWidget(self.title_label)
 
         self.description_label = QLabel(
-            "This clipboard workspace uses native clipboard signals, a persistent SQLite store, label management, and a table/detail layout instead of an ad-hoc row pool."
+            "Capture plain text, rich text, copied files, and images. Pin important snippets, organize them into categories, and restore the original format back to the clipboard."
         )
         self.description_label.setWordWrap(True)
         outer.addWidget(self.description_label)
@@ -248,18 +281,28 @@ class ClipboardManagerPage(QWidget):
         self.label_filter.addItem("All Labels", "")
         toolbar.addWidget(self.label_filter, 0, 3)
 
+        self.category_filter = QComboBox()
+        self.category_filter.addItem("All Categories", "")
+        toolbar.addWidget(self.category_filter, 0, 4)
+
+        self.pinned_only_checkbox = QCheckBox("Pinned only")
+        toolbar.addWidget(self.pinned_only_checkbox, 1, 0)
+
         self.auto_capture_checkbox = QCheckBox("Auto capture")
         self.auto_capture_checkbox.setChecked(True)
-        toolbar.addWidget(self.auto_capture_checkbox, 1, 0)
+        toolbar.addWidget(self.auto_capture_checkbox, 1, 1)
 
         self.capture_button = QPushButton("Capture Current")
-        toolbar.addWidget(self.capture_button, 1, 1)
+        toolbar.addWidget(self.capture_button, 1, 2)
 
         self.manage_labels_button = QPushButton("Manage Labels")
-        toolbar.addWidget(self.manage_labels_button, 1, 2)
+        toolbar.addWidget(self.manage_labels_button, 1, 3)
+
+        self.manage_categories_button = QPushButton("Manage Categories")
+        toolbar.addWidget(self.manage_categories_button, 1, 4)
 
         self.clear_history_button = QPushButton("Clear History")
-        toolbar.addWidget(self.clear_history_button, 1, 3)
+        toolbar.addWidget(self.clear_history_button, 2, 4)
 
         outer.addWidget(self.toolbar_card)
 
@@ -281,9 +324,11 @@ class ClipboardManagerPage(QWidget):
         self.table_view.horizontalHeader().setStretchLastSection(True)
         self.table_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table_view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.table_view.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.table_view.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         left_layout.addWidget(self.table_view, 1)
 
@@ -302,10 +347,25 @@ class ClipboardManagerPage(QWidget):
         summary_layout.addWidget(self.summary_label)
         right_layout.addWidget(self.summary_card)
 
-        self.detail_view = QPlainTextEdit()
-        self.detail_view.setReadOnly(True)
-        self.detail_view.setPlaceholderText("Clipboard content preview will appear here.")
-        right_layout.addWidget(self.detail_view, 1)
+        self.preview_stack = QStackedWidget()
+        right_layout.addWidget(self.preview_stack, 1)
+
+        self.text_preview = QTextEdit()
+        self.text_preview.setReadOnly(True)
+        self.text_preview.setPlaceholderText("Clipboard content preview will appear here.")
+        self.preview_stack.addWidget(self.text_preview)
+
+        self.image_preview = QLabel("Image preview will appear here.")
+        self.image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_preview.setMinimumHeight(220)
+        self.image_preview.setWordWrap(True)
+        self.preview_stack.addWidget(self.image_preview)
+
+        self.metadata_view = QPlainTextEdit()
+        self.metadata_view.setReadOnly(True)
+        self.metadata_view.setPlaceholderText("Clipboard metadata will appear here.")
+        self.metadata_view.setMaximumHeight(170)
+        right_layout.addWidget(self.metadata_view)
 
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 3)
@@ -316,9 +376,12 @@ class ClipboardManagerPage(QWidget):
         self.search_input.textChanged.connect(self._refresh_entries)
         self.type_filter.currentIndexChanged.connect(self._refresh_entries)
         self.label_filter.currentIndexChanged.connect(self._refresh_entries)
+        self.category_filter.currentIndexChanged.connect(self._refresh_entries)
+        self.pinned_only_checkbox.toggled.connect(self._refresh_entries)
         self.auto_capture_checkbox.toggled.connect(self._set_auto_capture)
         self.capture_button.clicked.connect(self._capture_current_clipboard)
         self.manage_labels_button.clicked.connect(self._manage_labels)
+        self.manage_categories_button.clicked.connect(self._manage_categories)
         self.clear_history_button.clicked.connect(self._clear_history)
         self.table_view.selectionModel().selectionChanged.connect(self._update_detail_panel)
         self.table_view.customContextMenuRequested.connect(self._show_context_menu)
@@ -334,9 +397,9 @@ class ClipboardManagerPage(QWidget):
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
+        self._update_detail_panel()
 
     def _bootstrap_existing_clipboard(self) -> None:
-        # Capture the current clipboard text once at startup without duplicating future self-copies.
         QTimer.singleShot(0, self._capture_current_clipboard)
 
     def _set_auto_capture(self, enabled: bool) -> None:
@@ -351,29 +414,44 @@ class ClipboardManagerPage(QWidget):
         source_index = self.proxy_model.mapToSource(proxy_index)
         return self.model.row_at(source_index.row())
 
-    def _current_filters(self) -> tuple[str, str, str]:
+    def _current_filters(self) -> tuple[str, str, str, str, bool]:
         return (
             self.search_input.text().strip(),
             self.type_filter.currentData(),
             self.label_filter.currentData(),
+            self.category_filter.currentData(),
+            self.pinned_only_checkbox.isChecked(),
         )
 
     def _refresh_entries(self) -> None:
-        search, content_type, label = self._current_filters()
-        entries = self.store.list_entries(search=search, content_type=content_type, label=label)
+        search, content_type, label, category, pinned_only = self._current_filters()
+        entries = self.store.list_entries(
+            search=search,
+            content_type=content_type,
+            label=label,
+            category=category,
+            pinned_only=pinned_only,
+        )
         rows = [
             ClipboardRow(
                 entry_id=entry.entry_id,
                 content=entry.content,
-                preview=build_preview(entry.content),
+                preview=build_preview(entry),
                 content_type=entry.content_type,
                 label=entry.label,
+                category=entry.category,
+                pinned=entry.pinned,
                 created_at=entry.created_at,
+                html_content=entry.html_content,
+                image_path=entry.image_path,
+                file_paths=entry.file_paths,
+                metadata=entry.metadata,
             )
             for entry in entries
         ]
         self.model.set_rows(rows)
         self._refresh_label_filter()
+        self._refresh_category_filter()
         self._update_detail_panel()
         QTimer.singleShot(0, self._rebuild_row_action_widgets)
 
@@ -384,7 +462,7 @@ class ClipboardManagerPage(QWidget):
             row = self.model.row_at(source_index.row())
             if row is None:
                 continue
-            action_index = self.proxy_model.index(proxy_row, 4)
+            action_index = self.proxy_model.index(proxy_row, 6)
             self.table_view.setIndexWidget(action_index, self._row_action_widget(row))
 
     def _row_action_widget(self, row: ClipboardRow) -> QWidget:
@@ -400,12 +478,29 @@ class ClipboardManagerPage(QWidget):
         copy_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._copy_entry(entry_id))
         layout.addWidget(copy_button)
 
+        pin_button = QToolButton()
+        pin_button.setAutoRaise(True)
+        pin_button.setIcon(
+            icon_from_name("unpin" if row.pinned else "pin", self)
+            or self.style().standardIcon(self.style().StandardPixmap.SP_DialogApplyButton)
+        )
+        pin_button.setToolTip("Unpin item" if row.pinned else "Pin item")
+        pin_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._toggle_pin(entry_id))
+        layout.addWidget(pin_button)
+
         label_button = QToolButton()
         label_button.setAutoRaise(True)
         label_button.setIcon(icon_from_name("tag", self) or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogDetailedView))
         label_button.setToolTip("Set label")
         label_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._set_label_for_entry(entry_id))
         layout.addWidget(label_button)
+
+        category_button = QToolButton()
+        category_button.setAutoRaise(True)
+        category_button.setIcon(icon_from_name("folder", self) or self.style().standardIcon(self.style().StandardPixmap.SP_DirIcon))
+        category_button.setToolTip("Set category")
+        category_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._set_category_for_entry(entry_id))
+        layout.addWidget(category_button)
 
         delete_button = QToolButton()
         delete_button.setAutoRaise(True)
@@ -429,6 +524,18 @@ class ClipboardManagerPage(QWidget):
         self.label_filter.setCurrentIndex(index if index >= 0 else 0)
         self.label_filter.blockSignals(False)
 
+    def _refresh_category_filter(self) -> None:
+        current_category = self.category_filter.currentData()
+        categories = self.store.list_categories()
+        self.category_filter.blockSignals(True)
+        self.category_filter.clear()
+        self.category_filter.addItem("All Categories", "")
+        for category in categories:
+            self.category_filter.addItem(category, category)
+        index = self.category_filter.findData(current_category)
+        self.category_filter.setCurrentIndex(index if index >= 0 else 0)
+        self.category_filter.blockSignals(False)
+
     def _handle_clipboard_changed(self) -> None:
         if self._suspend_capture_once:
             self._suspend_capture_once = False
@@ -437,17 +544,7 @@ class ClipboardManagerPage(QWidget):
             self._capture_current_clipboard()
 
     def _capture_current_clipboard(self) -> None:
-        mime_data = self.clipboard.mimeData()
-        if mime_data is None:
-            return
-        text = mime_data.text() or ""
-        normalized = text.strip()
-        if not normalized:
-            return
-        if normalized == self._last_seen_text:
-            return
-        inserted = self.store.add_entry(normalized)
-        self._last_seen_text = normalized
+        inserted = self.store.add_mime_entry(self.clipboard.mimeData())
         if inserted:
             self.services.log("Clipboard entry captured.")
             self._refresh_entries()
@@ -456,14 +553,61 @@ class ClipboardManagerPage(QWidget):
         row = self._selected_row()
         if row is None:
             self.summary_label.setText("Select a clipboard item to inspect and act on it.")
-            self.detail_view.clear()
+            self.text_preview.clear()
+            self.image_preview.clear()
+            self.image_preview.setText("Image preview will appear here.")
+            self.metadata_view.clear()
+            self.preview_stack.setCurrentWidget(self.text_preview)
             return
+
         label_text = row.label or "No label"
+        category_text = row.category or "Uncategorized"
+        pin_text = "Pinned" if row.pinned else "History"
         type_text = TYPE_LABELS.get(row.content_type, row.content_type.title())
         self.summary_label.setText(
-            f"{type_text} item captured at {row.created_at}. Label: {label_text}."
+            f"{pin_text} {type_text.lower()} item captured at {row.created_at}. "
+            f"Label: {label_text}. Category: {category_text}."
         )
-        self.detail_view.setPlainText(row.content)
+
+        if row.content_type == "image" and row.image_path and Path(row.image_path).exists():
+            pixmap = QPixmap(row.image_path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(
+                    420,
+                    280,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.image_preview.setPixmap(scaled)
+                self.image_preview.setText("")
+                self.preview_stack.setCurrentWidget(self.image_preview)
+            else:
+                self.image_preview.setPixmap(QPixmap())
+                self.image_preview.setText("Image preview unavailable.")
+                self.preview_stack.setCurrentWidget(self.image_preview)
+        elif row.html_content:
+            self.text_preview.setHtml(row.html_content)
+            self.preview_stack.setCurrentWidget(self.text_preview)
+        elif row.content_type == "files":
+            file_lines = row.file_paths or ([row.content] if row.content else [])
+            self.text_preview.setPlainText("\n".join(file_lines))
+            self.preview_stack.setCurrentWidget(self.text_preview)
+        else:
+            self.text_preview.setPlainText(row.content)
+            self.preview_stack.setCurrentWidget(self.text_preview)
+
+        metadata_lines = [
+            f"Type: {type_text}",
+            f"Pinned: {'Yes' if row.pinned else 'No'}",
+            f"Label: {label_text}",
+            f"Category: {category_text}",
+        ]
+        if row.file_paths:
+            metadata_lines.append(f"Files: {len(row.file_paths)}")
+        if row.metadata:
+            metadata_lines.append("")
+            metadata_lines.append(json.dumps(row.metadata, indent=2, ensure_ascii=False))
+        self.metadata_view.setPlainText("\n".join(metadata_lines))
 
     def _copy_selected(self) -> None:
         row = self._selected_row()
@@ -472,13 +616,28 @@ class ClipboardManagerPage(QWidget):
         self._copy_entry(row.entry_id)
 
     def _copy_entry(self, entry_id: int) -> None:
+        entry = self.store.get_entry(entry_id)
+        if entry is None:
+            return
+        self._suspend_capture_once = True
+        if self.store.restore_entry_to_clipboard(entry, self.clipboard):
+            self.services.log("Clipboard item restored to the system clipboard.")
+        else:
+            self._suspend_capture_once = False
+
+    def _toggle_pin_selected(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        self._toggle_pin(row.entry_id)
+
+    def _toggle_pin(self, entry_id: int) -> None:
         row = self.model.row_for_entry(entry_id)
         if row is None:
             return
-        self._suspend_capture_once = True
-        self.clipboard.setText(row.content)
-        self._last_seen_text = row.content.strip()
-        self.services.log("Clipboard item copied back to the system clipboard.")
+        self.store.update_pinned(entry_id, not row.pinned)
+        self.services.log("Clipboard pin state updated.")
+        self._refresh_entries()
 
     def _set_label_for_selected(self) -> None:
         row = self._selected_row()
@@ -498,13 +657,40 @@ class ClipboardManagerPage(QWidget):
             "Choose or clear label",
             labels,
             current_index,
-            False,
+            True,
         )
         if accepted:
             if label:
                 self.store.add_label(label)
             self.store.update_label(row.entry_id, label)
             self.services.log("Clipboard label updated.")
+            self._refresh_entries()
+
+    def _set_category_for_selected(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        self._set_category_for_entry(row.entry_id)
+
+    def _set_category_for_entry(self, entry_id: int) -> None:
+        row = self.model.row_for_entry(entry_id)
+        if row is None:
+            return
+        categories = [""] + self.store.list_categories()
+        current_index = categories.index(row.category) if row.category in categories else 0
+        category, accepted = QInputDialog.getItem(
+            self,
+            "Set Category",
+            "Choose or clear category",
+            categories,
+            current_index,
+            True,
+        )
+        if accepted:
+            if category:
+                self.store.add_category(category)
+            self.store.update_category(row.entry_id, category)
+            self.services.log("Clipboard category updated.")
             self._refresh_entries()
 
     def _delete_selected(self) -> None:
@@ -525,18 +711,39 @@ class ClipboardManagerPage(QWidget):
         answer = QMessageBox.warning(
             self,
             "Clear Clipboard History",
-            "Delete all saved clipboard entries from the local history database?",
+            "Delete all non-pinned clipboard entries from the local history database?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self.store.clear_entries()
-        self.services.log("Clipboard history cleared.")
+        self.store.clear_entries(preserve_pinned=True)
+        self.services.log("Clipboard history cleared. Pinned entries were preserved.")
         self._refresh_entries()
 
     def _manage_labels(self) -> None:
-        dialog = LabelManagerDialog(self.store, self)
+        dialog = NameManagerDialog(
+            "Manage Labels",
+            "Create reusable labels for clipboard items.",
+            "New label name",
+            self.store.list_labels,
+            self.store.add_label,
+            self.store.delete_label,
+            self,
+        )
+        dialog.exec()
+        self._refresh_entries()
+
+    def _manage_categories(self) -> None:
+        dialog = NameManagerDialog(
+            "Manage Categories",
+            "Create reusable categories for pinned snippets and saved clipboard entries.",
+            "New category name",
+            self.store.list_categories,
+            self.store.add_category,
+            self.store.delete_category,
+            self,
+        )
         dialog.exec()
         self._refresh_entries()
 
@@ -549,9 +756,17 @@ class ClipboardManagerPage(QWidget):
         copy_action.triggered.connect(self._copy_selected)
         menu.addAction(copy_action)
 
+        pin_action = QAction("Unpin Selected" if row.pinned else "Pin Selected", self)
+        pin_action.triggered.connect(self._toggle_pin_selected)
+        menu.addAction(pin_action)
+
         label_action = QAction("Set Label", self)
         label_action.triggered.connect(self._set_label_for_selected)
         menu.addAction(label_action)
+
+        category_action = QAction("Set Category", self)
+        category_action.triggered.connect(self._set_category_for_selected)
+        menu.addAction(category_action)
 
         delete_action = QAction("Delete Selected", self)
         delete_action.triggered.connect(self._delete_selected)

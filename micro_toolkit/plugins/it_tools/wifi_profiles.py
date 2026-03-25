@@ -468,6 +468,8 @@ class WifiProfilesPage(QWidget):
         self.plugin_id = plugin_id
         self._payload: dict[str, object] = {"profiles": [], "warnings": [], "current": None}
         self._current_password = ""
+        self._current_password_revealed = False
+        self._revealed_profile_rows: set[int] = set()
         self._build_ui()
         self._apply_theme_styles()
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
@@ -539,6 +541,8 @@ class WifiProfilesPage(QWidget):
         current_layout.addLayout(self.current_grid)
 
         self.current_fields: dict[str, QLabel] = {}
+        self.current_password_toggle: QToolButton | None = None
+        self.current_password_value: QLabel | None = None
         field_labels = [
             ("ssid", "SSID"),
             ("device", "Device"),
@@ -549,13 +553,32 @@ class WifiProfilesPage(QWidget):
         ]
         for row, (field_key, field_title) in enumerate(field_labels):
             label = QLabel(field_title)
-            value = QLabel("--")
-            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            value.setWordWrap(True)
             self.current_grid.addWidget(label, row, 0)
-            self.current_grid.addWidget(value, row, 1)
             self.current_fields[f"{field_key}_title"] = label
-            self.current_fields[field_key] = value
+            if field_key == "password":
+                host = QWidget()
+                host_layout = QHBoxLayout(host)
+                host_layout.setContentsMargins(0, 0, 0, 0)
+                host_layout.setSpacing(6)
+                value = QLabel("--")
+                value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                value.setWordWrap(True)
+                host_layout.addWidget(value, 1)
+                toggle = QToolButton()
+                toggle.setAutoRaise(True)
+                toggle.setToolTip("Reveal password")
+                toggle.clicked.connect(self._toggle_current_password_visibility)
+                host_layout.addWidget(toggle, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.current_grid.addWidget(host, row, 1)
+                self.current_password_value = value
+                self.current_password_toggle = toggle
+                self.current_fields[field_key] = value
+            else:
+                value = QLabel("--")
+                value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                value.setWordWrap(True)
+                self.current_grid.addWidget(value, row, 1)
+                self.current_fields[field_key] = value
         info_row.addWidget(self.current_card, 1)
 
         self.warnings_card = QFrame()
@@ -607,6 +630,9 @@ class WifiProfilesPage(QWidget):
                 label.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {palette.text_primary};")
             else:
                 label.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {palette.text_muted};")
+        if self.current_password_toggle is not None:
+            self.current_password_toggle.setIcon(self._password_toggle_icon(self._current_password_revealed))
+            self.current_password_toggle.setEnabled(bool(self._current_password))
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -649,6 +675,8 @@ class WifiProfilesPage(QWidget):
         self.warnings_output.setPlainText(message)
         self.table.setRowCount(0)
         self._current_password = ""
+        self._current_password_revealed = False
+        self._revealed_profile_rows.clear()
         self.copy_current_button.setEnabled(False)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
 
@@ -664,17 +692,28 @@ class WifiProfilesPage(QWidget):
                 if not key.endswith("_title"):
                     label.setText("--")
             self._current_password = ""
+            self._current_password_revealed = False
             self.copy_current_button.setEnabled(False)
+            if self.current_password_toggle is not None:
+                self.current_password_toggle.setEnabled(False)
+                self.current_password_toggle.setIcon(self._password_toggle_icon(False))
             self.current_fields["ssid"].setText(self._pt("unsupported", "No current Wi-Fi network is connected."))
             return
 
         self._current_password = str(current.get("password") or "").strip()
         self.copy_current_button.setEnabled(bool(self._current_password and self._current_password != "--"))
+        if self.current_password_toggle is not None:
+            self.current_password_toggle.setEnabled(bool(self._current_password))
+            self.current_password_toggle.setIcon(self._password_toggle_icon(self._current_password_revealed))
         for field in ("ssid", "device", "signal", "rate", "security", "password"):
             value = str(current.get(field) or "--")
             if field == "password" and not value.strip():
                 value = "--"
-            self.current_fields[field].setText(value)
+            if field == "password":
+                self.current_fields[field].setText(self._display_password(value, revealed=self._current_password_revealed))
+                self.current_fields[field].setToolTip(value if value not in {"", "--"} else "No stored password available")
+            else:
+                self.current_fields[field].setText(value)
 
     def _render_warnings(self) -> None:
         warnings = self._payload.get("warnings") or []
@@ -686,12 +725,14 @@ class WifiProfilesPage(QWidget):
     def _render_profiles(self) -> None:
         payload_profiles = self._payload.get("profiles") or []
         profiles = payload_profiles if isinstance(payload_profiles, list) else []
+        self._revealed_profile_rows.intersection_update(range(len(profiles)))
         self.table.setRowCount(len(profiles))
         for row_index, row in enumerate(profiles):
             item = row if isinstance(row, dict) else {}
+            password = str(item.get("password") or "")
             values = [
                 str(item.get("ssid") or ""),
-                str(item.get("password") or ""),
+                self._display_password(password, revealed=row_index in self._revealed_profile_rows),
                 str(item.get("security") or ""),
                 str(item.get("device") or ""),
                 str(item.get("status") or ""),
@@ -700,7 +741,7 @@ class WifiProfilesPage(QWidget):
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 if column == 1:
-                    cell.setToolTip(value or "No stored password available")
+                    cell.setToolTip(password or "No stored password available")
                 self.table.setItem(row_index, column, cell)
         self._rebuild_action_cells()
         self.table.resizeRowsToContents()
@@ -718,8 +759,20 @@ class WifiProfilesPage(QWidget):
             action_layout.setSpacing(4)
             action_layout.addStretch(1)
 
+            reveal_button = QToolButton()
+            reveal_button.setAutoRaise(True)
+            reveal_button.setIcon(self._password_toggle_icon(row_index in self._revealed_profile_rows))
+            reveal_button.setToolTip("Reveal password" if row_index not in self._revealed_profile_rows else "Hide password")
+            reveal_button.setEnabled(bool(password))
+            reveal_button.clicked.connect(lambda _checked=False, idx=row_index: self._toggle_profile_password_visibility(idx))
+            action_layout.addWidget(reveal_button)
+
             copy_button = QToolButton()
-            copy_button.setIcon(icon_from_name("clipboard", self) or copy_button.icon())
+            copy_button.setAutoRaise(True)
+            copy_button.setIcon(
+                icon_from_name("clipboard", self)
+                or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogContentsView)
+            )
             copy_button.setToolTip("Copy password")
             copy_button.setEnabled(bool(password))
             copy_button.clicked.connect(lambda _checked=False, text=password, name=ssid: self._copy_password(text, name))
@@ -738,3 +791,42 @@ class WifiProfilesPage(QWidget):
         current = self._payload.get("current")
         ssid = str(current.get("ssid") or "current network") if isinstance(current, dict) else "current network"
         self._copy_password(self._current_password, ssid)
+
+    def _display_password(self, password: str, *, revealed: bool) -> str:
+        text = str(password or "").strip()
+        if not text or text == "--":
+            return "--"
+        if revealed:
+            return text
+        return "*" * max(8, len(text))
+
+    def _password_toggle_icon(self, revealed: bool):
+        icon_name = "eye-slash" if revealed else "eye"
+        return icon_from_name(icon_name, self) or self.style().standardIcon(
+            self.style().StandardPixmap.SP_FileDialogDetailedView
+        )
+
+    def _toggle_current_password_visibility(self) -> None:
+        if not self._current_password:
+            return
+        self._current_password_revealed = not self._current_password_revealed
+        if self.current_password_toggle is not None:
+            self.current_password_toggle.setIcon(self._password_toggle_icon(self._current_password_revealed))
+            self.current_password_toggle.setToolTip(
+                "Hide password" if self._current_password_revealed else "Reveal password"
+            )
+        current = self._payload.get("current")
+        value = str(current.get("password") or "--") if isinstance(current, dict) else "--"
+        self.current_fields["password"].setText(
+            self._display_password(value, revealed=self._current_password_revealed)
+        )
+
+    def _toggle_profile_password_visibility(self, row_index: int) -> None:
+        item = self.table.item(row_index, 1)
+        if item is None:
+            return
+        if row_index in self._revealed_profile_rows:
+            self._revealed_profile_rows.remove(row_index)
+        else:
+            self._revealed_profile_rows.add(row_index)
+        self._render_profiles()

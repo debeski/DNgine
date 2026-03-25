@@ -101,6 +101,12 @@ class ClipboardQuickPanel(QWidget):
             self.preview.clear()
             return
         entry = item.data(Qt.ItemDataRole.UserRole)
+        if entry.content_type == "files" and entry.file_paths:
+            self.preview.setPlainText("\n".join(entry.file_paths))
+            return
+        if entry.content_type == "image":
+            self.preview.setPlainText("Image entry. Press Enter or double-click to restore it to the clipboard.")
+            return
         self.preview.setPlainText(entry.content)
 
     def _copy_selected(self) -> None:
@@ -108,8 +114,8 @@ class ClipboardQuickPanel(QWidget):
         if item is None:
             return
         entry = item.data(Qt.ItemDataRole.UserRole)
-        self.clipboard.setText(entry.content)
-        self.services.log("Copied clipboard history item from quick panel.")
+        if self.store.restore_entry_to_clipboard(entry, self.clipboard):
+            self.services.log("Copied clipboard history item from quick panel.")
         self.hide()
 
     def keyPressEvent(self, event) -> None:

@@ -44,6 +44,21 @@ def register_builtin_tool_commands(registry, services) -> None:
     output_dir_str = lambda svc: str(svc.default_output_path())
     output_dir_path = lambda svc: svc.default_output_path()
 
+    def chart_builder_payload(_svc, payload):
+        config = dict(payload.get("config", {}))
+        if "group_cols" in payload and "group_columns" not in config:
+            config["group_columns"] = payload.get("group_cols", "")
+            config.setdefault("operation", "summarize")
+        if "aggregate" in payload and "aggregate" not in config:
+            config["aggregate"] = payload.get("aggregate", "count")
+        if "chart_type" in payload and "chart_type" not in config:
+            config["chart_type"] = payload.get("chart_type", "none")
+        primary_file = payload.get("primary_file") or payload.get("file_path")
+        return {
+            "primary_file": primary_file,
+            "config": config,
+        }
+
     register_task_command(
         "tool.sys_audit.run",
         "Run System Audit",
@@ -53,12 +68,22 @@ def register_builtin_tool_commands(registry, services) -> None:
         "gather_system_audit",
     )
     register_task_command(
+        "tool.chart_builder.run",
+        "Run Chart Builder",
+        "Shape workbook data, build charts, and return a result table.",
+        "chart_builder",
+        "micro_toolkit.plugins.core_tools.chart_builder",
+        "run_chart_builder_task",
+        argument_adapter=chart_builder_payload,
+    )
+    register_task_command(
         "tool.quick_analytics.run",
         "Run Quick Analytics",
-        "Group an Excel workbook by selected columns.",
-        "quick_analytics",
-        "micro_toolkit.plugins.core_tools.quick_analytics",
-        "generate_analytics_report",
+        "Backward-compatible alias for Chart Builder.",
+        "chart_builder",
+        "micro_toolkit.plugins.core_tools.chart_builder",
+        "run_chart_builder_task",
+        argument_adapter=chart_builder_payload,
     )
     register_task_command(
         "tool.cred_scanner.scan",
@@ -94,24 +119,24 @@ def register_builtin_tool_commands(registry, services) -> None:
         },
     )
     register_task_command(
-        "tool.exporter.run",
-        "Export Folder Contents",
-        "Export file metadata from a folder tree to Excel.",
-        "exporter",
-        "micro_toolkit.plugins.core_tools.folder_exporter",
-        "export_folder_contents_task",
+        "tool.folder_mapper.run",
+        "Run Folder Mapper",
+        "Map file metadata from a folder tree into an Excel workbook.",
+        "folder_mapper",
+        "micro_toolkit.plugins.core_tools.folder_mapper",
+        "map_folder_contents_task",
         argument_adapter=lambda svc, payload: {
             **payload,
             "output_dir": payload.get("output_dir", output_dir_str(svc)),
         },
     )
     register_task_command(
-        "tool.validator.run",
-        "Validate Files",
-        "Validate workbook filenames against one or more source folders.",
-        "validator",
-        "micro_toolkit.plugins.core_tools.validator",
-        "validate_files_task",
+        "tool.data_link_auditor.run",
+        "Run Data-Link Auditor",
+        "Audit workbook-linked filenames against one or more source folders.",
+        "data_link_auditor",
+        "micro_toolkit.plugins.core_tools.data_link_auditor",
+        "audit_data_links_task",
         argument_adapter=lambda svc, payload: {
             **payload,
             "source_folders": list(payload.get("source_folders", [])),
@@ -122,36 +147,36 @@ def register_builtin_tool_commands(registry, services) -> None:
         },
     )
     register_task_command(
-        "tool.seq.run",
-        "Find Missing Sequence",
-        "Find missing sequence values in a folder listing or workbook column.",
-        "seq",
-        "micro_toolkit.plugins.core_tools.sequence_finder",
-        "sequence_finder_task",
+        "tool.sequence_auditor.run",
+        "Run Sequence Auditor",
+        "Audit a folder listing or workbook column for sequence gaps.",
+        "sequence_auditor",
+        "micro_toolkit.plugins.core_tools.sequence_auditor",
+        "sequence_auditor_task",
         argument_adapter=lambda svc, payload: {
             **payload,
             "output_dir": payload.get("output_dir", output_dir_str(svc)),
         },
     )
     register_task_command(
-        "tool.dups.excel",
-        "Find Excel Duplicates",
-        "Find duplicate rows in an Excel column.",
-        "dups",
-        "micro_toolkit.plugins.core_tools.duplicate_finder",
-        "find_duplicates_in_excel_task",
+        "tool.deep_scan_auditor.excel",
+        "Run Deep-Scan Auditor (Excel)",
+        "Audit workbook rows for duplicate combinations.",
+        "deep_scan_auditor",
+        "micro_toolkit.plugins.core_tools.deep_scan_auditor",
+        "audit_excel_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
             "output_dir": payload.get("output_dir", output_dir_str(svc)),
         },
     )
     register_task_command(
-        "tool.dups.folder",
-        "Find Folder Duplicates",
-        "Find duplicate files in a folder tree.",
-        "dups",
-        "micro_toolkit.plugins.core_tools.duplicate_finder",
-        "find_duplicates_in_folders_task",
+        "tool.deep_scan_auditor.folder",
+        "Run Deep-Scan Auditor (Folder)",
+        "Audit folder trees for duplicate files.",
+        "deep_scan_auditor",
+        "micro_toolkit.plugins.core_tools.deep_scan_auditor",
+        "audit_folder_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
             "criteria": list(payload.get("criteria", [])),

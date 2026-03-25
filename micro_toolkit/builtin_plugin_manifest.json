@@ -7,7 +7,7 @@
   ],
   "files": {
     "about_center.py": {
-      "sha256": "e255d1582cdc018f423352c6e39db8abd2f0662f4fa4d5f4d6b138e09c063075",
+      "sha256": "0e0fcd02e2972ee5582650e0b5ae7810f16d79194ca9c6c0e3c75f0bd4ed05d7",
       "plugins": [
         {
           "plugin_id": "about_center",
@@ -16,7 +16,7 @@
       ]
     },
     "clipboard_manager.py": {
-      "sha256": "58ff1cbdc6c03719ef86eee51a53ace8fd46ba8764fd3b2096ea86d5bb2f0f57",
+      "sha256": "668a896f060ef74f10ac3b4a888d25f77ac3cfd683df98989670dfbd78dc461b",
       "plugins": [
         {
           "plugin_id": "clip_manager",
@@ -24,48 +24,48 @@
         }
       ]
     },
-    "core_tools/duplicate_finder.py": {
-      "sha256": "d32f6271a6f1fb78591c7ba00d2339c4aa4852bbaa367a3775ecfbe00f1aff74",
+    "core_tools/chart_builder.py": {
+      "sha256": "fe8a6c47a8b76cc9038d2e71d69efb47fa585283af67ac25556dc5e764de5940",
       "plugins": [
         {
-          "plugin_id": "dups",
-          "class_name": "DuplicateFinderPlugin"
+          "plugin_id": "chart_builder",
+          "class_name": "ChartBuilderPlugin"
         }
       ]
     },
-    "core_tools/folder_exporter.py": {
-      "sha256": "bb80fb4e296db25380c8254250a65b7eca385564ffb9684fce38395256b7b4e5",
+    "core_tools/data_link_auditor.py": {
+      "sha256": "8bd3284a55d6917e157525b141612fe2eaa1f3d5a4b1daafb3956366ecef87f3",
       "plugins": [
         {
-          "plugin_id": "exporter",
-          "class_name": "FolderExporterPlugin"
+          "plugin_id": "data_link_auditor",
+          "class_name": "DataLinkAuditorPlugin"
         }
       ]
     },
-    "core_tools/quick_analytics.py": {
-      "sha256": "68f6dbf009aab0e0a566c5d4876819e97c87dcc4cfd5a9fbd38f02e6a5975697",
+    "core_tools/deep_scan_auditor.py": {
+      "sha256": "be2014e502d349cc8e3b872a409b569d5306bd1fe38b3ab8d8e4739993f7c7ba",
       "plugins": [
         {
-          "plugin_id": "quick_analytics",
-          "class_name": "QuickAnalyticsPlugin"
+          "plugin_id": "deep_scan_auditor",
+          "class_name": "DeepScanAuditorPlugin"
         }
       ]
     },
-    "core_tools/sequence_finder.py": {
-      "sha256": "06ad127abcc82e5a098b225444830894009f824d5a3e658ff7ef1e0b4b01d6d6",
+    "core_tools/folder_mapper.py": {
+      "sha256": "b97a33a430bea24c88be2258d169e817498c1a9de51c9392c57f24051b88e1cf",
       "plugins": [
         {
-          "plugin_id": "seq",
-          "class_name": "SequenceFinderPlugin"
+          "plugin_id": "folder_mapper",
+          "class_name": "FolderMapperPlugin"
         }
       ]
     },
-    "core_tools/validator.py": {
-      "sha256": "0e3696706af035170f94a290a9265891d4b9cc3dadf93f74f606145dd52342b8",
+    "core_tools/sequence_auditor.py": {
+      "sha256": "86e3e589a4cdd940e5640d1c1e0e5537608c1e37352eceba8f8d159f73470bce",
       "plugins": [
         {
-          "plugin_id": "validator",
-          "class_name": "ValidatorPlugin"
+          "plugin_id": "sequence_auditor",
+          "class_name": "SequenceAuditorPlugin"
         }
       ]
     },
@@ -106,11 +106,20 @@
       ]
     },
     "general/welcome.py": {
-      "sha256": "e01df9409ec7b6dfabc23e39e50b9d23e9865c22d4fb0467d2a6629229800c33",
+      "sha256": "e683eb53dfbcb1afd48dcc1807ee17eaf4aeb24f679f10e2ce3991c81719bc52",
       "plugins": [
         {
           "plugin_id": "welcome_overview",
           "class_name": "WelcomeOverviewPlugin"
+        }
+      ]
+    },
+    "inspector_center.py": {
+      "sha256": "f97bb8b9474c89b569be2f72553fcf66b430af7ebb4bdf4d8e8a124fa7de01fa",
+      "plugins": [
+        {
+          "plugin_id": "inspector_center",
+          "class_name": "InspectorCenterPlugin"
         }
       ]
     },
@@ -151,7 +160,7 @@
       ]
     },
     "it_tools/wifi_profiles.py": {
-      "sha256": "54eeffdd837772eb3851e2424fa87b92d7429caa617a1974a011e9015b6285d3",
+      "sha256": "e2e4091797dd771a13ecbf6b14da38053b9808d5743ad8884a0bdfbddc60fa0d",
       "plugins": [
         {
           "plugin_id": "wifi_profiles",
@@ -159,12 +168,12 @@
         }
       ]
     },
-    "it_tools/wifi_revealer.py": {
-      "sha256": "dbcbe697173968f94afbd2e9c26dcef26fb61be40f5898274b6aaf53dceb501d",
+    "media_tools/color_picker.py": {
+      "sha256": "80f29cec0197cf8d2110897a88186cfb7b5c029d2c0a3c52cae5f7400a364936",
       "plugins": [
         {
-          "plugin_id": "wifi_revealer",
-          "class_name": "WifiRevealerPlugin"
+          "plugin_id": "color_picker",
+          "class_name": "ColorPickerPlugin"
         }
       ]
     },
@@ -223,7 +232,7 @@
       ]
     },
     "settings_center.py": {
-      "sha256": "e70ace1ab1fd7d25258c1f17da7e4bc3a6a20733e0d59204aec9575b0996b0fa",
+      "sha256": "345a09ebaae80ef900829b91aa355f7c9caee65a7558e31af9de87985965b7c7",
       "plugins": [
         {
           "plugin_id": "settings_center",

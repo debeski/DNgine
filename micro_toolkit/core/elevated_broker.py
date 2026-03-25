@@ -19,6 +19,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from micro_toolkit.core.backup_manager import restore_encrypted_snapshot
 from micro_toolkit.core.plugin_manager import PluginManager
 from micro_toolkit.core.plugin_state import PluginStateManager
 
@@ -44,10 +45,11 @@ class ElevatedCapabilityContext:
 
 
 class ElevatedBrokerRuntime:
-    def __init__(self, data_root: Path, output_root: Path, assets_root: Path):
+    def __init__(self, data_root: Path, output_root: Path, assets_root: Path, app_root: Path):
         self.data_root = Path(data_root)
         self.output_root = Path(output_root)
         self.assets_root = Path(assets_root)
+        self.app_root = Path(app_root)
         self.runtime_root = self.data_root / "runtime"
         self.runtime_root.mkdir(parents=True, exist_ok=True)
 
@@ -106,6 +108,13 @@ def _register_core_capabilities(registry: ElevatedCapabilityRegistry) -> None:
         _filesystem_stat_capability,
         provider="core",
     )
+    registry.register(
+        "backup.restore_snapshot",
+        "Restore Backup Snapshot",
+        "Restore an encrypted Micro Toolkit backup snapshot over the current app and data files.",
+        _backup_restore_capability,
+        provider="core",
+    )
 
 
 def _system_identity_capability(context: ElevatedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
@@ -138,6 +147,24 @@ def _filesystem_stat_capability(context: ElevatedCapabilityContext, payload: dic
     }
 
 
+def _backup_restore_capability(context: ElevatedCapabilityContext, payload: dict[str, object]) -> dict[str, object]:
+    backup_path = Path(str(payload.get("backup_path") or "").strip()).expanduser()
+    key_path = Path(str(payload.get("key_path") or "").strip()).expanduser()
+    if not backup_path:
+        raise ValueError("payload.backup_path is required")
+    if not key_path:
+        raise ValueError("payload.key_path is required")
+    context.log(f"Restoring backup snapshot from {backup_path}")
+    return restore_encrypted_snapshot(
+        backup_path=backup_path,
+        key_path=key_path,
+        runtime_root=context.runtime.app_root.parent,
+        app_root=context.runtime.app_root,
+        data_root=context.runtime.data_root,
+        output_root=context.runtime.output_root,
+    )
+
+
 def load_elevated_capability_registry(
     plugins_root: Path,
     custom_plugins_root: Path,
@@ -148,7 +175,7 @@ def load_elevated_capability_registry(
     builtin_manifest_path: Path | None = None,
     enforce_builtin_manifest: bool = False,
 ) -> ElevatedCapabilityRegistry:
-    runtime = ElevatedBrokerRuntime(data_root, output_root, assets_root)
+    runtime = ElevatedBrokerRuntime(data_root, output_root, assets_root, plugins_root.parent)
     registry = ElevatedCapabilityRegistry()
     _register_core_capabilities(registry)
 

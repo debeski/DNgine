@@ -4,7 +4,18 @@ from micro_toolkit.core.theme import ThemePalette
 
 
 def card_style(palette: ThemePalette, *, radius: int = 18) -> str:
-    return f"QFrame {{ background: {palette.surface_bg}; border: 1px solid {palette.border}; border-radius: {radius}px; }}"
+    return f"QFrame {{ background: {palette.surface_bg}; border: none; border-radius: {radius}px; }}"
+
+
+def tinted_card_style(
+    palette: ThemePalette,
+    *,
+    background: str,
+    border: str | None = None,
+    radius: int = 22,
+) -> str:
+    _ = border or palette.border
+    return f"QFrame {{ background: {background}; border: none; border-radius: {radius}px; }}"
 
 
 def page_title_style(palette: ThemePalette, *, size: int = 30, weight: int = 800) -> str:

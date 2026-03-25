@@ -10,17 +10,27 @@ DEFAULT_CONFIG = {
     "close_to_tray": False,
     "run_on_startup": False,
     "start_minimized": False,
-    "appearance_mode": "system",
+    "appearance_mode": "light",
+    "material_theme": "light_pink_500.xml",
+    "material_color": "pink",
+    "material_dark": False,
+    "density_scale": 0,
     "grayscale": False,
     "invert_colors": False,
     "high_contrast": False,
     "ui_scaling": 1.0,
+    "backup_schedule": "monthly",
+    "backup_last_created_at": "",
     "default_output_path": "",
     "language": "en",
     "hotkeys": {},
     "quick_access": [],
     "collapsed_groups": {},
     "plugin_overrides": {},
+    "activity_dock_state": "",
+    "activity_dock_visible": True,
+    "activity_dock_mode": "activity",
+    "developer_mode": False,
 }
 
 _BOOL_KEYS = {
@@ -28,12 +38,14 @@ _BOOL_KEYS = {
     "close_to_tray",
     "run_on_startup",
     "start_minimized",
+    "material_dark",
     "grayscale",
     "invert_colors",
     "high_contrast",
+    "developer_mode",
 }
-_STR_KEYS = {"default_output_path", "language", "appearance_mode"}
-_NUM_KEYS = {"ui_scaling"}
+_STR_KEYS = {"default_output_path", "language", "appearance_mode", "material_theme", "material_color", "backup_schedule", "backup_last_created_at", "activity_dock_state", "activity_dock_mode"}
+_NUM_KEYS = {"ui_scaling", "density_scale"}
 _DICT_KEYS = {"hotkeys", "collapsed_groups", "plugin_overrides"}
 _LIST_KEYS = {"quick_access"}
 
@@ -186,4 +198,26 @@ class AppConfig:
             if output_path.name == "output" and output_path.parent.name == "qt_app":
                 self.config["default_output_path"] = str(self.default_output_path)
                 changed = True
+        return changed
+
+    def migrate_plugin_ids(self, mapping: dict[str, str]) -> bool:
+        changed = False
+        quick_access = self.config.get("quick_access")
+        if isinstance(quick_access, list):
+            updated = [mapping.get(str(item), str(item)) for item in quick_access]
+            if updated != quick_access:
+                self.config["quick_access"] = updated
+                changed = True
+
+        overrides = self.config.get("plugin_overrides")
+        if isinstance(overrides, dict):
+            updated_overrides = {}
+            for key, value in overrides.items():
+                updated_overrides[mapping.get(str(key), str(key))] = value
+            if updated_overrides != overrides:
+                self.config["plugin_overrides"] = updated_overrides
+                changed = True
+
+        if changed:
+            self.save()
         return changed

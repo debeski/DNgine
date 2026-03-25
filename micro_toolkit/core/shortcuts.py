@@ -18,6 +18,7 @@ class ShortcutBinding:
     action_id: str
     title: str
     default_sequence: str
+    default_scope: str
     callback: callable
     sequence: str = ""
     scope: str = "application"
@@ -55,6 +56,7 @@ class ShortcutManager(QObject):
             action_id=action_id,
             title=title,
             default_sequence=default_sequence,
+            default_scope=default_scope,
             callback=callback,
             sequence=saved.get("sequence", default_sequence),
             scope=self._normalize_scope(requested_scope),
