@@ -27,6 +27,7 @@
   "tray.menu.settings": "الإعدادات",
   "tray.menu.workflows": "سلاسل العمل",
   "tray.menu.quit": "إنهاء",
+  "confirm.exit.ask_always": "اسأل دائماً عند الإنهاء",
   "settings.title": "الإعدادات",
   "settings.description": "تحكم بالمظهر، واللغة، وسلوك بدء التشغيل، وسلوك شريط النظام، والاختصارات من مكان واحد.",
   "settings.tab.general": "عام",

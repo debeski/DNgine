@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +38,20 @@ PLUGIN_ID_MIGRATIONS = {
 }
 
 
+def _standard_storage_root() -> Path:
+    override = str(os.environ.get("MICRO_TOOLKIT_HOME", "")).strip()
+    if override:
+        return Path(override).expanduser()
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Micro Toolkit"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Micro Toolkit"
+    xdg_data_home = str(os.environ.get("XDG_DATA_HOME", "")).strip()
+    if xdg_data_home:
+        return Path(xdg_data_home).expanduser() / "micro-toolkit"
+    return Path.home() / ".local" / "share" / "micro-toolkit"
+
+
 class AppLogger(QObject):
     message_logged = Signal(str, str, str)
     status_changed = Signal(str)
@@ -69,20 +82,9 @@ class AppServices(QObject):
         super().__init__()
         self.app_root = Path(__file__).resolve().parents[1]
         self.runtime_root = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else self.app_root.parent
-        # Determine data and output roots based on frozen state and platform
-        if getattr(sys, "frozen", False):
-            if os.name == "nt":
-                base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Micro Toolkit"
-            elif sys.platform == "darwin":
-                base = Path.home() / "Library" / "Application Support" / "Micro Toolkit"
-            else:
-                base = Path.home() / ".local" / "share" / "micro-toolkit"
-            
-            self.data_root = base / "data"
-            self.output_root = base / "output"
-        else:
-            self.data_root = self.runtime_root / "data"
-            self.output_root = self.runtime_root / "output"
+        self.storage_root = _standard_storage_root()
+        self.data_root = self.storage_root / "data"
+        self.output_root = self.storage_root / "output"
 
         self.assets_root = self.app_root / "assets"
         self.locales_root = self.app_root / "i18n"
@@ -93,7 +95,6 @@ class AppServices(QObject):
         self.config_path = self.data_root / "micro_toolkit_config.json"
         self.database_path = self.data_root / "micro_toolkit.db"
         self.plugin_state_path = self.data_root / "plugin_state.json"
-        self._migrate_legacy_runtime_files()
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.custom_plugins_root.mkdir(parents=True, exist_ok=True)
@@ -450,35 +451,6 @@ class AppServices(QObject):
 
     def serialize_result(self, payload: object):
         return serialize_command_result(payload)
-
-    def _migrate_legacy_runtime_files(self) -> None:
-        self.data_root.mkdir(parents=True, exist_ok=True)
-        legacy_data_root = self.app_root / "data"
-        legacy_pairs = [
-            (self.data_root / "qt_toolkit_config.json", self.config_path),
-            (self.data_root / "micro_toolkit_qt.db", self.database_path),
-            (legacy_data_root / "micro_toolkit_config.json", self.config_path),
-            (legacy_data_root / "micro_toolkit.db", self.database_path),
-            (legacy_data_root / "plugin_state.json", self.plugin_state_path),
-        ]
-        for legacy_path, target_path in legacy_pairs:
-            if legacy_path.exists() and not target_path.exists():
-                try:
-                    shutil.move(str(legacy_path), str(target_path))
-                except Exception:
-                    pass
-        legacy_plugins_root = legacy_data_root / "plugins"
-        if legacy_plugins_root.exists() and not self.custom_plugins_root.exists():
-            try:
-                shutil.move(str(legacy_plugins_root), str(self.custom_plugins_root))
-            except Exception:
-                pass
-        legacy_workflows_root = legacy_data_root / "workflows"
-        if legacy_workflows_root.exists() and not self.workflows_root.exists():
-            try:
-                shutil.move(str(legacy_workflows_root), str(self.workflows_root))
-            except Exception:
-                pass
 
     def reload_plugins(self) -> None:
         self.plugin_manager.invalidate_cache(clear_instances=True)

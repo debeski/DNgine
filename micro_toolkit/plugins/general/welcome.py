@@ -1,48 +1,60 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QPieSeries, QValueAxis
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QComboBox,
+    QBoxLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
+    QMessageBox,
     QPushButton,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.page_style import (
     body_text_style,
     card_style,
     muted_text_style,
-    page_title_style,
     section_title_style,
     tinted_card_style,
 )
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.widgets import width_breakpoint
+
+
+def _mix_hex(first: str, second: str, ratio: float) -> str:
+    first_color = QColor(first)
+    second_color = QColor(second)
+    if not first_color.isValid() or not second_color.isValid():
+        return first
+    ratio = max(0.0, min(1.0, float(ratio)))
+    red = round((first_color.red() * (1.0 - ratio)) + (second_color.red() * ratio))
+    green = round((first_color.green() * (1.0 - ratio)) + (second_color.green() * ratio))
+    blue = round((first_color.blue() * (1.0 - ratio)) + (second_color.blue() * ratio))
+    return QColor(red, green, blue).name()
 
 
 class WelcomeOverviewPlugin(QtPlugin):
     plugin_id = "welcome_overview"
     name = "Dashboard"
-    description = "A live dashboard for your toolkit activity, system snapshot, and quick access shortcuts."
+    description = "A live dashboard for toolkit activity, health signals, and useful next actions."
     category = "General"
     translations = {
         "en": {
             "plugin.name": "Dashboard",
-            "plugin.description": "A live dashboard for your toolkit activity, system snapshot, and quick access shortcuts.",
+            "plugin.description": "A live dashboard for toolkit activity, health signals, and useful next actions.",
         },
         "ar": {
             "plugin.name": "لوحة التحكم",
-            "plugin.description": "لوحة حية لنشاط الأدوات ولمحة النظام واختصارات الوصول السريع.",
+            "plugin.description": "لوحة حية لنشاط الأدوات وإشارات الحالة والإجراءات المفيدة التالية.",
         },
     }
 
@@ -55,30 +67,29 @@ class DashboardPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
-        self.quick_bar_layout: QHBoxLayout | None = None
-        self.quick_access_list: QListWidget | None = None
-        self.quick_access_combo: QComboBox | None = None
         self.hero_card: QFrame | None = None
         self.hero_stats_grid = None
         self.hero_side_panel: QFrame | None = None
-        self.quick_access_card: QFrame | None = None
+        self.workspace_card: QFrame | None = None
         self.activity_card: QFrame | None = None
         self.top_tools_card: QFrame | None = None
         self.status_card: QFrame | None = None
         self.hero_eyebrow: QLabel | None = None
         self.hero_title: QLabel | None = None
         self.hero_body: QLabel | None = None
-        self.quick_access_title: QLabel | None = None
+        self.workspace_title: QLabel | None = None
+        self.workspace_note: QLabel | None = None
+        self.workspace_stack: QVBoxLayout | None = None
         self.activity_title: QLabel | None = None
         self.activity_stack: QVBoxLayout | None = None
         self.top_tools_chart = QChartView()
         self.status_chart = QChartView()
+        self._responsive_bucket = ""
+        self._workspace_action_buttons: list[QPushButton] = []
         self._build_ui()
         self._refresh()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-        self.services.quick_access_changed.connect(self._render_quick_access)
-        self.services.plugin_visuals_changed.connect(self._handle_plugin_visuals_changed)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -90,9 +101,9 @@ class DashboardPage(QWidget):
 
         self.hero_card = QFrame()
         self.hero_card.setObjectName("DashboardWelcomeCard")
-        hero_layout = QHBoxLayout(self.hero_card)
-        hero_layout.setContentsMargins(26, 24, 26, 24)
-        hero_layout.setSpacing(20)
+        self.hero_layout = QHBoxLayout(self.hero_card)
+        self.hero_layout.setContentsMargins(26, 24, 26, 24)
+        self.hero_layout.setSpacing(20)
 
         hero_left = QVBoxLayout()
         hero_left.setSpacing(10)
@@ -105,63 +116,62 @@ class DashboardPage(QWidget):
         hero_left.addWidget(self.hero_title)
         hero_left.addWidget(self.hero_body)
 
-        from PySide6.QtWidgets import QGridLayout
-
         self.hero_stats_grid = QGridLayout()
         self.hero_stats_grid.setContentsMargins(0, 8, 0, 0)
         self.hero_stats_grid.setHorizontalSpacing(12)
         self.hero_stats_grid.setVerticalSpacing(12)
         hero_left.addLayout(self.hero_stats_grid)
-        hero_layout.addLayout(hero_left, 1)
+        self.hero_layout.addLayout(hero_left, 1)
         outer.addWidget(self.hero_card)
 
-        operational_row = QHBoxLayout()
-        operational_row.setSpacing(14)
+        self.operational_row = QHBoxLayout()
+        self.operational_row.setSpacing(14)
 
-        self.quick_access_card = QFrame()
-        quick_layout = QVBoxLayout(self.quick_access_card)
-        quick_layout.setContentsMargins(20, 20, 20, 20)
-        quick_layout.setSpacing(14)
+        self.workspace_card = QFrame()
+        workspace_layout = QVBoxLayout(self.workspace_card)
+        workspace_layout.setContentsMargins(20, 20, 20, 20)
+        workspace_layout.setSpacing(14)
 
-        self.quick_access_title = QLabel()
-        quick_layout.addWidget(self.quick_access_title)
+        self.workspace_title = QLabel()
+        workspace_layout.addWidget(self.workspace_title)
+        self.workspace_note = QLabel()
+        self.workspace_note.setWordWrap(True)
+        workspace_layout.addWidget(self.workspace_note)
 
-        self.quick_bar_frame = QFrame()
-        self.quick_bar_frame.setObjectName("QuickAccessRail")
-        self.quick_bar_layout = QHBoxLayout(self.quick_bar_frame)
-        self.quick_bar_layout.setContentsMargins(0, 0, 0, 0)
-        self.quick_bar_layout.setSpacing(10)
-        quick_layout.addWidget(self.quick_bar_frame)
+        workspace_stack_host = QFrame()
+        self.workspace_stack = QVBoxLayout(workspace_stack_host)
+        self.workspace_stack.setContentsMargins(0, 0, 0, 0)
+        self.workspace_stack.setSpacing(10)
+        workspace_layout.addWidget(workspace_stack_host, 1)
 
-        editor_row = QHBoxLayout()
-        editor_row.setSpacing(14)
-
-        self.quick_access_list = QListWidget()
-        self.quick_access_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.quick_access_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.quick_access_list.model().rowsMoved.connect(self._persist_quick_access_from_list)
-        editor_row.addWidget(self.quick_access_list, 1)
-
-        editor_side = QVBoxLayout()
-        editor_side.setSpacing(10)
-        self.quick_access_combo = QComboBox()
-        editor_side.addWidget(self.quick_access_combo)
-
-        self.add_button = QPushButton()
-        self.add_button.clicked.connect(self._add_selected_plugin)
-        editor_side.addWidget(self.add_button)
-
-        self.remove_button = QPushButton()
-        self.remove_button.clicked.connect(self._remove_selected_plugin)
-        editor_side.addWidget(self.remove_button)
-
-        self.open_button = QPushButton()
-        self.open_button.clicked.connect(self._open_selected_plugin)
-        editor_side.addWidget(self.open_button)
-        editor_side.addStretch(1)
-        editor_row.addLayout(editor_side)
-        quick_layout.addLayout(editor_row)
-        operational_row.addWidget(self.quick_access_card, 3)
+        self.workspace_actions = QGridLayout()
+        self.workspace_actions.setContentsMargins(0, 4, 0, 0)
+        self.workspace_actions.setHorizontalSpacing(8)
+        self.workspace_actions.setVerticalSpacing(8)
+        self._workspace_action_buttons = [
+            self._make_dashboard_action_button(
+                self._pt("workspace.action.clipboard", "Clipboard"),
+                "clipboard",
+                lambda: self._open_plugin("clip_manager"),
+            ),
+            self._make_dashboard_action_button(
+                self._pt("workspace.action.workflows", "Workflows"),
+                "workflow",
+                lambda: self._open_plugin("workflow_studio"),
+            ),
+            self._make_dashboard_action_button(
+                self._pt("workspace.action.settings", "Settings"),
+                "settings",
+                self._open_settings,
+            ),
+            self._make_dashboard_action_button(
+                self._pt("workspace.action.plugins", "Plugins"),
+                "inspect",
+                self._open_plugins,
+            ),
+        ]
+        workspace_layout.addLayout(self.workspace_actions)
+        self.operational_row.addWidget(self.workspace_card, 3)
 
         self.activity_card = QFrame()
         activity_layout = QVBoxLayout(self.activity_card)
@@ -174,11 +184,11 @@ class DashboardPage(QWidget):
         self.activity_stack.setContentsMargins(0, 0, 0, 0)
         self.activity_stack.setSpacing(12)
         activity_layout.addWidget(activity_stack_host, 1)
-        operational_row.addWidget(self.activity_card, 3)
-        outer.addLayout(operational_row, 1)
+        self.operational_row.addWidget(self.activity_card, 3)
+        outer.addLayout(self.operational_row, 1)
 
-        analytics_row = QHBoxLayout()
-        analytics_row.setSpacing(14)
+        self.analytics_row = QHBoxLayout()
+        self.analytics_row.setSpacing(14)
 
         self.top_tools_card = QFrame()
         top_tools_layout = QVBoxLayout(self.top_tools_card)
@@ -188,7 +198,7 @@ class DashboardPage(QWidget):
         top_tools_layout.addWidget(self.top_tools_title)
         self.top_tools_chart.setRenderHint(QPainter.RenderHint.Antialiasing)
         top_tools_layout.addWidget(self.top_tools_chart)
-        analytics_row.addWidget(self.top_tools_card, 2)
+        self.analytics_row.addWidget(self.top_tools_card, 2)
 
         self.status_card = QFrame()
         status_layout = QVBoxLayout(self.status_card)
@@ -198,32 +208,34 @@ class DashboardPage(QWidget):
         status_layout.addWidget(self.status_title)
         self.status_chart.setRenderHint(QPainter.RenderHint.Antialiasing)
         status_layout.addWidget(self.status_chart)
-        analytics_row.addWidget(self.status_card, 1)
+        self.analytics_row.addWidget(self.status_card, 1)
 
-        outer.addLayout(analytics_row, 1)
+        outer.addLayout(self.analytics_row, 1)
+        self._apply_responsive_layout(force=True)
 
     def _refresh(self) -> None:
         greeting, date_text = self._welcome_texts()
         self.hero_eyebrow.setText(self._pt("hero.eyebrow", "Welcome back"))
         self.hero_title.setText(greeting)
         self.hero_body.setText(date_text)
-        self.quick_access_title.setText(self._pt("quick.title", "Quick launch"))
-        self.add_button.setText(self._pt("quick.add", "Add shortcut"))
-        self.remove_button.setText(self._pt("quick.remove", "Remove selected"))
-        self.open_button.setText(self._pt("quick.open", "Open selected"))
+        self.workspace_title.setText(self._pt("workspace.title", "Workspace pulse"))
+        self.workspace_note.setText(
+            self._pt(
+                "workspace.note",
+                "A quick read on backups, shortcuts, workflows, and your output desk so you can decide what needs attention next.",
+            )
+        )
         self.activity_title.setText(self._pt("activity.title", "Recent activity"))
         self.top_tools_title.setText(self._pt("chart.top_tools", "Most used tools"))
         self.status_title.setText(self._pt("chart.status", "Run outcomes"))
         self._render_hero_stats()
         self._render_charts()
-        self._render_quick_access()
+        self._render_workspace_pulse()
         self._render_recent_activity()
         self._apply_card_styles()
+        self._apply_responsive_layout()
 
     def _handle_theme_change(self, _mode: str) -> None:
-        self._refresh()
-
-    def _handle_plugin_visuals_changed(self, _plugin_id: str) -> None:
         self._refresh()
 
     def _apply_card_styles(self) -> None:
@@ -231,7 +243,7 @@ class DashboardPage(QWidget):
         for frame in (
             self.hero_card,
             self.hero_side_panel,
-            self.quick_access_card,
+            self.workspace_card,
             self.activity_card,
             self.top_tools_card,
             self.status_card,
@@ -250,31 +262,49 @@ class DashboardPage(QWidget):
         )
         self.hero_title.setStyleSheet(f"color: {title_color}; font-size: 34px; font-weight: 800;")
         self.hero_body.setStyleSheet(f"color: {body_color}; font-size: 15px; font-weight: 500;")
-        if self.quick_access_combo is not None:
-            self.quick_access_combo.setStyleSheet(
-                f"background: {palette.input_bg}; border: none; border-radius: 0px; color: {palette.text_primary};"
-            )
-        if self.quick_access_list is not None:
-            self.quick_access_list.setStyleSheet(
-                f"""
-                QListWidget {{
-                    background: {palette.input_bg};
-                    border: none;
-                    border-radius: 0px;
-                    color: {palette.text_primary};
-                }}
-                QListWidget::item {{
-                    border: none;
-                    margin: 0;
-                    padding: 8px 10px;
-                }}
-                QListWidget::item:selected {{
-                    background: {palette.accent_soft};
-                    color: {palette.text_primary};
-                }}
-                """
-            )
-        for label in (self.quick_access_title, self.activity_title, self.top_tools_title, self.status_title):
+        if self.workspace_note is not None:
+            self.workspace_note.setStyleSheet(muted_text_style(palette, size=13))
+        if self.workspace_card is not None:
+            for button in self.workspace_card.findChildren(QPushButton, "DashboardActionButton"):
+                button.setStyleSheet(
+                    f"""
+                    QPushButton#DashboardActionButton {{
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                            stop:0 {palette.surface_bg},
+                            stop:1 {palette.surface_alt_bg});
+                        color: {palette.text_primary};
+                        border: 1px solid {palette.border};
+                        border-radius: 14px;
+                        padding: 10px 12px;
+                        font-size: 13px;
+                        font-weight: 700;
+                        text-align: left;
+                    }}
+                    QPushButton#DashboardActionButton:hover {{
+                        border-color: {palette.accent};
+                        background: {palette.accent_soft};
+                    }}
+                    """
+                )
+            for button in self.workspace_card.findChildren(QPushButton, "DashboardInlineButton"):
+                button.setStyleSheet(
+                    f"""
+                    QPushButton#DashboardInlineButton {{
+                        background: transparent;
+                        color: {palette.accent};
+                        border: 1px solid {palette.border};
+                        border-radius: 999px;
+                        padding: 6px 10px;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }}
+                    QPushButton#DashboardInlineButton:hover {{
+                        background: {palette.accent_soft};
+                        border-color: {palette.accent};
+                    }}
+                    """
+                )
+        for label in (self.workspace_title, self.activity_title, self.top_tools_title, self.status_title):
             label.setStyleSheet(section_title_style(palette, size=20))
 
     def _welcome_texts(self) -> tuple[str, str]:
@@ -313,13 +343,14 @@ class DashboardPage(QWidget):
             elif top_tool_id:
                 top_tool_name = top_tool_id
         available_plugins = len(self.services.manageable_plugin_specs())
-        pinned_count = len(self.services.quick_access_ids())
+        output_path = self.services.default_output_path()
+        output_name = output_path.name or str(output_path)
         shortcut_count = len(self.services.shortcut_manager.list_bindings())
         workflow_count = len(self.services.workflow_manager.list_workflows())
         success_count = int((summary.get("status_counts") or {}).get("success", 0))
         stats = [
             (self._pt("hero.stat.available", "Available Plugins"), str(available_plugins)),
-            (self._pt("hero.stat.pinned", "Pinned"), str(pinned_count)),
+            (self._pt("hero.stat.output", "Output desk"), output_name),
             (self._pt("hero.stat.shortcuts", "Shortcuts"), str(shortcut_count)),
             (self._pt("hero.stat.workflows", "Workflows"), str(workflow_count)),
             (self._pt("hero.stat.success", "Successful runs"), str(success_count)),
@@ -329,6 +360,7 @@ class DashboardPage(QWidget):
         stat_bg = "rgba(255, 255, 255, 0.10)" if palette.mode == "dark" else "rgba(255, 255, 255, 0.42)"
         stat_value_color = "#ffffff" if palette.mode == "dark" else palette.text_primary
         stat_label_color = "rgba(255, 255, 255, 0.76)" if palette.mode == "dark" else "rgba(20, 33, 49, 0.64)"
+        columns = {"wide": 3, "medium": 2, "compact": 1}.get(self._responsive_bucket or "wide", 3)
         for index, (label, value) in enumerate(stats):
             card = QFrame()
             card.setStyleSheet(
@@ -348,7 +380,39 @@ class DashboardPage(QWidget):
             text_label.setStyleSheet(f"color: {stat_label_color}; font-size: 11px; font-weight: 600;")
             layout.addWidget(value_label)
             layout.addWidget(text_label)
-            self.hero_stats_grid.addWidget(card, index // 3, index % 3)
+            self.hero_stats_grid.addWidget(card, index // columns, index % columns)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        bucket = width_breakpoint(self.width(), compact_max=620, medium_max=1120)
+        if not force and bucket == self._responsive_bucket:
+            if self.hero_stats_grid.count():
+                self._render_hero_stats()
+            return
+        self._responsive_bucket = bucket
+        compact = bucket == "compact"
+
+        self.operational_row.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        )
+        self.analytics_row.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        )
+        while self.workspace_actions.count():
+            item = self.workspace_actions.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self.workspace_card)
+        columns = 1 if compact else 2
+        for index, button in enumerate(self._workspace_action_buttons):
+            self.workspace_actions.addWidget(button, index // columns, index % columns)
+        for column in range(columns):
+            self.workspace_actions.setColumnStretch(column, 1)
+        if self.hero_stats_grid.count():
+            self._render_hero_stats()
 
     def _render_charts(self) -> None:
         summary = self.services.session_manager.get_summary(days=7)
@@ -424,43 +488,95 @@ class DashboardPage(QWidget):
         chart.addSeries(series)
         return chart
 
-    def _render_quick_access(self) -> None:
-        while self.quick_bar_layout.count():
-            item = self.quick_bar_layout.takeAt(0)
+    def _render_workspace_pulse(self) -> None:
+        while self.workspace_stack.count():
+            item = self.workspace_stack.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
 
-        quick_ids = self.services.quick_access_ids()
-        for plugin_id in quick_ids:
-            spec = self.services.plugin_manager.get_spec(plugin_id)
-            if spec is None:
-                continue
-            button = QToolButton()
-            button.setText(self.services.plugin_display_name(spec))
-            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            button.setAutoRaise(False)
-            button.clicked.connect(lambda _checked=False, pid=plugin_id: self._open_plugin(pid))
-            self.quick_bar_layout.addWidget(button)
-        self.quick_bar_layout.addStretch(1)
+        output_path = self.services.default_output_path()
+        output_count = self._safe_dir_item_count(output_path)
+        output_meta = self._pt(
+            "workspace.output.meta",
+            "{count} item(s) are currently sitting in the default export folder.",
+            count=str(output_count),
+        )
+        self.workspace_stack.addWidget(
+            self._build_workspace_row(
+                self._pt("workspace.output.title", "Output desk"),
+                str(output_path),
+                output_meta,
+                self._pt("workspace.output.action", "Settings"),
+                self._open_settings,
+            )
+        )
 
-        self.quick_access_list.blockSignals(True)
-        self.quick_access_list.clear()
-        for plugin_id in quick_ids:
-            spec = self.services.plugin_manager.get_spec(plugin_id)
-            if spec is None:
-                continue
-            item = QListWidgetItem(self.services.plugin_display_name(spec))
-            item.setData(Qt.ItemDataRole.UserRole, plugin_id)
-            self.quick_access_list.addItem(item)
-        self.quick_access_list.blockSignals(False)
+        last_backup = self.services.backup_manager.last_backup_at()
+        backup_due = self.services.backup_manager.backup_due()
+        backup_value = self._pt("workspace.backup.value.due", "Backup due") if backup_due else self._pt("workspace.backup.value.ready", "On schedule")
+        if last_backup:
+            backup_meta = self._pt(
+                "workspace.backup.meta.last",
+                "{schedule} cadence. Last backup: {timestamp}.",
+                schedule=self.services.backup_manager.schedule().title(),
+                timestamp=self._format_iso_timestamp(last_backup),
+            )
+        else:
+            backup_meta = self._pt(
+                "workspace.backup.meta.none",
+                "{schedule} cadence. No encrypted backup has been created yet.",
+                schedule=self.services.backup_manager.schedule().title(),
+            )
+        self.workspace_stack.addWidget(
+            self._build_workspace_row(
+                self._pt("workspace.backup.title", "Backups"),
+                backup_value,
+                backup_meta,
+                self._pt("workspace.backup.action", "Create backup"),
+                self._create_dashboard_backup,
+            )
+        )
 
-        self.quick_access_combo.clear()
-        pinned = set(quick_ids)
-        for spec in self.services.pinnable_plugin_specs():
-            if spec.plugin_id in pinned:
-                continue
-            self.quick_access_combo.addItem(self.services.plugin_display_name(spec), spec.plugin_id)
+        workflow_count = len(self.services.workflow_manager.list_workflows())
+        workflow_meta = (
+            self._pt("workspace.workflows.meta.none", "You do not have any saved workflows yet.")
+            if workflow_count == 0
+            else self._pt("workspace.workflows.meta.some", "Automation sequences are ready for repeat jobs and handoffs.")
+        )
+        self.workspace_stack.addWidget(
+            self._build_workspace_row(
+                self._pt("workspace.workflows.title", "Automation"),
+                self._pt("workspace.workflows.value", "{count} workflow(s)", count=str(workflow_count)),
+                workflow_meta,
+                self._pt("workspace.workflows.action", "Open workflows"),
+                lambda: self._open_plugin("workflow_studio"),
+            )
+        )
+
+        global_bindings = self.services.shortcut_manager.global_binding_sequences()
+        helper_active = self.services.hotkey_helper_manager.is_active()
+        shortcut_value = (
+            self._pt("workspace.shortcuts.value.active", "Helper active")
+            if helper_active
+            else self._pt("workspace.shortcuts.value.local", "App focused")
+        )
+        shortcut_meta = self._pt(
+            "workspace.shortcuts.meta",
+            "{count} global binding(s) configured. Use Shortcuts to adjust helper access.",
+            count=str(len(global_bindings)),
+        )
+        self.workspace_stack.addWidget(
+            self._build_workspace_row(
+                self._pt("workspace.shortcuts.title", "Shortcuts"),
+                shortcut_value,
+                shortcut_meta,
+                self._pt("workspace.shortcuts.action", "Settings"),
+                self._open_settings,
+            )
+        )
+        self.workspace_stack.addStretch(1)
+        self._apply_card_styles()
 
     def _render_recent_activity(self) -> None:
         while self.activity_stack.count():
@@ -527,41 +643,47 @@ class DashboardPage(QWidget):
             f"background: {background}; color: {foreground}; font-size: 12px; font-weight: 700;"
         )
 
-    def _persist_quick_access_from_list(self, *args) -> None:
-        plugin_ids = []
-        for row in range(self.quick_access_list.count()):
-            item = self.quick_access_list.item(row)
-            if item is not None:
-                plugin_ids.append(str(item.data(Qt.ItemDataRole.UserRole)))
-        self.services.set_quick_access_ids(plugin_ids)
-        self._render_quick_access()
-
-    def _add_selected_plugin(self) -> None:
-        plugin_id = self.quick_access_combo.currentData()
-        if not plugin_id:
-            return
-        updated = self.services.quick_access_ids() + [str(plugin_id)]
-        self.services.set_quick_access_ids(updated)
-        self._render_quick_access()
-
-    def _remove_selected_plugin(self) -> None:
-        item = self.quick_access_list.currentItem()
-        if item is None:
-            return
-        plugin_id = str(item.data(Qt.ItemDataRole.UserRole))
-        updated = [value for value in self.services.quick_access_ids() if value != plugin_id]
-        self.services.set_quick_access_ids(updated)
-        self._render_quick_access()
-
-    def _open_selected_plugin(self) -> None:
-        item = self.quick_access_list.currentItem()
-        if item is None:
-            return
-        self._open_plugin(str(item.data(Qt.ItemDataRole.UserRole)))
-
     def _open_plugin(self, plugin_id: str) -> None:
         if self.services.main_window is not None:
             self.services.main_window.open_plugin(plugin_id)
+
+    def _make_dashboard_action_button(self, text: str, icon_name: str, handler) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("DashboardActionButton")
+        icon = icon_from_name(icon_name, self)
+        if icon is not None:
+            button.setIcon(icon)
+        button.clicked.connect(handler)
+        return button
+
+    def _build_workspace_row(self, title: str, value: str, meta: str, action_text: str, action_handler) -> QFrame:
+        palette = self.services.theme_manager.current_palette()
+        row = QFrame()
+        row.setStyleSheet(tinted_card_style(palette, background=palette.surface_alt_bg, radius=14))
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(12)
+
+        text_column = QVBoxLayout()
+        text_column.setSpacing(4)
+        title_label = QLabel(title)
+        title_label.setStyleSheet(section_title_style(palette, size=16))
+        value_label = QLabel(value)
+        value_label.setWordWrap(True)
+        value_label.setStyleSheet(body_text_style(palette, size=14))
+        meta_label = QLabel(meta)
+        meta_label.setWordWrap(True)
+        meta_label.setStyleSheet(muted_text_style(palette, size=12))
+        text_column.addWidget(title_label)
+        text_column.addWidget(value_label)
+        text_column.addWidget(meta_label)
+        layout.addLayout(text_column, 1)
+
+        action_button = QPushButton(action_text)
+        action_button.setObjectName("DashboardInlineButton")
+        action_button.clicked.connect(action_handler)
+        layout.addWidget(action_button, 0, Qt.AlignmentFlag.AlignTop)
+        return row
 
     def _format_timestamp(self, timestamp) -> str:
         try:
@@ -569,16 +691,63 @@ class DashboardPage(QWidget):
         except Exception:
             return str(timestamp)
 
+    def _format_iso_timestamp(self, timestamp: str) -> str:
+        try:
+            return datetime.fromisoformat(timestamp).strftime("%b %d, %Y · %H:%M")
+        except Exception:
+            return timestamp
+
+    def _safe_dir_item_count(self, path: Path) -> int:
+        try:
+            return sum(1 for _ in path.iterdir())
+        except Exception:
+            return 0
+
+    def _create_dashboard_backup(self) -> None:
+        try:
+            backup_path = self.services.create_backup(reason="dashboard")
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                self._pt("workspace.backup.failed.title", "Backup failed"),
+                str(exc),
+            )
+            return
+        QMessageBox.information(
+            self,
+            self._pt("workspace.backup.done.title", "Backup created"),
+            self._pt("workspace.backup.done.body", "Created encrypted backup at:\n{path}", path=str(backup_path)),
+        )
+        self._refresh()
+
+    def _open_settings(self) -> None:
+        main_window = self.services.main_window
+        if main_window is not None:
+            main_window.open_settings_center()
+
+    def _open_plugins(self) -> None:
+        main_window = self.services.main_window
+        if main_window is not None:
+            main_window.open_plugin_manager()
+
     def _hero_card_style(self) -> str:
         palette = self.services.theme_manager.current_palette()
         if palette.mode == "dark":
-            gradient = "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #16233b, stop:0.55 #1d345b, stop:1 #274774)"
+            start = _mix_hex(palette.surface_bg, palette.accent, 0.32)
+            middle = _mix_hex(palette.surface_alt_bg, palette.accent, 0.52)
+            end = _mix_hex(palette.accent, "#ffffff", 0.12)
         else:
-            gradient = "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #dff0ff, stop:0.55 #c9e5ff, stop:1 #b2d9ff)"
+            start = _mix_hex(palette.surface_bg, palette.accent_soft, 0.62)
+            middle = _mix_hex(palette.surface_alt_bg, palette.accent, 0.2)
+            end = _mix_hex(palette.accent_soft, palette.accent, 0.42)
+        gradient = (
+            "qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            f"stop:0 {start}, stop:0.56 {middle}, stop:1 {end})"
+        )
         return (
             "QFrame#DashboardWelcomeCard {"
             f"background: {gradient};"
-            "border: none;"
+            f"border: 1px solid {_mix_hex(palette.border, palette.accent, 0.28)};"
             "border-radius: 16px;"
             "}"
         )

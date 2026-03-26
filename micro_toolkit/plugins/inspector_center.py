@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 
@@ -44,12 +46,15 @@ class InspectorCenterPage(QWidget):
         self.details_view: QPlainTextEdit | None = None
         self.inspect_button: QPushButton | None = None
         self.copy_button: QPushButton | None = None
+        self._copy_feedback_timer: QTimer | None = None
+        self.text_unlock_checkbox: QCheckBox | None = None
         self._last_snapshot: dict[str, object] = {}
         self._build_ui()
         self._apply_texts()
         self._refresh_state()
         self.services.ui_inspector.snapshot_changed.connect(self._handle_snapshot_changed)
         self.services.ui_inspector.inspect_mode_changed.connect(self._handle_inspect_mode_changed)
+        self.services.ui_inspector.text_unlock_changed.connect(self._handle_text_unlock_changed)
         self.services.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._apply_styles)
 
@@ -78,14 +83,15 @@ class InspectorCenterPage(QWidget):
         self.status_label.setWordWrap(True)
         control_layout.addWidget(self.status_label)
 
+        self.text_unlock_checkbox = QCheckBox()
+        self.text_unlock_checkbox.toggled.connect(self._toggle_text_unlock)
+        control_layout.addWidget(self.text_unlock_checkbox)
+
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
         self.inspect_button = QPushButton()
         self.inspect_button.clicked.connect(self._toggle_inspecting)
         button_row.addWidget(self.inspect_button)
-        self.copy_button = QPushButton()
-        self.copy_button.clicked.connect(self._copy_snapshot)
-        button_row.addWidget(self.copy_button)
         button_row.addStretch(1)
         control_layout.addLayout(button_row)
         outer.addWidget(control_card)
@@ -109,8 +115,16 @@ class InspectorCenterPage(QWidget):
         detail_layout = QVBoxLayout(detail_card)
         detail_layout.setContentsMargins(18, 18, 18, 18)
         detail_layout.setSpacing(10)
+        detail_header = QHBoxLayout()
+        detail_header.setContentsMargins(0, 0, 0, 0)
+        detail_header.setSpacing(8)
         self.details_title = QLabel()
-        detail_layout.addWidget(self.details_title)
+        detail_header.addWidget(self.details_title)
+        detail_header.addStretch(1)
+        self.copy_button = QPushButton()
+        self.copy_button.clicked.connect(self._copy_snapshot)
+        detail_header.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignRight)
+        detail_layout.addLayout(detail_header)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
         detail_layout.addWidget(self.summary_label)
@@ -120,6 +134,9 @@ class InspectorCenterPage(QWidget):
         content_row.addWidget(detail_card, 2)
 
         outer.addLayout(content_row, 1)
+        self._copy_feedback_timer = QTimer(self)
+        self._copy_feedback_timer.setSingleShot(True)
+        self._copy_feedback_timer.timeout.connect(self._reset_copy_button_text)
         self._apply_styles()
 
     def _apply_styles(self, *_args) -> None:
@@ -132,25 +149,53 @@ class InspectorCenterPage(QWidget):
         self.status_label.setStyleSheet(muted_text_style(palette, size=13))
         for frame in (self.control_card, self.path_card, self.detail_card):
             frame.setStyleSheet(card_style(palette, radius=16))
+        self.copy_button.setStyleSheet(
+            f"""
+            QPushButton {{
+                background: {palette.surface_alt_bg};
+                color: {palette.text_primary};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+                padding: 5px 10px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                border-color: {palette.accent};
+                background: {palette.accent_soft};
+            }}
+            QPushButton:disabled {{
+                color: {palette.text_muted};
+            }}
+            """
+        )
+        self._reset_copy_button_text()
 
     def _apply_texts(self, *_args) -> None:
         self.title_label.setText(self._pt("title", "Inspector"))
         self.description_label.setText(
             self._pt(
                 "description",
-                "Inspect live widgets in the running interface. Start inspect mode, hover the UI, then click a widget to capture its structure, palette, and stylesheet details.",
+                "Inspect live widgets in the running interface. Start inspect mode, hover the UI, then left-click a widget to capture its structure, palette, and stylesheet details. If you need to move to another page first, use right-click navigation while inspect mode stays active.",
             )
         )
         self.path_title.setText(self._pt("path.title", "Parent Chain"))
         self.details_title.setText(self._pt("details.title", "Widget Details"))
-        self.copy_button.setText(self._pt("copy", "Copy snapshot"))
+        self._reset_copy_button_text()
+        self.text_unlock_checkbox.setText(
+            self._pt("text_unlock", "Unlock static text selection across the app")
+        )
         self._refresh_state()
 
     def _refresh_state(self) -> None:
         enabled = self.services.developer_mode_enabled()
         inspecting = self.services.ui_inspector.inspect_mode()
+        text_unlock = self.services.ui_inspector.text_unlock_enabled()
         self.inspect_button.setEnabled(enabled)
         self.copy_button.setEnabled(bool(self._last_snapshot))
+        self.text_unlock_checkbox.blockSignals(True)
+        self.text_unlock_checkbox.setChecked(text_unlock)
+        self.text_unlock_checkbox.setEnabled(enabled)
+        self.text_unlock_checkbox.blockSignals(False)
         self.inspect_button.setText(
             self._pt("inspect.stop", "Stop inspecting") if inspecting else self._pt("inspect.start", "Start inspecting")
         )
@@ -160,7 +205,11 @@ class InspectorCenterPage(QWidget):
             )
         elif inspecting:
             self.status_label.setText(
-                self._pt("status.live", "Inspect mode is active. Hover a widget in the app and click once to capture it. Press Esc to cancel.")
+                self._pt("status.live", "Inspect mode is active. Hover the app, left-click to capture a widget, and use right-click navigation if you need to move to another page first. Press Esc to cancel.")
+            )
+        elif text_unlock:
+            self.status_label.setText(
+                self._pt("status.text_unlock", "Inspector text unlock is active. Static app text can now be highlighted and copied where supported.")
             )
         else:
             self.status_label.setText(
@@ -205,7 +254,26 @@ class InspectorCenterPage(QWidget):
     def _handle_inspect_mode_changed(self, _enabled: bool) -> None:
         self._refresh_state()
 
+    def _handle_text_unlock_changed(self, _enabled: bool) -> None:
+        self._refresh_state()
+
+    def _toggle_text_unlock(self, enabled: bool) -> None:
+        if not self.services.developer_mode_enabled():
+            return
+        self.services.ui_inspector.set_text_unlock_enabled(enabled)
+
     def _copy_snapshot(self) -> None:
         if not self._last_snapshot:
             return
         QApplication.clipboard().setText(json.dumps(self._last_snapshot, indent=2, ensure_ascii=False))
+        check_icon = icon_from_name("check", self)
+        if check_icon is not None:
+            self.copy_button.setIcon(check_icon)
+        self.copy_button.setText(self._pt("copy.done", "Copied"))
+        if self._copy_feedback_timer is not None:
+            self._copy_feedback_timer.start(1400)
+
+    def _reset_copy_button_text(self) -> None:
+        copy_icon = icon_from_name("copy", self)
+        self.copy_button.setIcon(copy_icon or self.copy_button.icon())
+        self.copy_button.setText(self._pt("copy", "Copy snapshot"))

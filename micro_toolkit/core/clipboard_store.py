@@ -144,16 +144,30 @@ class ClipboardStore:
             image_file = Path(image_path)
             if image_file.exists():
                 image_hash = hashlib.md5(image_file.read_bytes()).hexdigest()
+        stable_metadata = self._stable_metadata(metadata or {})
         payload = {
             "content": content.strip(),
             "content_type": content_type,
             "html_content": html_content.strip(),
             "image_hash": image_hash,
             "file_paths": file_paths or [],
-            "metadata": metadata or {},
+            "metadata": stable_metadata,
         }
         serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True)
         return hashlib.md5(serialized.encode("utf-8", errors="replace")).hexdigest()
+
+    @staticmethod
+    def _stable_metadata(metadata: dict) -> dict:
+        stable: dict[str, object] = {}
+        for key in ("kind", "width", "height", "count", "names"):
+            if key not in metadata:
+                continue
+            value = metadata.get(key)
+            if key == "names" and isinstance(value, list):
+                stable[key] = [str(item) for item in value]
+            else:
+                stable[key] = value
+        return stable
 
     def add_entry(
         self,
@@ -285,8 +299,7 @@ class ClipboardStore:
                 """,
                 (overflow,),
             ).fetchall()
-            for row in rows:
-                self._remove_asset(row["image_path"])
+            image_paths = [row["image_path"] for row in rows]
             connection.execute(
                 """
                 DELETE FROM clipboard_entries
@@ -299,6 +312,7 @@ class ClipboardStore:
                 """,
                 (overflow,),
             )
+            self._cleanup_unused_assets(connection, image_paths)
 
     def list_entries(
         self,
@@ -435,9 +449,9 @@ class ClipboardStore:
         entry = self.get_entry(entry_id)
         if entry is None:
             return
-        self._remove_asset(entry.image_path)
         with self._connect() as connection:
             connection.execute("DELETE FROM clipboard_entries WHERE id = ?", (entry_id,))
+            self._cleanup_unused_assets(connection, [entry.image_path])
 
     def clear_entries(self, preserve_pinned: bool = True) -> None:
         with self._connect() as connection:
@@ -445,14 +459,14 @@ class ClipboardStore:
                 rows = connection.execute(
                     "SELECT image_path FROM clipboard_entries WHERE pinned = 0"
                 ).fetchall()
-                for row in rows:
-                    self._remove_asset(row["image_path"])
+                image_paths = [row["image_path"] for row in rows]
                 connection.execute("DELETE FROM clipboard_entries WHERE pinned = 0")
+                self._cleanup_unused_assets(connection, image_paths)
             else:
                 rows = connection.execute("SELECT image_path FROM clipboard_entries").fetchall()
-                for row in rows:
-                    self._remove_asset(row["image_path"])
+                image_paths = [row["image_path"] for row in rows]
                 connection.execute("DELETE FROM clipboard_entries")
+                self._cleanup_unused_assets(connection, image_paths)
 
     def list_labels(self) -> list[str]:
         with self._connect() as connection:
@@ -503,3 +517,12 @@ class ClipboardStore:
                 path.unlink()
         except Exception:
             pass
+
+    def _cleanup_unused_assets(self, connection: sqlite3.Connection, image_paths: list[str]) -> None:
+        for image_path in {path for path in image_paths if path}:
+            still_used = connection.execute(
+                "SELECT 1 FROM clipboard_entries WHERE image_path = ? LIMIT 1",
+                (image_path,),
+            ).fetchone()
+            if still_used is None:
+                self._remove_asset(image_path)

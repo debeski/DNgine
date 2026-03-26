@@ -31,9 +31,9 @@ python tools/generate_builtin_plugin_manifest.py
 echo "Cleaning previous build artifacts..."
 rm -rf build dist
 
-echo "Building macOS onedir package..."
+echo "Building macOS app bundle..."
 python -m PyInstaller --noconfirm --clean micro-toolkit.spec
 
 deactivate
-echo "Build complete: dist/micro-toolkit/"
-echo "Launcher: dist/micro-toolkit/micro-toolkit"
+echo "Build complete: dist/Micro Toolkit.app"
+echo "Launcher: dist/Micro Toolkit.app"

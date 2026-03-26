@@ -25,6 +25,10 @@ from PySide6.QtWidgets import (
 from micro_toolkit.core.app_utils import generate_output_filename
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.table_model import DataFrameTableModel
+from micro_toolkit.core.widgets import ScrollSafeComboBox
+
+
+QComboBox = ScrollSafeComboBox
 
 
 def get_date_taken(path: str) -> str:

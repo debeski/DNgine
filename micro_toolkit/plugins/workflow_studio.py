@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QComboBox,
     QFrame,
     QGridLayout,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QPlainTextEdit,
     QSplitter,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -23,6 +26,10 @@ from PySide6.QtWidgets import (
 
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
+from micro_toolkit.core.widgets import ScrollSafeComboBox, width_breakpoint
+
+
+QComboBox = ScrollSafeComboBox
 
 
 class WorkflowStudioPlugin(QtPlugin):
@@ -53,6 +60,7 @@ class WorkflowStudioPage(QWidget):
         super().__init__()
         self.services = services
         self.i18n = services.i18n
+        self._responsive_bucket = ""
         self._build_ui()
         self._reload_workflows()
         self._apply_texts()
@@ -75,11 +83,11 @@ class WorkflowStudioPage(QWidget):
         self.description_label.setWordWrap(True)
         outer.addWidget(self.description_label)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        outer.addWidget(self.splitter, 1)
 
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
+        self.left_panel = QWidget()
+        left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
 
@@ -94,78 +102,120 @@ class WorkflowStudioPage(QWidget):
         self.workflow_list.currentTextChanged.connect(self._load_selected_workflow)
         list_card_layout.addWidget(self.workflow_list, 1)
 
-        list_buttons = QHBoxLayout()
+        self.list_buttons = QHBoxLayout()
         self.reload_button = QPushButton()
         self.reload_button.clicked.connect(self._reload_workflows)
-        list_buttons.addWidget(self.reload_button)
+        self.list_buttons.addWidget(self.reload_button)
         self.delete_button = QPushButton()
         self.delete_button.clicked.connect(self._delete_current_workflow)
-        list_buttons.addWidget(self.delete_button)
-        list_card_layout.addLayout(list_buttons)
+        self.list_buttons.addWidget(self.delete_button)
+        list_card_layout.addLayout(self.list_buttons)
         left_layout.addWidget(self.list_card, 1)
-        splitter.addWidget(left_panel)
+        self.splitter.addWidget(self.left_panel)
 
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
+        self.right_panel = QWidget()
+        right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(12)
+        right_layout.setSpacing(14)
 
-        self.meta_card = QFrame()
-        meta_grid = QGridLayout(self.meta_card)
-        meta_grid.setHorizontalSpacing(10)
-        meta_grid.setVerticalSpacing(10)
+        self.info_card = QFrame()
+        info_layout = QVBoxLayout(self.info_card)
+        info_layout.setContentsMargins(18, 16, 18, 16)
+        info_layout.setSpacing(12)
+
+        self.info_label = QLabel()
+        info_layout.addWidget(self.info_label)
+
+        self.meta_host = QWidget()
+        self.meta_grid = QGridLayout(self.meta_host)
+        self.meta_grid.setContentsMargins(0, 0, 0, 0)
+        self.meta_grid.setHorizontalSpacing(10)
+        self.meta_grid.setVerticalSpacing(10)
 
         self.name_label = QLabel()
-        meta_grid.addWidget(self.name_label, 0, 0)
+        self.meta_grid.addWidget(self.name_label, 0, 0)
         self.name_input = QLineEdit()
-        meta_grid.addWidget(self.name_input, 0, 1)
+        self.meta_grid.addWidget(self.name_input, 0, 1)
 
         self.description_meta_label = QLabel()
-        meta_grid.addWidget(self.description_meta_label, 1, 0)
+        self.meta_grid.addWidget(self.description_meta_label, 1, 0)
         self.description_input = QLineEdit()
-        meta_grid.addWidget(self.description_input, 1, 1)
-        right_layout.addWidget(self.meta_card)
+        self.meta_grid.addWidget(self.description_input, 1, 1)
+        info_layout.addWidget(self.meta_host)
+        right_layout.addWidget(self.info_card)
+
+        self.steps_card = QFrame()
+        steps_layout = QVBoxLayout(self.steps_card)
+        steps_layout.setContentsMargins(18, 16, 18, 16)
+        steps_layout.setSpacing(12)
 
         self.steps_label = QLabel()
-        right_layout.addWidget(self.steps_label)
-
+        steps_layout.addWidget(self.steps_label)
         self.step_table = QTableWidget(0, 2)
         self.step_table.setAlternatingRowColors(True)
         self.step_table.verticalHeader().setVisible(False)
         self.step_table.horizontalHeader().setStretchLastSection(True)
-        right_layout.addWidget(self.step_table, 1)
+        self.step_table.setMinimumHeight(220)
+        self.step_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        steps_layout.addWidget(self.step_table, 1)
 
-        step_buttons = QHBoxLayout()
+        self.step_buttons = QHBoxLayout()
         self.add_step_button = QPushButton()
         self.add_step_button.clicked.connect(self._add_step)
-        step_buttons.addWidget(self.add_step_button)
+        self.step_buttons.addWidget(self.add_step_button)
         self.remove_step_button = QPushButton()
         self.remove_step_button.clicked.connect(self._remove_selected_step)
-        step_buttons.addWidget(self.remove_step_button)
-        step_buttons.addStretch(1)
+        self.step_buttons.addWidget(self.remove_step_button)
+        self.step_buttons.addStretch(1)
         self.save_button = QPushButton()
         self.save_button.clicked.connect(self._save_workflow)
-        step_buttons.addWidget(self.save_button)
+        self.step_buttons.addWidget(self.save_button)
         self.run_button = QPushButton()
         self.run_button.clicked.connect(self._run_workflow)
-        step_buttons.addWidget(self.run_button)
-        right_layout.addLayout(step_buttons)
+        self.step_buttons.addWidget(self.run_button)
+        steps_layout.addLayout(self.step_buttons)
+        right_layout.addWidget(self.steps_card, 1)
 
+        self.commands_card = QFrame()
+        commands_layout = QVBoxLayout(self.commands_card)
+        commands_layout.setContentsMargins(18, 16, 18, 16)
+        commands_layout.setSpacing(12)
         self.reference_label = QLabel()
-        right_layout.addWidget(self.reference_label)
+        commands_layout.addWidget(self.reference_label)
         self.reference_card = QFrame()
         reference_layout = QVBoxLayout(self.reference_card)
-        reference_layout.setContentsMargins(18, 16, 18, 16)
+        reference_layout.setContentsMargins(0, 0, 0, 0)
         reference_layout.setSpacing(10)
-        self.command_reference = QPlainTextEdit()
-        self.command_reference.setReadOnly(True)
-        self.command_reference.setMaximumBlockCount(500)
-        reference_layout.addWidget(self.command_reference, 1)
-        right_layout.addWidget(self.reference_card, 1)
+        self.command_reference_table = QTableWidget(0, 3)
+        self.command_reference_table.setAlternatingRowColors(True)
+        self.command_reference_table.verticalHeader().setVisible(False)
+        self.command_reference_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.command_reference_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.command_reference_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.command_reference_table.horizontalHeader().setStretchLastSection(True)
+        self.command_reference_table.setColumnWidth(0, 190)
+        self.command_reference_table.setColumnWidth(1, 220)
+        self.command_reference_table.setMinimumHeight(180)
+        reference_layout.addWidget(self.command_reference_table, 1)
 
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
+        self.run_output_label = QLabel()
+        reference_layout.addWidget(self.run_output_label)
+        self.command_output = QPlainTextEdit()
+        self.command_output.setReadOnly(True)
+        self.command_output.setMaximumBlockCount(500)
+        self.command_output.setMinimumHeight(120)
+        reference_layout.addWidget(self.command_output, 1)
+        commands_layout.addWidget(self.reference_card, 1)
+
+        right_layout.addWidget(self.commands_card, 1)
+        right_layout.setStretch(0, 0)
+        right_layout.setStretch(1, 2)
+        right_layout.setStretch(2, 2)
+
+        self.splitter.addWidget(self.right_panel)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self._apply_responsive_layout(force=True)
 
     def _reload_workflows(self) -> None:
         self.services.ensure_plugin_commands_registered()
@@ -260,11 +310,12 @@ class WorkflowStudioPage(QWidget):
             )
         except Exception as exc:
             messages.append(str(exc))
+            self.command_output.setPlainText("\n".join(messages))
             QMessageBox.critical(self, self._pt("run_failed.title", "Workflow failed"), "\n".join(messages))
             return
 
         messages.append(json.dumps(self.services.serialize_result(result), indent=2, ensure_ascii=False))
-        self.command_reference.setPlainText("\n".join(messages))
+        self.command_output.setPlainText("\n".join(messages))
         self.services.record_run("workflow_studio", "SUCCESS", f"Ran workflow {name}")
 
     def _collect_steps(self) -> list[dict]:
@@ -285,10 +336,13 @@ class WorkflowStudioPage(QWidget):
 
     def _refresh_command_reference(self) -> None:
         self.services.ensure_plugin_commands_registered()
-        lines = []
-        for spec in self.services.command_registry.list_commands():
-            lines.append(f"{spec.command_id}\n  {spec.description}")
-        self.command_reference.setPlainText("\n\n".join(lines))
+        commands = self.services.command_registry.list_commands()
+        self.command_reference_table.setRowCount(len(commands))
+        for row_index, spec in enumerate(commands):
+            self.command_reference_table.setItem(row_index, 0, QTableWidgetItem(spec.command_id))
+            self.command_reference_table.setItem(row_index, 1, QTableWidgetItem(spec.title))
+            self.command_reference_table.setItem(row_index, 2, QTableWidgetItem(spec.description))
+        self.command_reference_table.resizeRowsToContents()
 
     def _apply_texts(self) -> None:
         self._apply_theme_styles()
@@ -302,6 +356,7 @@ class WorkflowStudioPage(QWidget):
         self.list_label.setText(self._pt("list", "Saved workflows"))
         self.reload_button.setText(self._pt("reload", "Reload"))
         self.delete_button.setText(self._pt("delete", "Delete"))
+        self.info_label.setText(self._pt("details", "Workflow details"))
         self.name_label.setText(self._pt("name", "Name"))
         self.description_meta_label.setText(self._pt("meta.description", "Description"))
         self.steps_label.setText(self._pt("steps", "Steps"))
@@ -316,19 +371,74 @@ class WorkflowStudioPage(QWidget):
         self.save_button.setText(self._pt("save", "Save workflow"))
         self.run_button.setText(self._pt("run", "Run workflow"))
         self.reference_label.setText(self._pt("reference", "Available commands"))
+        self.run_output_label.setText(self._pt("run_output", "Run output"))
+        self.command_reference_table.setHorizontalHeaderLabels(
+            [
+                self._pt("reference.command_id", "Command ID"),
+                self._pt("reference.title", "Title"),
+                self._pt("reference.description", "Description"),
+            ]
+        )
         self._refresh_command_reference()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        for frame in (self.list_card, self.meta_card, self.reference_card):
+        for frame in (self.list_card, self.info_card, self.steps_card, self.commands_card):
             frame.setStyleSheet(card_style(palette))
+        self.reference_card.setStyleSheet("background: transparent; border: none;")
+        self.left_panel.setStyleSheet("background: transparent;")
+        self.right_panel.setStyleSheet("background: transparent;")
+        self.splitter.setStyleSheet("background: transparent;")
+        field_style = (
+            f"background: {palette.input_bg};"
+            f"border: 1px solid {palette.border};"
+            "border-radius: 12px;"
+            f"color: {palette.text_primary};"
+            "padding: 6px 10px;"
+        )
+        self.name_input.setStyleSheet(field_style)
+        self.description_input.setStyleSheet(field_style)
+        self.command_output.setStyleSheet(
+            f"background: {'#11161d' if palette.mode != 'dark' else '#0d131b'};"
+            f"color: {'#d9f7df' if palette.mode != 'dark' else '#d7e3ee'};"
+            f"border: 1px solid {palette.border};"
+            "border-radius: 12px;"
+            "padding: 10px 12px;"
+        )
+        self.command_output.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
         self.description_label.setStyleSheet(muted_text_style(palette))
         self.list_label.setStyleSheet(section_title_style(palette))
+        self.info_label.setStyleSheet(section_title_style(palette))
         self.name_label.setStyleSheet(section_title_style(palette, size=14))
         self.description_meta_label.setStyleSheet(section_title_style(palette, size=14))
         self.steps_label.setStyleSheet(section_title_style(palette))
         self.reference_label.setStyleSheet(section_title_style(palette))
+        self.run_output_label.setStyleSheet(section_title_style(palette, size=15))
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        bucket = width_breakpoint(self.width(), compact_max=700, medium_max=1200)
+        if not force and bucket == self._responsive_bucket:
+            return
+        self._responsive_bucket = bucket
+        compact = bucket == "compact"
+
+        self.splitter.setOrientation(Qt.Orientation.Vertical if compact else Qt.Orientation.Horizontal)
+        self.list_buttons.setDirection(QBoxLayout.Direction.LeftToRight)
+        if compact:
+            self.meta_grid.addWidget(self.name_label, 0, 0)
+            self.meta_grid.addWidget(self.name_input, 1, 0)
+            self.meta_grid.addWidget(self.description_meta_label, 2, 0)
+            self.meta_grid.addWidget(self.description_input, 3, 0)
+        else:
+            self.meta_grid.addWidget(self.name_label, 0, 0)
+            self.meta_grid.addWidget(self.name_input, 0, 1)
+            self.meta_grid.addWidget(self.description_meta_label, 1, 0)
+            self.meta_grid.addWidget(self.description_input, 1, 1)

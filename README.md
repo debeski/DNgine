@@ -25,8 +25,10 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - English and Arabic support with RTL-aware layout direction
 - Five curated theme colors with a dark-mode toggle
 - Live preview for language, direction, density, and UI scaling
+- Standardized per-user runtime storage across Windows, macOS, and Linux
 - Tray integration for all-day companion use
-- Dashboard shell with quick access management, welcome panel, usage snapshots, and recent activity
+- Dashboard shell with a workspace pulse panel, usage snapshots, and recent activity
+- Settings support for default output path and default startup page selection
 - Workflow engine and CLI command surface
 - Importable/exportable custom plugin packaging
 - Plugin-local translations through sidecar locale files
@@ -90,7 +92,7 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 
 - Acts as the app landing page
 - Shows a welcome header, greeting, date, usage snapshots, and recent activity
-- Supports quick access pinning for frequently used tools
+- Includes a workspace pulse panel for output, backups, workflows, shortcuts, and useful next actions
 
 ### Clipboard Manager
 
@@ -141,6 +143,8 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 
 - Hidden unless `Developer mode` is enabled
 - Lets you inspect live widgets, object names, hierarchy, palette roles, and stylesheet state
+- Can temporarily unlock static app text so labels become highlightable and copyable
+- While inspect mode is active, use right-click navigation to move around the app and left-click to select the target widget
 - Useful for debugging layout, theming, and shell paint issues without external Qt tooling
 
 ## Architecture
@@ -156,8 +160,6 @@ micro_toolkit/
   core/
   i18n/
   plugins/
-data/
-output/
 build_linux.sh
 build_macos.sh
 build_windows.sh
@@ -168,8 +170,13 @@ micro-toolkit.spec
 ### Runtime Layout
 
 - [micro_toolkit](/home/debeski/depy/tools/micro-toolkit/micro_toolkit) contains code, assets, built-in plugins, and locale files.
-- [data](/home/debeski/depy/tools/micro-toolkit/data) contains runtime state such as config, database, plugin state, workflows, and custom plugins.
-- [output](/home/debeski/depy/tools/micro-toolkit/output) is the default export/output folder for generated files.
+- Runtime state lives in a per-user storage root, not in the project directory.
+- Windows uses `%LOCALAPPDATA%\\Micro Toolkit`
+- macOS uses `~/Library/Application Support/Micro Toolkit`
+- Linux uses `$XDG_DATA_HOME/micro-toolkit` or `~/.local/share/micro-toolkit`
+- Inside that root, `data/` contains config, database, plugin state, workflows, and custom plugins.
+- Inside that root, `output/` is the default export/output folder for generated files.
+- `MICRO_TOOLKIT_HOME` can override the storage root for development or portable testing.
 
 ### Plugin Engine
 
@@ -401,13 +408,13 @@ You have two supported options:
 2. Place them inside the writable custom plugin area under:
 
 ```text
-data/plugins/<your_plugin_package>/
+<storage_root>/data/plugins/<your_plugin_package>/
 ```
 
 Example:
 
 ```text
-data/plugins/my_tools/
+<storage_root>/data/plugins/my_tools/
   my_plugin.py
   my_plugin.en.json
   my_plugin.ar.json
@@ -458,7 +465,7 @@ Avoid:
 
 ### How Custom Plugin Review Works
 
-When a plugin is imported through `Settings -> Plugins`, or even when it is copied manually into `data/plugins`, the app treats it as a custom plugin with review state.
+When a plugin is imported through `Settings -> Plugins`, or even when it is copied manually into `<storage_root>/data/plugins`, the app treats it as a custom plugin with review state.
 
 This review flow does not apply to packaged first-party plugins that were verified through the builtin manifest during app startup.
 
@@ -688,7 +695,7 @@ Avoid these patterns in plugins:
 For anything beyond a tiny tool, use:
 
 ```text
-data/plugins/my_tools/
+<storage_root>/data/plugins/my_tools/
   my_plugin.py
   my_plugin.en.json
   my_plugin.ar.json
@@ -778,7 +785,9 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Version | Status | Highlights |
 | --- | --- | --- |
-| 0.6.1 | Current | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
+| 0.6.3 | Current | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, and tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings. |
+| 0.6.2 | Previous milestone | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
+| 0.6.1 | Internal milestone | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
 | 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Dubai font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
 | 0.5.2 | Internal milestone | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
 | 0.5.1 | Internal milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |

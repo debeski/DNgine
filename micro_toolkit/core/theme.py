@@ -211,11 +211,21 @@ class ThemeManager(QObject):
     def current_palette(self) -> ThemePalette:
         base = DARK_PALETTE if self.current_mode() == "dark" else LIGHT_PALETTE
         accent, accent_hover, accent_soft = self._accent_triplet(self.current_color_key(), dark=self.is_dark_mode())
+        window_bg = base.window_bg
+        surface_bg = base.surface_bg
+        surface_alt_bg = base.surface_alt_bg
+        status_bg = base.status_bg
+        if base.mode == "light":
+            # Keep the shell light, but let it pick up a faint tint from the selected theme color.
+            window_bg = self._mix_hex(base.window_bg, accent, 0.08, darken=103)
+            surface_bg = self._mix_hex(base.surface_bg, accent, 0.045, darken=101)
+            surface_alt_bg = self._mix_hex(base.surface_alt_bg, accent, 0.06, darken=102)
+            status_bg = self._mix_hex(base.status_bg, accent, 0.05, darken=101)
         return ThemePalette(
             mode=base.mode,
-            window_bg=base.window_bg,
-            surface_bg=base.surface_bg,
-            surface_alt_bg=base.surface_alt_bg,
+            window_bg=window_bg,
+            surface_bg=surface_bg,
+            surface_alt_bg=surface_alt_bg,
             input_bg=base.input_bg,
             border=base.border,
             text_primary=base.text_primary,
@@ -225,7 +235,7 @@ class ThemeManager(QObject):
             accent_soft=accent_soft,
             danger=base.danger,
             selection=accent,
-            status_bg=base.status_bg,
+            status_bg=status_bg,
         )
 
     def apply(self, app) -> None:
@@ -333,6 +343,18 @@ class ThemeManager(QObject):
         }
         mapping = dark_map if dark else light_map
         return mapping.get(color_key, mapping["pink"])
+
+    def _mix_hex(self, base_hex: str, tint_hex: str, amount: float, *, darken: int = 100) -> str:
+        base = QColor(base_hex)
+        tint = QColor(tint_hex)
+        weight = max(0.0, min(1.0, float(amount)))
+        red = round((base.red() * (1.0 - weight)) + (tint.red() * weight))
+        green = round((base.green() * (1.0 - weight)) + (tint.green() * weight))
+        blue = round((base.blue() * (1.0 - weight)) + (tint.blue() * weight))
+        mixed = QColor(red, green, blue)
+        if darken != 100:
+            mixed = mixed.darker(max(100, int(darken)))
+        return mixed.name()
 
     def _material_parent_path(self) -> Path:
         runtime = self.config.config_path.parent / "runtime" / "qt_material"
@@ -506,6 +528,27 @@ class ThemeManager(QObject):
             border: none;
             outline: 0;
         }}
+        QLineEdit#TerminalInput {{
+            min-height: {max(28, round(34 * scale))}px;
+            padding: 0 12px;
+            background: {palette.surface_alt_bg};
+            color: {palette.text_primary};
+            border-top: 1px solid {palette.border};
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+        }}
+        QLineEdit#TerminalInput:focus {{
+            background: {palette.surface_bg};
+            border-top: 1px solid {palette.accent};
+        }}
+        QLineEdit#TerminalInput:hover {{
+            background: {palette.surface_bg};
+        }}
+        QLineEdit#TerminalInput:disabled,
+        QLineEdit#TerminalInput[readOnly="true"] {{
+            border-top: 1px solid {palette.border};
+        }}
         QTreeWidget::item, QListWidget::item {{
             padding: 10px 12px;
             border-radius: 10px;
@@ -587,18 +630,18 @@ class ThemeManager(QObject):
             background: {palette.accent_soft};
             border-color: {palette.accent};
         }}
-        QToolButton#SystemToolbarButton, QToolButton#ConsoleToggle {{
+        QToolButton#SystemToolbarButton, QToolButton#ConsoleToggle, QToolButton#TerminalToggle {{
             background: transparent;
             border: 1px solid transparent;
             border-radius: 10px;
             padding: 5px;
             color: {palette.text_primary};
         }}
-        QToolButton#SystemToolbarButton:hover, QToolButton#ConsoleToggle:hover {{
+        QToolButton#SystemToolbarButton:hover, QToolButton#ConsoleToggle:hover, QToolButton#TerminalToggle:hover {{
             border-color: {palette.border};
             background: {palette.surface_bg};
         }}
-        QToolButton#SystemToolbarButton:checked, QToolButton#ConsoleToggle:checked {{
+        QToolButton#SystemToolbarButton:checked, QToolButton#ConsoleToggle:checked, QToolButton#TerminalToggle:checked {{
             background: {palette.accent_soft};
             border: 1px solid {palette.accent};
         }}

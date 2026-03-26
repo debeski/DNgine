@@ -33,6 +33,7 @@ def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = 
 
     services = AppServices()
     services.attach_application(app)
+    app.setQuitOnLastWindowClosed(not services.tray_manager.is_enabled())
     icon_path = services.resource_path("app.ico")
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
@@ -48,7 +49,7 @@ def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = 
     window.show()
     should_start_minimized = start_minimized or bool(services.config.get("start_minimized"))
     if should_start_minimized:
-        if services.tray_manager.tray_icon is not None:
+        if services.tray_manager.can_hide_to_tray():
             window.hide()
         else:
             window.showMinimized()

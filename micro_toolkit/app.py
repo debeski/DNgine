@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QEvent, QProcess, QSize, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.confirm_dialog import confirm_action
+from micro_toolkit.core.confirm_dialog import confirm_action, confirm_action_with_option
 from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.plugin_manager import PluginSpec
 from micro_toolkit.core.services import AppServices
@@ -50,6 +50,7 @@ from micro_toolkit.core.table_utils import configure_resizable_table
 
 PLUGIN_ID_ROLE = Qt.ItemDataRole.UserRole + 1
 GROUP_KEY_ROLE = Qt.ItemDataRole.UserRole + 2
+ITEM_SOURCE_ROLE = Qt.ItemDataRole.UserRole + 3
 
 
 class BranchlessTreeStyle(QProxyStyle):
@@ -210,6 +211,57 @@ class LoadingOverlay(QWidget):
                 target.setGraphicsEffect(None)
 
 
+class TerminalOutputView(QPlainTextEdit):
+    def __init__(self, terminal_widget: "EmbeddedTerminalWidget", parent: QWidget | None = None):
+        super().__init__(parent)
+        self._terminal_widget = terminal_widget
+
+    def keyPressEvent(self, event) -> None:
+        if self._forward_to_prompt(event):
+            return
+        super().keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        super().mouseDoubleClickEvent(event)
+        self._terminal_widget.focus_prompt(select_all=False)
+
+    def _forward_to_prompt(self, event) -> bool:
+        prompt = self._terminal_widget.input
+        if not prompt.isEnabled() or prompt.isReadOnly():
+            return False
+
+        if event.matches(QKeySequence.StandardKey.Copy):
+            return False
+
+        forwarded_key = event.key()
+        if forwarded_key in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+            self._terminal_widget.focus_prompt(select_all=False)
+            self._terminal_widget._submit_command()
+            return True
+
+        text = event.text()
+        if text or forwarded_key in {
+            Qt.Key.Key_Backspace,
+            Qt.Key.Key_Delete,
+            Qt.Key.Key_Left,
+            Qt.Key.Key_Right,
+            Qt.Key.Key_Home,
+            Qt.Key.Key_End,
+        }:
+            self._terminal_widget.focus_prompt(select_all=False)
+            forwarded = QKeyEvent(
+                QEvent.Type.KeyPress,
+                forwarded_key,
+                event.modifiers(),
+                text,
+                event.isAutoRepeat(),
+                event.count(),
+            )
+            QApplication.sendEvent(prompt, forwarded)
+            return True
+        return False
+
+
 class EmbeddedTerminalWidget(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -223,7 +275,7 @@ class EmbeddedTerminalWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.output = QPlainTextEdit()
+        self.output = TerminalOutputView(self)
         self.output.setReadOnly(True)
         self.output.setMaximumBlockCount(2000)
         layout.addWidget(self.output, 1)
@@ -283,10 +335,11 @@ class EmbeddedTerminalWidget(QWidget):
     def _handle_finished(self) -> None:
         self.output.appendPlainText("\n[Shell exited]")
 
-    def focus_prompt(self) -> None:
+    def focus_prompt(self, *, select_all: bool = True) -> None:
         self.ensure_started()
         self.input.setFocus()
-        self.input.selectAll()
+        if select_all:
+            self.input.selectAll()
 
     def shutdown(self) -> None:
         if self.process.state() == QProcess.ProcessState.NotRunning:
@@ -362,7 +415,8 @@ class MicroToolkitWindow(QMainWindow):
 
         self.sidebar_tree = BranchlessTreeWidget()
         self.sidebar_tree.setObjectName("SidebarTree")
-        self.sidebar_tree.setStyle(BranchlessTreeStyle(self.sidebar_tree.style()))
+        # Avoid wrapping the existing widget-owned style, which can crash during Qt teardown.
+        self.sidebar_tree.setStyle(BranchlessTreeStyle())
         self.sidebar_tree.setItemDelegate(SidebarItemDelegate(self.sidebar_tree))
         self.sidebar_tree.setHeaderHidden(True)
         self.sidebar_tree.setRootIsDecorated(False)
@@ -521,7 +575,7 @@ class MicroToolkitWindow(QMainWindow):
         self.terminal_button.setFixedSize(32, 24)
         status.addPermanentWidget(self.terminal_button)
         self.console_button = self._make_tool_button(
-            icon=self._named_icon("activity", fallback=QStyle.StandardPixmap.SP_FileDialogContentsView),
+            icon=self._named_icon("console", fallback=QStyle.StandardPixmap.SP_FileDialogContentsView),
             tooltip="Show activity console",
             handler=self.toggle_activity_dock,
             checkable=True,
@@ -672,6 +726,7 @@ class MicroToolkitWindow(QMainWindow):
             child = QTreeWidgetItem([self.services.plugin_display_name(spec)])
             child.setToolTip(0, spec.localized_description(language))
             child.setData(0, PLUGIN_ID_ROLE, spec.plugin_id)
+            child.setData(0, ITEM_SOURCE_ROLE, "quick_access")
             child.setIcon(0, self._plugin_icon(spec))
             child.setFont(0, item_font)
             child.setForeground(0, item_brush)
@@ -704,6 +759,7 @@ class MicroToolkitWindow(QMainWindow):
                 child = QTreeWidgetItem([self.services.plugin_display_name(spec)])
                 child.setToolTip(0, spec.localized_description(language))
                 child.setData(0, PLUGIN_ID_ROLE, spec.plugin_id)
+                child.setData(0, ITEM_SOURCE_ROLE, "catalog")
                 child.setIcon(0, self._plugin_icon(spec))
                 child.setFont(0, item_font)
                 child.setForeground(0, item_brush)
@@ -714,6 +770,11 @@ class MicroToolkitWindow(QMainWindow):
     def _open_initial_page(self) -> None:
         initial_id = self.initial_plugin_id if self.initial_plugin_id in self.plugin_by_id else None
         if initial_id is None:
+            configured_id = str(self.services.config.get("default_start_plugin") or "").strip()
+            if configured_id == INSPECTOR_PLUGIN_ID and not self.services.developer_mode_enabled():
+                configured_id = ""
+            initial_id = configured_id if configured_id in self.plugin_by_id else None
+        if initial_id is None:
             initial_id = DASHBOARD_PLUGIN_ID if DASHBOARD_PLUGIN_ID in self.plugin_by_id else None
         if initial_id is None and self.plugin_specs:
             initial_id = self.plugin_specs[0].plugin_id
@@ -723,16 +784,34 @@ class MicroToolkitWindow(QMainWindow):
 
     def _select_plugin_item(self, plugin_id: str) -> None:
         root = self.sidebar_tree.invisibleRootItem()
+        current_item = self.sidebar_tree.currentItem()
+        preferred_source = None
+        if current_item is not None and current_item.data(0, PLUGIN_ID_ROLE) == plugin_id:
+            preferred_source = current_item.data(0, ITEM_SOURCE_ROLE)
+
+        matches: list[QTreeWidgetItem] = []
         for i in range(root.childCount()):
             top_item = root.child(i)
             if top_item.data(0, PLUGIN_ID_ROLE) == plugin_id:
-                self.sidebar_tree.setCurrentItem(top_item)
-                return
+                matches.append(top_item)
             for j in range(top_item.childCount()):
                 item = top_item.child(j)
                 if item.data(0, PLUGIN_ID_ROLE) == plugin_id:
-                    self.sidebar_tree.setCurrentItem(item)
-                    return
+                    matches.append(item)
+
+        for item in matches:
+            if preferred_source and item.data(0, ITEM_SOURCE_ROLE) == preferred_source:
+                self.sidebar_tree.setCurrentItem(item)
+                return
+
+        for item in matches:
+            if item.data(0, ITEM_SOURCE_ROLE) == "catalog":
+                self.sidebar_tree.setCurrentItem(item)
+                return
+
+        if matches:
+            self.sidebar_tree.setCurrentItem(matches[0])
+            return
 
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
@@ -980,7 +1059,7 @@ class MicroToolkitWindow(QMainWindow):
                     button.setToolTip(self.services.plugin_display_name(spec) if spec is not None else label)
                 button.setIcon(self._system_component_icon(plugin_id))
         self.console_button.setToolTip(tr("shell.activity", "Activity"))
-        self.console_button.setIcon(self._named_icon("activity", fallback=QStyle.StandardPixmap.SP_FileDialogContentsView))
+        self.console_button.setIcon(self._named_icon("console", fallback=QStyle.StandardPixmap.SP_FileDialogContentsView))
         self.terminal_button.setToolTip(tr("shell.terminal", "Terminal"))
         self.terminal_button.setIcon(self._named_icon("terminal", fallback=QStyle.StandardPixmap.SP_ComputerIcon))
         self._update_dock_title()
@@ -1104,11 +1183,11 @@ class MicroToolkitWindow(QMainWindow):
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
-            if self.services.config.get("minimize_to_tray") and self.services.tray_manager.tray_icon is not None:
+            if self.services.config.get("minimize_to_tray") and self.services.tray_manager.can_hide_to_tray():
                 QTimer.singleShot(0, self._hide_to_tray)
 
     def closeEvent(self, event) -> None:
-        if not self._quitting and self.services.config.get("close_to_tray") and self.services.tray_manager.tray_icon is not None:
+        if not self._quitting and self.services.config.get("close_to_tray") and self.services.tray_manager.can_hide_to_tray():
             event.ignore()
             self._hide_to_tray()
             return
@@ -1119,6 +1198,10 @@ class MicroToolkitWindow(QMainWindow):
         if hasattr(self, "terminal_output"):
             self.terminal_output.shutdown()
         super().closeEvent(event)
+        if event.isAccepted():
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
 
     def _hide_to_tray(self) -> None:
         self.hide()
@@ -1423,7 +1506,9 @@ class MicroToolkitWindow(QMainWindow):
         self.refresh_plugin_visuals()
 
     def _confirm_exit(self) -> bool:
-        return confirm_action(
+        if not bool(self.services.config.get("confirm_on_exit")):
+            return True
+        confirmed, always_ask = confirm_action_with_option(
             self,
             title=self.services.i18n.tr("confirm.exit.title", "Exit Micro Toolkit?"),
             body=self.services.i18n.tr(
@@ -1432,7 +1517,11 @@ class MicroToolkitWindow(QMainWindow):
             ),
             confirm_text=self.services.i18n.tr("confirm.exit.confirm", "Exit"),
             cancel_text=self.services.i18n.tr("confirm.cancel", "Cancel"),
+            option_text=self.services.i18n.tr("confirm.exit.ask_always", "Always ask on exit"),
+            option_checked=True,
         )
+        self.services.config.set("confirm_on_exit", always_ask)
+        return confirmed
 
     def _handle_plugin_open_error(self, spec: PluginSpec, exc: Exception) -> None:
         message = str(exc)

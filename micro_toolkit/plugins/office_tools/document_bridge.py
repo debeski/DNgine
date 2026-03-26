@@ -26,6 +26,10 @@ from micro_toolkit.core.app_utils import generate_output_filename, open_file_or_
 from micro_toolkit.core.command_runtime import HeadlessTaskContext
 from micro_toolkit.core.document_converter import convert_docx_to_markdown, convert_markdown_to_docx
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.widgets import ScrollSafeComboBox
+
+
+QComboBox = ScrollSafeComboBox
 
 
 def _resolve_output_path(

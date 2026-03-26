@@ -35,7 +35,14 @@ class _InitialTableFitFilter(QObject):
             QEvent.Type.PolishRequest,
         }:
             if bool(self._table.property("_micro_initial_table_fit_pending")):
-                QTimer.singleShot(0, self._trigger_fit)
+                _queue_fit_attempts(
+                    self._table,
+                    column_count=self._column_count,
+                    stretch_columns=self._stretch_columns,
+                    resize_to_contents_columns=self._resize_to_contents_columns,
+                    default_widths=self._default_widths,
+                    minimum_section_size=self._minimum_section_size,
+                )
         return super().eventFilter(watched, event)
 
     def _trigger_fit(self) -> None:
@@ -98,6 +105,34 @@ def configure_resizable_table(
             table.installEventFilter(fit_filter)
         QTimer.singleShot(
             0,
+            lambda tbl=table,
+            cols=column_count,
+            stretch=set(stretch_columns),
+            sized=set(resize_to_contents_columns),
+            widths=dict(default_widths),
+            minimum=minimum_section_size: _queue_fit_attempts(
+                tbl,
+                column_count=cols,
+                stretch_columns=stretch,
+                resize_to_contents_columns=sized,
+                default_widths=widths,
+                minimum_section_size=minimum,
+            ),
+        )
+
+
+def _queue_fit_attempts(
+    table: QTableView | QTableWidget,
+    *,
+    column_count: int,
+    stretch_columns: set[int],
+    resize_to_contents_columns: set[int],
+    default_widths: Mapping[int, int],
+    minimum_section_size: int,
+) -> None:
+    for delay in (0, 40, 140, 320):
+        QTimer.singleShot(
+            delay,
             lambda tbl=table,
             cols=column_count,
             stretch=set(stretch_columns),

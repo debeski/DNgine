@@ -19,6 +19,10 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.widgets import ScrollSafeSlider
+
+
+QSlider = ScrollSafeSlider
 
 
 def secure_shred_task(context, file_path: str, passes: int):

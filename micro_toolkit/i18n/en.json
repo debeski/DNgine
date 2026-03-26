@@ -27,6 +27,7 @@
   "tray.menu.settings": "Settings",
   "tray.menu.workflows": "Workflows",
   "tray.menu.quit": "Quit",
+  "confirm.exit.ask_always": "Always ask on exit",
   "settings.title": "Settings",
   "settings.description": "Control appearance, language, startup behavior, tray behavior, and shortcuts from one place.",
   "settings.tab.general": "General",

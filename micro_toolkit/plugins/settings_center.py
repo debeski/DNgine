@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QAbstractScrollArea,
+    QBoxLayout,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -15,10 +18,12 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHeaderView,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -29,13 +34,53 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QStyle,
-)
+    QStyleOptionTabWidgetFrame,
+    QScrollArea,
+    )
 
 from micro_toolkit.core.confirm_dialog import confirm_action
 from micro_toolkit.core.icon_registry import icon_choices, icon_from_name
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.app_config import DEFAULT_CONFIG
+from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, INSPECTOR_PLUGIN_ID
+from micro_toolkit.core.widgets import ScrollSafeComboBox, ScrollSafeSlider, adaptive_columns, adaptive_grid_columns, visible_parent_width, width_breakpoint
+
+
+QComboBox = ScrollSafeComboBox
+
+
+class CurrentTabSizeWidget(QTabWidget):
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.currentChanged.connect(self._refresh_geometry)
+
+    def sizeHint(self):
+        return self._tab_aware_size_hint(minimum=False)
+
+    def minimumSizeHint(self):
+        return self._tab_aware_size_hint(minimum=True)
+
+    def _tab_aware_size_hint(self, *, minimum: bool):
+        current = self.currentWidget()
+        if current is None:
+            return super().minimumSizeHint() if minimum else super().sizeHint()
+
+        page_hint = current.minimumSizeHint() if minimum else current.sizeHint()
+        tab_bar_hint = self.tabBar().sizeHint()
+
+        option = QStyleOptionTabWidgetFrame()
+        self.initStyleOption(option)
+        frame_width = self.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth, option, self)
+        width = max(page_hint.width(), tab_bar_hint.width()) + (frame_width * 2)
+        height = page_hint.height() + tab_bar_hint.height() + (frame_width * 2)
+        return QSize(width, height)
+
+    def _refresh_geometry(self, _index: int) -> None:
+        self.updateGeometry()
+        current = self.currentWidget()
+        if current is not None:
+            current.updateGeometry()
 
 
 class ThemeSwatchButton(QToolButton):
@@ -70,9 +115,89 @@ class ChoiceChipButton(QToolButton):
         self.setMinimumHeight(32)
 
 
-class ClickSlider(QSlider):
+class QuickAccessPreviewTile(QFrame):
+    clicked = Signal()
+
+    def __init__(self, label: str, icon: QIcon, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("QuickAccessPreviewTile")
+        self._hovered = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(112, 96)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.icon_label.setPixmap(icon.pixmap(38, 38))
+        layout.addWidget(self.icon_label)
+        self.text_label = QLabel(label)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.text_label.setWordWrap(True)
+        layout.addWidget(self.text_label)
+
+    def apply_palette(self, palette) -> None:
+        background = palette.accent_soft if self._hovered else "transparent"
+        border = palette.accent if self._hovered else "transparent"
+        self.setStyleSheet(
+            f"""
+            QFrame#QuickAccessPreviewTile {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 18px;
+            }}
+            QLabel {{
+                background: transparent;
+                color: {palette.text_primary};
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            """
+        )
+
+    def enterEvent(self, event) -> None:
+        self._hovered = True
+        page = self.parentWidget()
+        while page is not None and not hasattr(page, "services"):
+            page = page.parentWidget()
+        services = getattr(page, "services", None)
+        if services is not None:
+            self.apply_palette(services.theme_manager.current_palette())
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = False
+        page = self.parentWidget()
+        while page is not None and not hasattr(page, "services"):
+            page = page.parentWidget()
+        services = getattr(page, "services", None)
+        if services is not None:
+            self.apply_palette(services.theme_manager.current_palette())
+        super().leaveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
+class ClickSlider(ScrollSafeSlider):
+    interaction_started = Signal(int)
+    interaction_finished = Signal(int)
+
+    def __init__(self, orientation: Qt.Orientation, parent: QWidget | None = None):
+        super().__init__(orientation, parent)
+        self._mouse_interaction_active = False
+
+    def mouse_interaction_active(self) -> bool:
+        return self._mouse_interaction_active
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
+            self._mouse_interaction_active = True
+            self.interaction_started.emit(self.value())
             self._set_value_from_event(event)
             event.accept()
         super().mousePressEvent(event)
@@ -82,6 +207,12 @@ class ClickSlider(QSlider):
             self._set_value_from_event(event)
             event.accept()
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._mouse_interaction_active = False
+            self.interaction_finished.emit(self.value())
 
     def _set_value_from_event(self, event) -> None:
         if self.orientation() == Qt.Orientation.Horizontal:
@@ -230,20 +361,60 @@ class SettingsCenterPage(QWidget):
         self._editing_plugin_id: str | None = None
         self._editing_snapshot: dict[str, str] = {}
         self._suspend_live_updates = False
-        self._appearance_preview_timer = QTimer(self)
-        self._appearance_preview_timer.setSingleShot(True)
-        self._appearance_preview_timer.timeout.connect(self._apply_pending_appearance_preview)
-        self._scale_preview_timer = QTimer(self)
-        self._scale_preview_timer.setSingleShot(True)
-        self._scale_preview_timer.timeout.connect(self._apply_pending_appearance_preview)
+        self._density_interaction_start_value: int | None = None
+        self._scaling_interaction_start_value: int | None = None
+        self._responsive_bucket = ""
+        self._quick_access_preview_columns = 0
+        self._geometry_refresh_pending = False
+        self._responsive_refresh_pending = False
+        self._plugins_table_width_sync_pending = False
+        self._theme_preview_timer = QTimer(self)
+        self._theme_preview_timer.setSingleShot(True)
+        self._theme_preview_timer.timeout.connect(self._apply_pending_theme_preview)
+        self._language_preview_timer = QTimer(self)
+        self._language_preview_timer.setSingleShot(True)
+        self._language_preview_timer.timeout.connect(self._apply_pending_language_preview)
+        self._density_preview_timer = QTimer(self)
+        self._density_preview_timer.setSingleShot(True)
+        self._density_preview_timer.timeout.connect(self._apply_pending_density_preview)
+        self._scaling_preview_timer = QTimer(self)
+        self._scaling_preview_timer.setSingleShot(True)
+        self._scaling_preview_timer.timeout.connect(self._apply_pending_scaling_preview)
         self._build_ui()
         self._populate_values()
         self._apply_texts()
         self.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
+        self.services.quick_access_changed.connect(self._render_quick_access_settings)
+        self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._render_quick_access_settings())
+        self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._populate_startup_page_combo())
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+
+    def sizeHint(self):
+        return self._page_size_hint(minimum=False)
+
+    def minimumSizeHint(self):
+        return self._page_size_hint(minimum=True)
+
+    def _page_size_hint(self, *, minimum: bool):
+        title_hint = self.title_label.minimumSizeHint() if minimum else self.title_label.sizeHint()
+        description_hint = self.description_label.minimumSizeHint() if minimum else self.description_label.sizeHint()
+        tabs_hint = self.tabs.minimumSizeHint() if minimum else self.tabs.sizeHint()
+        margins = self.layout().contentsMargins() if self.layout() is not None else self.contentsMargins()
+        spacing = self.layout().spacing() if self.layout() is not None else 0
+        width = max(title_hint.width(), description_hint.width(), tabs_hint.width()) + margins.left() + margins.right()
+        height = (
+            margins.top()
+            + title_hint.height()
+            + spacing
+            + description_hint.height()
+            + spacing
+            + tabs_hint.height()
+            + margins.bottom()
+        )
+        return QSize(width, height)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -259,30 +430,43 @@ class SettingsCenterPage(QWidget):
         self.description_label.setStyleSheet("font-size: 14px;")
         outer.addWidget(self.description_label)
 
-        self.tabs = QTabWidget()
+        self.tabs = CurrentTabSizeWidget()
         self.tabs.currentChanged.connect(self._handle_tab_changed)
         outer.addWidget(self.tabs, 1)
 
         self.general_tab = QWidget()
+        self.quick_access_tab = QWidget()
         self.shortcuts_tab = QWidget()
         self.plugins_tab = QWidget()
         self.tabs.addTab(self.general_tab, "")
+        self.tabs.addTab(self.quick_access_tab, "")
         self.tabs.addTab(self.shortcuts_tab, "")
         self.tabs.addTab(self.plugins_tab, "")
 
         self._build_general_tab()
+        self._build_quick_access_tab()
         self._build_shortcuts_tab()
         self._build_plugins_tab()
 
     def _build_general_tab(self) -> None:
         layout = QVBoxLayout(self.general_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20, 20, 20, 10)
         layout.setSpacing(14)
 
         self.output_card = QFrame()
-        output_layout = QFormLayout(self.output_card)
-        output_layout.setSpacing(12)
+        output_layout = QVBoxLayout(self.output_card)
+        output_layout.setContentsMargins(18, 16, 18, 16)
+        output_layout.setSpacing(10)
+        self.output_title = QLabel()
+        output_layout.addWidget(self.output_title)
+        self.general_note = QLabel()
+        self.general_note.setWordWrap(True)
+        output_layout.addWidget(self.general_note)
         self.output_label = QLabel()
+        self.startup_page_label = QLabel()
+        output_form = QFormLayout()
+        output_form.setContentsMargins(0, 4, 0, 0)
+        output_form.setSpacing(12)
 
         row = QHBoxLayout()
         self.output_dir_input = QLineEdit()
@@ -290,15 +474,24 @@ class SettingsCenterPage(QWidget):
         self.output_browse_button = QPushButton()
         self.output_browse_button.clicked.connect(self._browse_output_dir)
         row.addWidget(self.output_browse_button)
-        output_layout.addRow(self.output_label, row)
+        output_form.addRow(self.output_label, row)
+
+        self.startup_page_combo = QComboBox()
+        output_form.addRow(self.startup_page_label, self.startup_page_combo)
+        output_layout.addLayout(output_form)
         layout.addWidget(self.output_card)
 
-        self.general_note = QLabel()
-        self.general_note.setWordWrap(True)
-        layout.addWidget(self.general_note)
-
         self.appearance_card = QFrame()
-        form = QFormLayout(self.appearance_card)
+        appearance_layout = QVBoxLayout(self.appearance_card)
+        appearance_layout.setContentsMargins(18, 16, 18, 16)
+        appearance_layout.setSpacing(10)
+        self.appearance_title = QLabel()
+        appearance_layout.addWidget(self.appearance_title)
+        self.appearance_note = QLabel()
+        self.appearance_note.setWordWrap(True)
+        appearance_layout.addWidget(self.appearance_note)
+        form = QFormLayout()
+        form.setContentsMargins(0, 4, 0, 0)
         form.setSpacing(12)
         self.theme_label = QLabel()
         self.language_label = QLabel()
@@ -353,8 +546,9 @@ class SettingsCenterPage(QWidget):
         self.density_slider.setPageStep(1)
         self.density_slider.setTickInterval(1)
         self.density_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.density_slider.interaction_started.connect(self._remember_density_interaction_start)
         self.density_slider.valueChanged.connect(self._handle_live_density_change)
-        self.density_slider.sliderReleased.connect(self._handle_density_released)
+        self.density_slider.interaction_finished.connect(self._handle_density_released)
         density_layout.addWidget(self.density_slider, 1)
         self.density_value_label = QLabel("0")
         density_layout.addWidget(self.density_value_label)
@@ -371,57 +565,75 @@ class SettingsCenterPage(QWidget):
         self.scaling_slider.setPageStep(10)
         self.scaling_slider.setTickInterval(10)
         self.scaling_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.scaling_slider.interaction_started.connect(self._remember_scaling_interaction_start)
         self.scaling_slider.valueChanged.connect(self._handle_live_scaling_change)
-        self.scaling_slider.sliderReleased.connect(self._handle_scaling_released)
+        self.scaling_slider.interaction_finished.connect(self._handle_scaling_released)
         scaling_layout.addWidget(self.scaling_slider, 1)
         self.scaling_value_label = QLabel("100%")
         scaling_layout.addWidget(self.scaling_value_label)
         form.addRow(self.scaling_label, scaling_host)
+        appearance_layout.addLayout(form)
 
         layout.addWidget(self.appearance_card)
-        self.appearance_note = QLabel()
-        self.appearance_note.setWordWrap(True)
-        layout.addWidget(self.appearance_note)
+
+        self.general_tools_row = QHBoxLayout()
+        self.general_tools_row.setContentsMargins(0, 0, 0, 0)
+        self.general_tools_row.setSpacing(12)
 
         self.automation_card = QFrame()
-        card_layout = QGridLayout(self.automation_card)
-        card_layout.setContentsMargins(18, 18, 18, 18)
-        card_layout.setHorizontalSpacing(16)
-        card_layout.setVerticalSpacing(10)
-        card_layout.setColumnStretch(0, 1)
-        card_layout.setColumnStretch(1, 1)
+        card_layout = QVBoxLayout(self.automation_card)
+        card_layout.setContentsMargins(18, 16, 18, 16)
+        card_layout.setSpacing(8)
+        self.behavior_title = QLabel()
+        card_layout.addWidget(self.behavior_title)
+        self.behavior_note = QLabel()
+        self.behavior_note.setWordWrap(True)
+        card_layout.addWidget(self.behavior_note)
 
         self.minimize_to_tray_checkbox = QCheckBox()
-        card_layout.addWidget(self.minimize_to_tray_checkbox, 0, 0)
+        card_layout.addWidget(self.minimize_to_tray_checkbox)
         self.close_to_tray_checkbox = QCheckBox()
-        card_layout.addWidget(self.close_to_tray_checkbox, 0, 1)
+        card_layout.addWidget(self.close_to_tray_checkbox)
+        self.confirm_on_exit_checkbox = QCheckBox()
+        card_layout.addWidget(self.confirm_on_exit_checkbox)
         self.run_on_startup_checkbox = QCheckBox()
-        card_layout.addWidget(self.run_on_startup_checkbox, 1, 0)
+        card_layout.addWidget(self.run_on_startup_checkbox)
         self.start_minimized_checkbox = QCheckBox()
-        card_layout.addWidget(self.start_minimized_checkbox, 1, 1)
+        card_layout.addWidget(self.start_minimized_checkbox)
         self.developer_mode_checkbox = QCheckBox()
-        card_layout.addWidget(self.developer_mode_checkbox, 2, 0)
-
-        layout.addWidget(self.automation_card)
-
+        card_layout.addWidget(self.developer_mode_checkbox)
         self.autostart_status_label = QLabel()
         self.autostart_status_label.setWordWrap(True)
-        layout.addWidget(self.autostart_status_label)
+        card_layout.addWidget(self.autostart_status_label)
+        self.general_tools_row.addWidget(self.automation_card, 1)
 
         self.backup_card = QFrame()
-        backup_layout = QFormLayout(self.backup_card)
-        backup_layout.setSpacing(12)
+        backup_layout = QVBoxLayout(self.backup_card)
+        backup_layout.setContentsMargins(18, 16, 18, 16)
+        backup_layout.setSpacing(8)
+        self.backup_title = QLabel()
+        backup_layout.addWidget(self.backup_title)
+        self.backup_note = QLabel()
+        self.backup_note.setWordWrap(True)
+        backup_layout.addWidget(self.backup_note)
         self.backup_schedule_label = QLabel()
         self.backup_schedule_combo = QComboBox()
         self.backup_schedule_combo.addItem("Daily", "daily")
         self.backup_schedule_combo.addItem("Weekly", "weekly")
         self.backup_schedule_combo.addItem("Monthly", "monthly")
         self.backup_schedule_combo.currentIndexChanged.connect(self._refresh_backup_status)
-        backup_layout.addRow(self.backup_schedule_label, self.backup_schedule_combo)
+        backup_schedule_row = QHBoxLayout()
+        backup_schedule_row.setContentsMargins(0, 0, 0, 0)
+        backup_schedule_row.setSpacing(8)
+        backup_schedule_row.addWidget(self.backup_schedule_label)
+        backup_schedule_row.addWidget(self.backup_schedule_combo, 1)
+        backup_layout.addLayout(backup_schedule_row)
         self.backup_status_label = QLabel()
         self.backup_status_label.setWordWrap(True)
-        backup_layout.addRow(self.backup_status_label)
+        backup_layout.addWidget(self.backup_status_label)
         backup_actions = QHBoxLayout()
+        backup_actions.setContentsMargins(0, 0, 0, 0)
+        backup_actions.setSpacing(8)
         self.create_backup_button = QPushButton()
         self.create_backup_button.clicked.connect(self._create_backup_now)
         backup_actions.addWidget(self.create_backup_button)
@@ -429,23 +641,97 @@ class SettingsCenterPage(QWidget):
         self.restore_backup_button.clicked.connect(self._restore_backup_from_file)
         backup_actions.addWidget(self.restore_backup_button)
         backup_actions.addStretch(1)
-        backup_layout.addRow(backup_actions)
-        layout.addWidget(self.backup_card)
+        backup_layout.addLayout(backup_actions)
+        self.general_tools_row.addWidget(self.backup_card, 1)
 
-        general_actions = QHBoxLayout()
-        general_actions.addStretch(1)
+        layout.addLayout(self.general_tools_row)
+
+        self.general_actions = QHBoxLayout()
+        self.general_actions.addStretch(1)
         self.general_reset_button = QPushButton()
         self.general_reset_button.clicked.connect(self._reset_general_defaults)
-        general_actions.addWidget(self.general_reset_button)
+        self.general_actions.addWidget(self.general_reset_button)
         self.general_save_button = QPushButton()
         self.general_save_button.clicked.connect(self._save_general_settings)
-        general_actions.addWidget(self.general_save_button)
-        layout.addLayout(general_actions)
-        layout.addStretch(1)
+        self.general_actions.addWidget(self.general_save_button)
+        layout.addLayout(self.general_actions)
+
+    def _build_quick_access_tab(self) -> None:
+        layout = QVBoxLayout(self.quick_access_tab)
+        layout.setContentsMargins(20, 20, 20, 10)
+        layout.setSpacing(14)
+
+        self.quick_access_tab_note = QLabel()
+        self.quick_access_tab_note.setWordWrap(True)
+        layout.addWidget(self.quick_access_tab_note)
+
+        self.quick_access_card = QFrame()
+        quick_layout = QVBoxLayout(self.quick_access_card)
+        quick_layout.setContentsMargins(18, 18, 18, 18)
+        quick_layout.setSpacing(12)
+
+        self.quick_access_title = QLabel()
+        quick_layout.addWidget(self.quick_access_title)
+        self.quick_access_note = QLabel()
+        self.quick_access_note.setWordWrap(True)
+        quick_layout.addWidget(self.quick_access_note)
+
+        self.quick_access_preview_frame = QFrame()
+        self.quick_access_preview_frame.setObjectName("QuickAccessPreview")
+        self.quick_access_preview_layout = QGridLayout(self.quick_access_preview_frame)
+        self.quick_access_preview_layout.setContentsMargins(0, 0, 0, 0)
+        self.quick_access_preview_layout.setHorizontalSpacing(10)
+        self.quick_access_preview_layout.setVerticalSpacing(10)
+        quick_layout.addWidget(self.quick_access_preview_frame)
+
+        self.quick_add_row = QHBoxLayout()
+        self.quick_add_row.setContentsMargins(0, 0, 0, 0)
+        self.quick_add_row.setSpacing(8)
+        self.quick_access_combo = QComboBox()
+        self.quick_add_row.addWidget(self.quick_access_combo, 1)
+        self.quick_access_add_button = QPushButton()
+        self.quick_access_add_button.clicked.connect(self._add_selected_quick_access_plugin)
+        self.quick_add_row.addWidget(self.quick_access_add_button)
+        quick_layout.addLayout(self.quick_add_row)
+
+        self.quick_manage_row = QHBoxLayout()
+        self.quick_manage_row.setContentsMargins(0, 0, 0, 0)
+        self.quick_manage_row.setSpacing(8)
+        self.quick_access_list = QListWidget()
+        self.quick_access_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.quick_access_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.quick_access_list.setMaximumHeight(230)
+        self.quick_access_list.itemSelectionChanged.connect(self._sync_quick_access_buttons)
+        self.quick_access_list.model().rowsMoved.connect(self._persist_quick_access_from_settings_list)
+        self.quick_manage_row.addWidget(self.quick_access_list, 1)
+
+        self.quick_actions_host = QWidget()
+        self.quick_actions_layout = QGridLayout(self.quick_actions_host)
+        self.quick_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.quick_actions_layout.setHorizontalSpacing(6)
+        self.quick_actions_layout.setVerticalSpacing(6)
+        self.quick_access_move_up_button = QPushButton()
+        self.quick_access_move_up_button.clicked.connect(lambda: self._move_selected_quick_access(-1))
+        self.quick_access_move_down_button = QPushButton()
+        self.quick_access_move_down_button.clicked.connect(lambda: self._move_selected_quick_access(1))
+        self.quick_access_open_button = QPushButton()
+        self.quick_access_open_button.clicked.connect(self._open_selected_quick_access_plugin)
+        self.quick_access_remove_button = QPushButton()
+        self.quick_access_remove_button.clicked.connect(self._remove_selected_quick_access_plugin)
+        self._quick_action_buttons = [
+            self.quick_access_move_up_button,
+            self.quick_access_move_down_button,
+            self.quick_access_open_button,
+            self.quick_access_remove_button,
+        ]
+        self.quick_manage_row.addWidget(self.quick_actions_host)
+        quick_layout.addLayout(self.quick_manage_row)
+
+        layout.addWidget(self.quick_access_card, 1)
 
     def _build_shortcuts_tab(self) -> None:
         layout = QVBoxLayout(self.shortcuts_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20, 20, 20, 10)
         layout.setSpacing(14)
 
         self.shortcut_note = QLabel()
@@ -456,15 +742,15 @@ class SettingsCenterPage(QWidget):
         self.shortcut_status_label.setWordWrap(True)
         layout.addWidget(self.shortcut_status_label)
 
-        shortcut_actions = QHBoxLayout()
+        self.shortcut_actions = QHBoxLayout()
         self.start_helper_button = QPushButton()
         self.start_helper_button.clicked.connect(self._start_hotkey_helper)
-        shortcut_actions.addWidget(self.start_helper_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.shortcut_actions.addWidget(self.start_helper_button, 0, Qt.AlignmentFlag.AlignLeft)
         self.stop_helper_button = QPushButton()
         self.stop_helper_button.clicked.connect(self._stop_hotkey_helper)
-        shortcut_actions.addWidget(self.stop_helper_button, 0, Qt.AlignmentFlag.AlignLeft)
-        shortcut_actions.addStretch(1)
-        layout.addLayout(shortcut_actions)
+        self.shortcut_actions.addWidget(self.stop_helper_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.shortcut_actions.addStretch(1)
+        layout.addLayout(self.shortcut_actions)
 
         self.shortcut_table = QTableWidget(0, 3)
         self.shortcut_table.setAlternatingRowColors(True)
@@ -472,19 +758,19 @@ class SettingsCenterPage(QWidget):
         self.shortcut_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.shortcut_table, 1)
 
-        actions = QHBoxLayout()
-        actions.addStretch(1)
+        self.shortcuts_footer_actions = QHBoxLayout()
+        self.shortcuts_footer_actions.addStretch(1)
         self.shortcuts_reset_button = QPushButton()
         self.shortcuts_reset_button.clicked.connect(self._reset_shortcut_defaults)
-        actions.addWidget(self.shortcuts_reset_button)
+        self.shortcuts_footer_actions.addWidget(self.shortcuts_reset_button)
         self.shortcuts_save_button = QPushButton()
         self.shortcuts_save_button.clicked.connect(self._save_shortcuts)
-        actions.addWidget(self.shortcuts_save_button)
-        layout.addLayout(actions)
+        self.shortcuts_footer_actions.addWidget(self.shortcuts_save_button)
+        layout.addLayout(self.shortcuts_footer_actions)
 
     def _build_plugins_tab(self) -> None:
         layout = QVBoxLayout(self.plugins_tab)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20, 20, 20, 10)
         layout.setSpacing(14)
 
         self.plugins_note = QLabel()
@@ -495,12 +781,17 @@ class SettingsCenterPage(QWidget):
         self.plugins_table.setAlternatingRowColors(True)
         self.plugins_table.verticalHeader().setVisible(False)
         self.plugins_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.plugins_table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.plugins_table.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
+        self.plugins_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.plugins_table.customContextMenuRequested.connect(self._show_plugins_context_menu)
         header = self.plugins_table.horizontalHeader()
         header.setSectionsMovable(False)
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(44)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setSectionResizeMode(10, QHeaderView.ResizeMode.Stretch)
+        header.sectionResized.connect(self._schedule_plugins_table_width_sync)
         self.plugins_table.setColumnWidth(0, 88)
         self.plugins_table.setColumnWidth(1, 88)
         self.plugins_table.setColumnWidth(2, 220)
@@ -513,26 +804,29 @@ class SettingsCenterPage(QWidget):
         self.plugins_table.setColumnWidth(9, 140)
         layout.addWidget(self.plugins_table, 1)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(8)
+        self.plugins_actions_layout = QGridLayout()
+        self.plugins_actions_layout.setHorizontalSpacing(8)
+        self.plugins_actions_layout.setVerticalSpacing(8)
         self.import_file_button = self._make_action_button("open", self._import_plugin_file)
-        actions.addWidget(self.import_file_button)
         self.import_folder_button = self._make_action_button("folder-open", self._import_plugin_folder)
-        actions.addWidget(self.import_folder_button)
         self.import_backup_button = self._make_action_button("download", self._import_backup)
-        actions.addWidget(self.import_backup_button)
         self.export_selected_button = self._make_action_button("save", self._export_selected_plugins)
-        actions.addWidget(self.export_selected_button)
         self.export_all_button = self._make_action_button("database", self._export_all_plugins)
-        actions.addWidget(self.export_all_button)
         self.apply_plugin_state_button = self._make_action_button("check", self._apply_plugin_states)
-        actions.addWidget(self.apply_plugin_state_button)
         self.reset_plugins_button = self._make_action_button("repeat", self._reset_plugin_defaults)
-        actions.addWidget(self.reset_plugins_button)
         self.refresh_plugins_button = self._make_action_button("sync", self._populate_plugin_table)
-        actions.addWidget(self.refresh_plugins_button)
-        actions.addStretch(1)
-        layout.addLayout(actions)
+        self._plugin_action_buttons = [
+            self.import_file_button,
+            self.import_folder_button,
+            self.import_backup_button,
+            self.export_selected_button,
+            self.export_all_button,
+            self.apply_plugin_state_button,
+            self.reset_plugins_button,
+            self.refresh_plugins_button,
+        ]
+        layout.addLayout(self.plugins_actions_layout)
+        self._apply_responsive_layout(force=True)
 
     def _populate_values(self) -> None:
         self._suspend_live_updates = True
@@ -546,16 +840,20 @@ class SettingsCenterPage(QWidget):
         self.scaling_value_label.setText(f"{self.scaling_slider.value()}%")
         self.minimize_to_tray_checkbox.setChecked(bool(self.services.config.get("minimize_to_tray")))
         self.close_to_tray_checkbox.setChecked(bool(self.services.config.get("close_to_tray")))
+        self.confirm_on_exit_checkbox.setChecked(bool(self.services.config.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(self.services.autostart_manager.is_enabled()))
         self.start_minimized_checkbox.setChecked(bool(self.services.config.get("start_minimized")))
         self.developer_mode_checkbox.setChecked(self.services.developer_mode_enabled())
         self._set_combo_value(self.backup_schedule_combo, self.services.backup_manager.schedule())
+        self._populate_startup_page_combo(str(self.services.config.get("default_start_plugin") or DASHBOARD_PLUGIN_ID))
+        self._render_quick_access_settings()
         self._populate_shortcuts()
         self._populate_plugin_table()
         self._refresh_autostart_status()
         self._refresh_shortcut_status()
         self._refresh_backup_status()
         self._suspend_live_updates = False
+        self._apply_responsive_layout(force=True)
 
     def _selected_theme_color(self) -> str:
         for color_key, button in self.theme_color_buttons.items():
@@ -583,49 +881,269 @@ class SettingsCenterPage(QWidget):
     def _handle_live_theme_change(self) -> None:
         if self._suspend_live_updates:
             return
-        self._schedule_appearance_preview()
+        self._schedule_theme_preview()
 
     def _handle_live_language_change(self) -> None:
         if self._suspend_live_updates:
             return
-        for code, button in self.language_buttons.items():
-            if button.isChecked():
-                self.services.set_language(code)
-                return
+        self._schedule_language_preview()
+
+    def _remember_density_interaction_start(self, value: int) -> None:
+        self._density_interaction_start_value = int(value)
+
+    def _remember_scaling_interaction_start(self, value: int) -> None:
+        self._scaling_interaction_start_value = int(value)
 
     def _handle_live_density_change(self, value: int) -> None:
         self.density_value_label.setText(str(value))
         if self._suspend_live_updates:
             return
+        if self.density_slider.mouse_interaction_active():
+            return
         if not self.density_slider.isSliderDown():
-            self._schedule_scale_preview()
+            self._schedule_density_preview()
 
     def _handle_live_scaling_change(self, value: int) -> None:
         self.scaling_value_label.setText(f"{value}%")
         if self._suspend_live_updates:
             return
+        if self.scaling_slider.mouse_interaction_active():
+            return
         if not self.scaling_slider.isSliderDown():
-            self._schedule_scale_preview()
+            self._schedule_scaling_preview()
 
-    def _handle_density_released(self) -> None:
+    def _handle_density_released(self, _value: int) -> None:
         if self._suspend_live_updates:
             return
-        self._schedule_scale_preview()
+        start_value = self._density_interaction_start_value
+        self._density_interaction_start_value = None
+        if start_value is not None and int(self.density_slider.value()) == int(start_value):
+            return
+        self._schedule_density_preview()
 
-    def _handle_scaling_released(self) -> None:
+    def _handle_scaling_released(self, _value: int) -> None:
         if self._suspend_live_updates:
             return
-        self._schedule_scale_preview()
+        start_value = self._scaling_interaction_start_value
+        self._scaling_interaction_start_value = None
+        if start_value is not None and int(self.scaling_slider.value()) == int(start_value):
+            return
+        self._schedule_scaling_preview()
 
-    def _schedule_appearance_preview(self) -> None:
-        self._appearance_preview_timer.start(120)
+    def _selected_language(self) -> str:
+        for code, button in self.language_buttons.items():
+            if button.isChecked():
+                return code
+        return self.i18n.current_language()
 
-    def _schedule_scale_preview(self) -> None:
-        self._scale_preview_timer.start(1000)
+    def _render_quick_access_settings(self, preferred_plugin_id: str | None = None) -> None:
+        if not hasattr(self, "quick_access_list"):
+            return
 
-    def _apply_pending_appearance_preview(self) -> None:
+        while self.quick_access_preview_layout.count():
+            item = self.quick_access_preview_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+
+        palette = self.services.theme_manager.current_palette()
+        quick_ids = self.services.quick_access_ids()
+        preview_columns = self._quick_access_preview_column_count()
+        self._quick_access_preview_columns = preview_columns
+        preview_count = 0
+        if quick_ids:
+            for plugin_id in quick_ids:
+                spec = self.services.plugin_manager.get_spec(plugin_id)
+                if spec is None:
+                    continue
+                tile = QuickAccessPreviewTile(
+                    self.services.plugin_display_name(spec),
+                    self._quick_access_preview_icon(spec),
+                    self.quick_access_preview_frame,
+                )
+                tile.setToolTip(spec.localized_description(self.i18n.current_language()))
+                tile.clicked.connect(lambda _checked=False, pid=plugin_id: self._open_quick_access_plugin(pid))
+                self.quick_access_preview_layout.addWidget(tile, preview_count // preview_columns, preview_count % preview_columns)
+                preview_count += 1
+        else:
+            empty = QLabel(self._pt("quick_access.empty", "No quick access tools selected yet."))
+            empty.setStyleSheet(muted_text_style(palette, size=13))
+            self.quick_access_preview_layout.addWidget(empty, 0, 0, 1, preview_columns)
+        if preview_count:
+            for column in range(preview_columns):
+                self.quick_access_preview_layout.setColumnStretch(column, 1)
+            self.quick_access_preview_layout.setRowStretch((preview_count // preview_columns) + 1, 1)
+
+        current_selection = preferred_plugin_id
+        current_item = self.quick_access_list.currentItem()
+        if current_selection is None and current_item is not None:
+            current_selection = str(current_item.data(Qt.ItemDataRole.UserRole) or "")
+
+        self.quick_access_list.blockSignals(True)
+        self.quick_access_list.clear()
+        selected_row = -1
+        for row_index, plugin_id in enumerate(quick_ids):
+            spec = self.services.plugin_manager.get_spec(plugin_id)
+            if spec is None:
+                continue
+            item = QListWidgetItem(self.services.plugin_display_name(spec))
+            item.setData(Qt.ItemDataRole.UserRole, plugin_id)
+            self.quick_access_list.addItem(item)
+            if plugin_id == current_selection:
+                selected_row = row_index
+        if self.quick_access_list.count():
+            self.quick_access_list.setCurrentRow(selected_row if selected_row >= 0 else 0)
+        self.quick_access_list.blockSignals(False)
+
+        self.quick_access_combo.blockSignals(True)
+        self.quick_access_combo.clear()
+        pinned = set(quick_ids)
+        for spec in self.services.pinnable_plugin_specs():
+            if spec.plugin_id in pinned:
+                continue
+            self.quick_access_combo.addItem(self.services.plugin_display_name(spec), spec.plugin_id)
+        self.quick_access_combo.blockSignals(False)
+        self._sync_quick_access_buttons()
+
+    def _quick_access_preview_column_count(self) -> int:
+        available_width = min(
+            visible_parent_width(self),
+            self.quick_access_preview_frame.contentsRect().width()
+            or self.quick_access_preview_frame.width()
+            or self.quick_access_card.contentsRect().width()
+            or self.quick_access_card.width()
+            or self.width(),
+        )
+        spacing = self.quick_access_preview_layout.horizontalSpacing()
+        required_for_four = (120 * 4) + (spacing * 3)
+        return 4 if available_width >= required_for_four else 2
+
+    def _refresh_quick_access_preview_layout(self) -> None:
+        if not hasattr(self, "quick_access_preview_layout"):
+            return
+        target_columns = self._quick_access_preview_column_count()
+        if target_columns == self._quick_access_preview_columns:
+            return
+        current_item = self.quick_access_list.currentItem() if hasattr(self, "quick_access_list") else None
+        preferred_plugin_id = None
+        if current_item is not None:
+            preferred_plugin_id = str(current_item.data(Qt.ItemDataRole.UserRole) or "")
+        self._render_quick_access_settings(preferred_plugin_id)
+
+    def _sync_quick_access_buttons(self) -> None:
+        current_row = self.quick_access_list.currentRow()
+        count = self.quick_access_list.count()
+        has_selection = current_row >= 0
+        self.quick_access_add_button.setEnabled(self.quick_access_combo.count() > 0)
+        self.quick_access_move_up_button.setEnabled(has_selection and current_row > 0)
+        self.quick_access_move_down_button.setEnabled(has_selection and current_row >= 0 and current_row < count - 1)
+        self.quick_access_open_button.setEnabled(has_selection)
+        self.quick_access_remove_button.setEnabled(has_selection)
+        self._apply_responsive_layout()
+
+    def _persist_quick_access_from_settings_list(self, *_args) -> None:
+        plugin_ids: list[str] = []
+        selected_plugin_id = ""
+        current_item = self.quick_access_list.currentItem()
+        if current_item is not None:
+            selected_plugin_id = str(current_item.data(Qt.ItemDataRole.UserRole) or "")
+        for row in range(self.quick_access_list.count()):
+            item = self.quick_access_list.item(row)
+            if item is not None:
+                plugin_ids.append(str(item.data(Qt.ItemDataRole.UserRole) or ""))
+        self.services.set_quick_access_ids(plugin_ids)
+        self._render_quick_access_settings(selected_plugin_id)
+
+    def _add_selected_quick_access_plugin(self) -> None:
+        plugin_id = str(self.quick_access_combo.currentData() or "").strip()
+        if not plugin_id:
+            return
+        updated = self.services.quick_access_ids() + [plugin_id]
+        self.services.set_quick_access_ids(updated)
+        self._render_quick_access_settings(plugin_id)
+
+    def _remove_selected_quick_access_plugin(self) -> None:
+        item = self.quick_access_list.currentItem()
+        if item is None:
+            return
+        plugin_id = str(item.data(Qt.ItemDataRole.UserRole) or "").strip()
+        if not plugin_id:
+            return
+        updated = [value for value in self.services.quick_access_ids() if value != plugin_id]
+        self.services.set_quick_access_ids(updated)
+        self._render_quick_access_settings()
+
+    def _move_selected_quick_access(self, step: int) -> None:
+        item = self.quick_access_list.currentItem()
+        if item is None:
+            return
+        plugin_id = str(item.data(Qt.ItemDataRole.UserRole) or "").strip()
+        plugin_ids = self.services.quick_access_ids()
+        if plugin_id not in plugin_ids:
+            return
+        current_index = plugin_ids.index(plugin_id)
+        target_index = current_index + int(step)
+        if target_index < 0 or target_index >= len(plugin_ids):
+            return
+        plugin_ids[current_index], plugin_ids[target_index] = plugin_ids[target_index], plugin_ids[current_index]
+        self.services.set_quick_access_ids(plugin_ids)
+        self._render_quick_access_settings(plugin_id)
+
+    def _open_selected_quick_access_plugin(self) -> None:
+        item = self.quick_access_list.currentItem()
+        if item is None:
+            return
+        self._open_quick_access_plugin(str(item.data(Qt.ItemDataRole.UserRole) or ""))
+
+    def _open_quick_access_plugin(self, plugin_id: str) -> None:
+        if plugin_id and self.services.main_window is not None:
+            self.services.main_window.open_plugin(plugin_id)
+
+    def _quick_access_preview_icon(self, spec) -> QIcon:
+        main_window = self.services.main_window
+        icon_getter = getattr(main_window, "_plugin_icon", None)
+        if callable(icon_getter):
+            try:
+                return icon_getter(spec)
+            except Exception:
+                pass
+        override = self._sanitized_plugin_icon_override(spec)
+        if override:
+            icon = icon_from_name(override, self)
+            if icon is not None:
+                return icon
+        preferred = icon_from_name(str(spec.preferred_icon or ""), self)
+        if preferred is not None:
+            return preferred
+        fallback = icon_from_name("desktop", self) or icon_from_name("tools", self)
+        if fallback is not None:
+            return fallback
+        return self.style().standardIcon(self.style().StandardPixmap.SP_FileIcon)
+
+    def _schedule_theme_preview(self) -> None:
+        self._theme_preview_timer.start(120)
+
+    def _schedule_language_preview(self) -> None:
+        self._language_preview_timer.start(120)
+
+    def _schedule_density_preview(self) -> None:
+        self._density_preview_timer.start(1000)
+
+    def _schedule_scaling_preview(self) -> None:
+        self._scaling_preview_timer.start(1000)
+
+    def _apply_pending_theme_preview(self) -> None:
         self.services.set_theme_selection(self._selected_theme_color(), self.dark_mode_checkbox.isChecked())
+
+    def _apply_pending_language_preview(self) -> None:
+        self.services.set_language(self._selected_language())
+
+    def _apply_pending_density_preview(self) -> None:
         self.services.set_density_scale(int(self.density_slider.value()))
+
+    def _apply_pending_scaling_preview(self) -> None:
         self.services.set_ui_scaling(self.scaling_slider.value() / 100.0)
 
     def _populate_shortcuts(self) -> None:
@@ -741,14 +1259,15 @@ class SettingsCenterPage(QWidget):
             self._building_plugin_table = False
         self.plugins_table.resizeColumnToContents(0)
         self.plugins_table.resizeColumnToContents(1)
+        self._schedule_plugins_table_width_sync()
 
     def _make_action_button(self, icon_name: str, handler) -> QToolButton:
         button = QToolButton()
         button.setAutoRaise(False)
-        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         button.setIcon(icon_from_name(icon_name, self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
-        button.setIconSize(QSize(18, 18))
-        button.setFixedSize(34, 34)
+        button.setIconSize(QSize(16, 16))
+        button.setMinimumHeight(36)
         button.clicked.connect(handler)
         return button
 
@@ -765,40 +1284,15 @@ class SettingsCenterPage(QWidget):
         export_check.setChecked(selected)
         export_check.setToolTip(self._pt("plugins.export", "Select for export"))
         layout.addWidget(export_check)
-
-        if self._editing_plugin_id == spec.plugin_id:
-            save_button = QToolButton()
-            save_button.setAutoRaise(True)
-            save_button.setIcon(icon_from_name("check", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
-            save_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            save_button.setToolTip(self._pt("plugins.row.save", "Save row edits"))
-            save_button.setIconSize(QSize(16, 16))
-            save_button.setFixedSize(24, 24)
-            save_button.setStyleSheet("QToolButton { background: #e7f5ec; border: 1px solid #9ad0ab; border-radius: 9px; padding: 2px; }")
-            save_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._save_row_edit(pid))
-            layout.addWidget(save_button)
-
-            cancel_button = QToolButton()
-            cancel_button.setAutoRaise(True)
-            cancel_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
-            cancel_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            cancel_button.setToolTip(self._pt("plugins.row.cancel", "Cancel row edits"))
-            cancel_button.setIconSize(QSize(16, 16))
-            cancel_button.setFixedSize(24, 24)
-            cancel_button.setStyleSheet("QToolButton { background: #f9ece8; border: 1px solid #d7aba3; border-radius: 9px; padding: 2px; }")
-            cancel_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._cancel_row_edit(pid))
-            layout.addWidget(cancel_button)
-        else:
-            edit_button = QToolButton()
-            edit_button.setAutoRaise(True)
-            edit_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            edit_button.setText("✎")
-            edit_button.setStyleSheet("QToolButton { background: transparent; border: none; font-size: 15px; font-weight: 700; padding: 0px; }")
-            edit_button.setFixedSize(22, 22)
-            edit_button.setToolTip(self._pt("plugins.row.edit", "Edit plugin row"))
-            edit_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._begin_row_edit(pid))
-            layout.addWidget(edit_button)
         return container
+
+    def _sanitized_plugin_icon_override(self, spec) -> str:
+        override = str(self.services.plugin_icon_override(spec) or "").strip()
+        if not override:
+            return ""
+        if Path(override).exists():
+            return override
+        return override if icon_from_name(override, self) is not None else ""
 
     def _confirm_risky(self, title: str, body: str) -> bool:
         return confirm_action(
@@ -883,7 +1377,7 @@ class SettingsCenterPage(QWidget):
         return bool(checkbox is not None and checkbox.isChecked())
 
     def _icon_display_text(self, spec) -> str:
-        override = self.services.plugin_icon_override(spec)
+        override = self._sanitized_plugin_icon_override(spec)
         return self._icon_display_name(override)
 
     def _icon_display_name(self, icon_value: str) -> str:
@@ -893,15 +1387,132 @@ class SettingsCenterPage(QWidget):
         return options.get(icon_value, Path(icon_value).name or icon_value)
 
     def _icon_display_icon(self, spec):
-        override = self.services.plugin_icon_override(spec)
+        override = self._sanitized_plugin_icon_override(spec)
         effective = override or str(spec.preferred_icon or "").strip()
         return icon_from_name(effective, self) if effective else icon_from_name("plugin", self)
+
+    def _plugin_spec_for_row(self, row: int):
+        if row < 0:
+            return None
+        name_item = self.plugins_table.item(row, 2)
+        if name_item is None:
+            return None
+        plugin_id = str(name_item.data(Qt.ItemDataRole.UserRole) or "")
+        if not plugin_id:
+            return None
+        return self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+
+    def _toggle_plugin_row_check(self, row: int, column: int) -> None:
+        item = self.plugins_table.item(row, column)
+        if item is None:
+            return
+        current = item.checkState() == Qt.CheckState.Checked
+        item.setCheckState(Qt.CheckState.Unchecked if current else Qt.CheckState.Checked)
+
+    def _show_plugins_context_menu(self, position) -> None:
+        index = self.plugins_table.indexAt(position)
+        if not index.isValid():
+            return
+        row = index.row()
+        self.plugins_table.selectRow(row)
+        spec = self._plugin_spec_for_row(row)
+        if spec is None:
+            return
+
+        menu = QMenu(self)
+        if spec.allow_name_override:
+            rename_action = menu.addAction(self._pt("plugins.menu.rename", "Change name..."))
+            rename_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._change_plugin_name(plugin_id))
+        if spec.allow_icon_override:
+            icon_action = menu.addAction(self._pt("plugins.menu.icon", "Change icon..."))
+            icon_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._change_plugin_icon(plugin_id))
+        reset_visuals = menu.addAction(self._pt("plugins.menu.reset_visuals", "Reset name and icon"))
+        reset_visuals.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._reset_plugin_visuals(plugin_id))
+
+        menu.addSeparator()
+        enabled_action = menu.addAction(self._pt("plugins.menu.toggle_enabled", "Toggle enabled"))
+        enabled_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 6))
+        hidden_action = menu.addAction(self._pt("plugins.menu.toggle_hidden", "Toggle hidden"))
+        hidden_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 7))
+        if spec.source_type != "builtin":
+            trusted_action = menu.addAction(self._pt("plugins.menu.toggle_trusted", "Toggle trusted"))
+            trusted_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 5))
+
+        details = self._plugin_review_details(spec)
+        if details:
+            menu.addSeparator()
+            review_action = menu.addAction(self._pt("plugins.menu.review", "Review details"))
+            review_action.triggered.connect(
+                lambda _checked=False, text=details, title=self.services.plugin_display_name(spec): QMessageBox.information(self, title, text)
+            )
+        menu.exec(self.plugins_table.viewport().mapToGlobal(position))
+
+    def _change_plugin_name(self, plugin_id: str) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if spec is None:
+            return
+        current_override = self.services.plugin_override(plugin_id).get("display_name", "")
+        current_text = current_override or self.services.plugin_display_name(spec)
+        value, accepted = QInputDialog.getText(
+            self,
+            self._pt("plugins.rename.title", "Change display name"),
+            self._pt("plugins.rename.prompt", "Display name"),
+            text=current_text,
+        )
+        if not accepted:
+            return
+        override = value.strip()
+        if override == spec.localized_name(self.i18n.current_language()):
+            override = ""
+        current_icon = self._sanitized_plugin_icon_override(spec)
+        self.services.set_plugin_override(plugin_id, display_name=override, icon=current_icon)
+        self._populate_plugin_table()
+        self._render_quick_access_settings(plugin_id)
+
+    def _change_plugin_icon(self, plugin_id: str) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if spec is None:
+            return
+        dialog = IconPickerDialog(self, self._icon_options(), self._sanitized_plugin_icon_override(spec))
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        current_name = self.services.plugin_override(plugin_id).get("display_name", "")
+        self.services.set_plugin_override(plugin_id, display_name=current_name, icon=dialog.selected_icon())
+        self._populate_plugin_table()
+        self._render_quick_access_settings(plugin_id)
+
+    def _reset_plugin_visuals(self, plugin_id: str) -> None:
+        self.services.set_plugin_override(plugin_id, display_name="", icon="")
+        self._populate_plugin_table()
+        self._render_quick_access_settings(plugin_id)
 
     def _browse_output_dir(self) -> None:
         current = self.output_dir_input.text().strip() or str(self.services.default_output_path())
         selected = QFileDialog.getExistingDirectory(self, self._pt("output.browse", "Choose output folder"), current)
         if selected:
             self.output_dir_input.setText(selected)
+
+    def _startup_page_specs(self):
+        specs = []
+        for spec in self.services.plugin_manager.sidebar_plugins():
+            if spec.plugin_id == INSPECTOR_PLUGIN_ID:
+                continue
+            specs.append(spec)
+        return specs
+
+    def _populate_startup_page_combo(self, preferred_plugin_id: str | None = None) -> None:
+        if not hasattr(self, "startup_page_combo"):
+            return
+        selected_plugin_id = preferred_plugin_id
+        if selected_plugin_id is None:
+            selected_plugin_id = str(self.startup_page_combo.currentData() or self.services.config.get("default_start_plugin") or DASHBOARD_PLUGIN_ID)
+
+        self.startup_page_combo.blockSignals(True)
+        self.startup_page_combo.clear()
+        for spec in self._startup_page_specs():
+            self.startup_page_combo.addItem(self.services.plugin_display_name(spec), spec.plugin_id)
+        self.startup_page_combo.blockSignals(False)
+        self._set_combo_value(self.startup_page_combo, selected_plugin_id)
 
     def _save_general_settings(self) -> None:
         window = self.services.main_window
@@ -910,8 +1521,10 @@ class SettingsCenterPage(QWidget):
         try:
             output_dir = Path(self.output_dir_input.text().strip() or self.services.output_root)
             output_dir.mkdir(parents=True, exist_ok=True)
-            self._appearance_preview_timer.stop()
-            self._scale_preview_timer.stop()
+            self._theme_preview_timer.stop()
+            self._language_preview_timer.stop()
+            self._density_preview_timer.stop()
+            self._scaling_preview_timer.stop()
 
             self.services.config.update_many(
                 {
@@ -924,8 +1537,10 @@ class SettingsCenterPage(QWidget):
                     "language": self.services.i18n.current_language(),
                     "backup_schedule": self.backup_schedule_combo.currentData() or "monthly",
                     "default_output_path": str(output_dir),
+                    "default_start_plugin": str(self.startup_page_combo.currentData() or DASHBOARD_PLUGIN_ID),
                     "minimize_to_tray": self.minimize_to_tray_checkbox.isChecked(),
                     "close_to_tray": self.close_to_tray_checkbox.isChecked(),
+                    "confirm_on_exit": self.confirm_on_exit_checkbox.isChecked(),
                     "run_on_startup": self.run_on_startup_checkbox.isChecked(),
                     "start_minimized": self.start_minimized_checkbox.isChecked(),
                 }
@@ -965,15 +1580,19 @@ class SettingsCenterPage(QWidget):
         self.scaling_slider.setValue(int(round(float(defaults.get("ui_scaling") or 1.0) * 100)))
         self.minimize_to_tray_checkbox.setChecked(bool(defaults.get("minimize_to_tray")))
         self.close_to_tray_checkbox.setChecked(bool(defaults.get("close_to_tray")))
+        self.confirm_on_exit_checkbox.setChecked(bool(defaults.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(defaults.get("run_on_startup")))
         self.start_minimized_checkbox.setChecked(bool(defaults.get("start_minimized")))
         self.developer_mode_checkbox.setChecked(bool(defaults.get("developer_mode")))
         self._set_combo_value(self.backup_schedule_combo, defaults.get("backup_schedule", "monthly"))
+        self._populate_startup_page_combo(str(defaults.get("default_start_plugin") or DASHBOARD_PLUGIN_ID))
         self._suspend_live_updates = False
         self.density_value_label.setText(str(self.density_slider.value()))
         self.scaling_value_label.setText(f"{self.scaling_slider.value()}%")
-        self.services.set_language(target_language)
-        self._apply_pending_appearance_preview()
+        self._apply_pending_language_preview()
+        self._apply_pending_theme_preview()
+        self._apply_pending_density_preview()
+        self._apply_pending_scaling_preview()
 
     def _save_shortcuts(self) -> None:
         window = self.services.main_window
@@ -1441,13 +2060,18 @@ class SettingsCenterPage(QWidget):
         )
         self.description_label.setStyleSheet(f"font-size: 14px; color: {palette.text_muted};")
         self.tabs.setTabText(0, self._pt("tab.general", "General"))
-        self.tabs.setTabText(1, self._pt("tab.shortcuts", "Shortcuts"))
-        self.tabs.setTabText(2, self._pt("tab.plugins", "Plugins"))
+        self.tabs.setTabText(1, self._pt("tab.quick_access", "Quick Access"))
+        self.tabs.setTabText(2, self._pt("tab.shortcuts", "Shortcuts"))
+        self.tabs.setTabText(3, self._pt("tab.plugins", "Plugins"))
 
         self.output_label.setText(self._pt("output.label", "Default output folder"))
+        self.startup_page_label.setText(self._pt("output.startup_page", "Default startup page"))
         self.output_browse_button.setText(self._pt("output.browse_button", "Browse"))
-        self.general_note.setText(self._pt("output.note", "Tools export into this folder by default."))
+        self.output_title.setText(self._pt("general.output.title", "Workspace"))
+        self.general_note.setText(self._pt("output.note", "Tools export into this folder by default, and the app can open straight to your preferred page on launch."))
+        self._populate_startup_page_combo()
 
+        self.appearance_title.setText(self._pt("general.appearance.title", "Appearance"))
         self.theme_label.setText(self._pt("theme.label", "Theme"))
         color_labels = {
             "pink": self._pt("theme.color.pink", "Pink"),
@@ -1471,11 +2095,26 @@ class SettingsCenterPage(QWidget):
             self._pt("appearance.note", "Appearance and language preview live in the app, but they are only written to the config when you click Save settings.")
         )
 
+        self.behavior_title.setText(self._pt("general.behavior.title", "Behavior"))
+        self.behavior_note.setText(
+            self._pt(
+                "general.behavior.note",
+                "Tray handling, startup behavior, exit confirmation, and developer mode live together here so the app shell is easier to reason about.",
+            )
+        )
         self.minimize_to_tray_checkbox.setText(self._pt("tray.minimize", "Minimize to system tray"))
         self.close_to_tray_checkbox.setText(self._pt("tray.close", "Close to system tray"))
+        self.confirm_on_exit_checkbox.setText(self._pt("exit.confirm", "Always ask on exit"))
         self.run_on_startup_checkbox.setText(self._pt("startup.run", "Start on system login"))
         self.start_minimized_checkbox.setText(self._pt("startup.minimized", "Start minimized"))
         self.developer_mode_checkbox.setText(self._pt("developer.mode", "Developer mode"))
+        self.backup_title.setText(self._pt("general.backup.title", "Backups"))
+        self.backup_note.setText(
+            self._pt(
+                "general.backup.note",
+                "Keep an encrypted safety trail of your workspace state, then restore from here when you need to roll back quickly.",
+            )
+        )
         self.backup_schedule_label.setText(self._pt("backup.schedule", "Backup intensity"))
         for index in range(self.backup_schedule_combo.count()):
             value = str(self.backup_schedule_combo.itemData(index) or "")
@@ -1487,6 +2126,24 @@ class SettingsCenterPage(QWidget):
             self.backup_schedule_combo.setItemText(index, text)
         self.create_backup_button.setText(self._pt("backup.create", "Create backup"))
         self.restore_backup_button.setText(self._pt("backup.restore", "Restore backup"))
+        self.quick_access_tab_note.setText(
+            self._pt(
+                "quick_access.tab_note",
+                "Build a desktop-style quick launch strip for your most-used tools. Add tools, reorder them, and test the launcher here.",
+            )
+        )
+        self.quick_access_title.setText(self._pt("quick_access.title", "Quick access"))
+        self.quick_access_note.setText(
+            self._pt(
+                "quick_access.note",
+                "These icons mirror the dashboard launcher. Drag the list to reorder, or use the move buttons for precise placement.",
+            )
+        )
+        self.quick_access_add_button.setText(self._pt("quick_access.add", "Add"))
+        self.quick_access_move_up_button.setText(self._pt("quick_access.move_up", "Move up"))
+        self.quick_access_move_down_button.setText(self._pt("quick_access.move_down", "Move down"))
+        self.quick_access_open_button.setText(self._pt("quick_access.open", "Open"))
+        self.quick_access_remove_button.setText(self._pt("quick_access.remove", "Remove"))
 
         self.shortcut_note.setText(
             self._pt(
@@ -1497,17 +2154,25 @@ class SettingsCenterPage(QWidget):
         self.plugins_note.setText(
             self._pt(
                 "plugins.note",
-                "Manage built-in and custom plugins here. Edit display name and icon inline per row, then trust, enable, hide, import, export, or review plugins from one place.",
+                "Manage built-in and custom plugins here. Use the checkboxes for trust, enabled, and hidden state, then right-click a row for name, icon, and review actions.",
             )
         )
-        self.import_file_button.setToolTip(self._pt("plugins.import_file_button", "Import File"))
-        self.import_folder_button.setToolTip(self._pt("plugins.import_folder_button", "Import Folder"))
-        self.import_backup_button.setToolTip(self._pt("plugins.import_backup_button", "Import Backup"))
-        self.export_selected_button.setToolTip(self._pt("plugins.export_selected", "Export Selected"))
-        self.export_all_button.setToolTip(self._pt("plugins.export_all", "Export All"))
-        self.apply_plugin_state_button.setToolTip(self._pt("plugins.apply", "Apply Plugin Changes"))
-        self.reset_plugins_button.setToolTip(self._pt("plugins.reset", "Reset plugin defaults"))
-        self.refresh_plugins_button.setToolTip(self._pt("plugins.refresh", "Refresh"))
+        self.import_file_button.setText(self._pt("plugins.import_file_button", "Import File"))
+        self.import_folder_button.setText(self._pt("plugins.import_folder_button", "Import Folder"))
+        self.import_backup_button.setText(self._pt("plugins.import_backup_button", "Import Backup"))
+        self.export_selected_button.setText(self._pt("plugins.export_selected", "Export Selected"))
+        self.export_all_button.setText(self._pt("plugins.export_all", "Export All"))
+        self.apply_plugin_state_button.setText(self._pt("plugins.apply", "Apply Plugin Changes"))
+        self.reset_plugins_button.setText(self._pt("plugins.reset", "Reset plugin defaults"))
+        self.refresh_plugins_button.setText(self._pt("plugins.refresh", "Refresh"))
+        self.import_file_button.setToolTip(self.import_file_button.text())
+        self.import_folder_button.setToolTip(self.import_folder_button.text())
+        self.import_backup_button.setToolTip(self.import_backup_button.text())
+        self.export_selected_button.setToolTip(self.export_selected_button.text())
+        self.export_all_button.setToolTip(self.export_all_button.text())
+        self.apply_plugin_state_button.setToolTip(self.apply_plugin_state_button.text())
+        self.reset_plugins_button.setToolTip(self.reset_plugins_button.text())
+        self.refresh_plugins_button.setToolTip(self.refresh_plugins_button.text())
 
         self.general_reset_button.setText(self._pt("reset", "Reset defaults"))
         self.general_save_button.setText(self._pt("save", "Save settings"))
@@ -1517,6 +2182,8 @@ class SettingsCenterPage(QWidget):
         self._populate_plugin_table()
         self._refresh_autostart_status()
         self._refresh_backup_status()
+        self._render_quick_access_settings()
+        self._apply_responsive_layout(force=True)
 
     def _set_combo_value(self, combo: QComboBox, value) -> None:
         for index in range(combo.count()):
@@ -1527,16 +2194,149 @@ class SettingsCenterPage(QWidget):
     def _handle_tab_changed(self, index: int) -> None:
         if self.tabs.widget(index) is self.plugins_tab:
             self._populate_plugin_table()
+        self._schedule_responsive_refresh()
+        self._schedule_page_geometry_refresh()
         window = self.services.main_window
         if window is not None and getattr(window, "current_plugin_id", None) == self.plugin_id:
             sync = getattr(window, "_sync_system_toolbar_selection", None)
             if callable(sync):
                 sync(self.plugin_id)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+        self._schedule_responsive_refresh()
+        self._schedule_page_geometry_refresh()
+
+    def _refresh_page_geometry(self) -> None:
+        self._geometry_refresh_pending = False
+        self.tabs.updateGeometry()
+        self.updateGeometry()
+        target_height = self.sizeHint().height()
+        self.setMinimumHeight(target_height)
+        self.setMaximumHeight(target_height)
+        if self.height() != target_height:
+            self.resize(self.width(), target_height)
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QScrollArea):
+                widget = parent.widget()
+                if widget is not None:
+                    widget.updateGeometry()
+                parent.updateGeometry()
+                break
+            parent = parent.parentWidget()
+
+    def _schedule_page_geometry_refresh(self) -> None:
+        if self._geometry_refresh_pending:
+            return
+        self._geometry_refresh_pending = True
+        QTimer.singleShot(0, self._refresh_page_geometry)
+
+    def _schedule_responsive_refresh(self) -> None:
+        if self._responsive_refresh_pending:
+            return
+        self._responsive_refresh_pending = True
+        QTimer.singleShot(0, self._run_responsive_refresh)
+
+    def _run_responsive_refresh(self) -> None:
+        self._responsive_refresh_pending = False
+        self._apply_responsive_layout()
+
+    def _plugins_table_content_width(self) -> int:
+        header = self.plugins_table.horizontalHeader()
+        width = (self.plugins_table.frameWidth() * 2) + self.plugins_table.verticalHeader().width()
+        for column in range(self.plugins_table.columnCount()):
+            width += header.sectionSize(column)
+        if self.plugins_table.verticalScrollBar().isVisible():
+            width += self.plugins_table.verticalScrollBar().sizeHint().width()
+        return width + 2
+
+    def _schedule_plugins_table_width_sync(self, *_args) -> None:
+        if self._plugins_table_width_sync_pending:
+            return
+        self._plugins_table_width_sync_pending = True
+        QTimer.singleShot(0, self._sync_plugins_table_width)
+
+    def _sync_plugins_table_width(self) -> None:
+        self._plugins_table_width_sync_pending = False
+        if not hasattr(self, "plugins_table"):
+            return
+        required_width = self._plugins_table_content_width()
+        if self.plugins_table.minimumWidth() != required_width:
+            self.plugins_table.setMinimumWidth(required_width)
+        self.plugins_table.updateGeometry()
+        self.plugins_tab.updateGeometry()
+        self.tabs.updateGeometry()
+        self.updateGeometry()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        bucket = width_breakpoint(self.width(), compact_max=760, medium_max=1180)
+        structure_changed = force or bucket != self._responsive_bucket
+        self._responsive_bucket = bucket
+        compact = bucket == "compact"
+
+        if structure_changed:
+            self.general_tools_row.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+            )
+            self.quick_add_row.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+            )
+            self.quick_manage_row.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+            )
+            self.shortcut_actions.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+            )
+
+        while self.quick_actions_layout.count():
+            item = self.quick_actions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self.quick_actions_host)
+        quick_columns = adaptive_grid_columns(
+            min(
+                visible_parent_width(self),
+                self.quick_actions_host.contentsRect().width()
+                or self.quick_actions_host.width()
+                or self.quick_access_card.contentsRect().width()
+                or self.quick_access_card.width(),
+            ),
+            item_widths=[button.sizeHint().width() for button in self._quick_action_buttons],
+            spacing=self.quick_actions_layout.horizontalSpacing(),
+            min_columns=2,
+        )
+        for index, button in enumerate(self._quick_action_buttons):
+            self.quick_actions_layout.addWidget(button, index // quick_columns, index % quick_columns)
+        for column in range(quick_columns):
+            self.quick_actions_layout.setColumnStretch(column, 1)
+
+        while self.plugins_actions_layout.count():
+            item = self.plugins_actions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self.plugins_tab)
+        available_width = min(
+            visible_parent_width(self),
+            self.plugins_tab.contentsRect().width() or self.plugins_tab.width() or self.width(),
+        )
+        plugin_button_widths = [button.sizeHint().width() for button in self._plugin_action_buttons]
+        plugin_spacing = self.plugins_actions_layout.horizontalSpacing()
+        required_for_single_row = sum(plugin_button_widths) + (plugin_spacing * max(0, len(plugin_button_widths) - 1))
+        plugin_columns = len(plugin_button_widths) if available_width >= required_for_single_row else 4
+        for index, button in enumerate(self._plugin_action_buttons):
+            self.plugins_actions_layout.addWidget(button, index // plugin_columns, index % plugin_columns)
+        for column in range(plugin_columns):
+            self.plugins_actions_layout.setColumnStretch(column, 1)
+        self._refresh_quick_access_preview_layout()
+
     def current_section_id(self) -> str:
         current = self.tabs.currentWidget()
         if current is self.plugins_tab:
             return "plugins"
+        if current is self.quick_access_tab:
+            return "quick_access"
         if current is self.shortcuts_tab:
             return "shortcuts"
         return "general"
@@ -1559,6 +2359,7 @@ class SettingsCenterPage(QWidget):
         self.setStyleSheet(f"background: {palette.window_bg};")
         for widget in (
             self.general_tab,
+            self.quick_access_tab,
             self.shortcuts_tab,
             self.plugins_tab,
             self.theme_picker_host,
@@ -1593,17 +2394,100 @@ class SettingsCenterPage(QWidget):
             self.appearance_card,
             self.automation_card,
             self.backup_card,
+            self.quick_access_card,
         ):
             frame.setStyleSheet(card_style(palette))
         for label in (
             self.general_note,
             self.appearance_note,
             self.autostart_status_label,
+            self.quick_access_tab_note,
+            self.quick_access_note,
             self.shortcut_note,
             self.shortcut_status_label,
             self.plugins_note,
+            self.behavior_note,
+            self.backup_note,
         ):
             label.setStyleSheet(muted_text_style(palette))
+        for label in (
+            self.output_title,
+            self.appearance_title,
+            self.behavior_title,
+            self.backup_title,
+        ):
+            label.setStyleSheet(section_title_style(palette, size=18))
+        self.quick_access_title.setStyleSheet(section_title_style(palette, size=18))
+        self.quick_access_preview_frame.setStyleSheet(
+            f"""
+            QFrame#QuickAccessPreview {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {palette.surface_alt_bg},
+                    stop:1 {palette.surface_bg});
+                border: 1px solid {palette.border};
+                border-radius: 16px;
+            }}
+            """
+        )
+        self.quick_access_list.setStyleSheet(
+            f"""
+            QListWidget {{
+                background: {palette.input_bg};
+                border: 1px solid {palette.border};
+                border-radius: 12px;
+                color: {palette.text_primary};
+            }}
+            QListWidget::item {{
+                padding: 8px 10px;
+                margin: 0;
+            }}
+            QListWidget::item:selected {{
+                background: {palette.accent_soft};
+                color: {palette.text_primary};
+            }}
+            """
+        )
+        self.quick_access_combo.setStyleSheet(
+            f"""
+            QComboBox {{
+                background: {palette.input_bg};
+                color: {palette.text_primary};
+                border: 1px solid {palette.border};
+                border-radius: 12px;
+                padding: 6px 10px;
+            }}
+            """
+        )
+        for tile in self.quick_access_preview_frame.findChildren(QuickAccessPreviewTile):
+            tile.apply_palette(palette)
+        plugin_action_buttons = (
+            self.import_file_button,
+            self.import_folder_button,
+            self.import_backup_button,
+            self.export_selected_button,
+            self.export_all_button,
+            self.apply_plugin_state_button,
+            self.reset_plugins_button,
+            self.refresh_plugins_button,
+        )
+        for button in plugin_action_buttons:
+            button.setStyleSheet(
+                f"""
+                QToolButton {{
+                    background: {palette.surface_bg};
+                    color: {palette.text_primary};
+                    border: 1px solid {palette.border};
+                    border-radius: 12px;
+                    padding: 5px 8px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                QToolButton:hover {{
+                    border-color: {palette.accent};
+                    background: {palette.accent_soft};
+                }}
+                """
+            )
         for button in self.theme_color_buttons.values():
             button.setStyleSheet(
                 f"""

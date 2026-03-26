@@ -244,15 +244,19 @@ class AboutCenterPage(QWidget):
             ("Micro Toolkit", __version__),
             ("Python", platform.python_version()),
             ("PySide6", self._version("PySide6")),
-            ("Bundled SVG icons", "local assets"),
+            ("numpy", self._version("numpy")),
             ("pandas", self._version("pandas")),
             ("openpyxl", self._version("openpyxl")),
-            ("Pillow", self._version("Pillow")),
-            ("pillow-heif", self._version("pillow-heif")),
             ("python-docx", self._version("python-docx")),
             ("PyPDF2", self._version("PyPDF2")),
+            ("Pillow", self._version("Pillow")),
+            ("pillow-heif", self._version("pillow-heif")),
+            ("cryptography", self._version("cryptography")),
+            ("python-dateutil", self._version("python-dateutil")),
+            ("qt-material", self._version("qt-material")),
             ("psutil", self._version("psutil")),
             ("keyboard", self._version("keyboard")),
+            ("Bundled SVG icons", "Bootstrap Icons"),
         ]
         self.libs_table.setRowCount(len(rows))
         self.libs_table.setHorizontalHeaderLabels(

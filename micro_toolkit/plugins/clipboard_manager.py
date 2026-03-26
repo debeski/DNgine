@@ -8,6 +8,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSortFilterProx
 from PySide6.QtGui import QAction, QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QBoxLayout,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -27,15 +28,17 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableView,
     QTextEdit,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from micro_toolkit.core.clipboard_store import ClipboardEntry, ClipboardStore
-from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
+from micro_toolkit.core.widgets import ScrollSafeComboBox, adaptive_grid_columns, width_breakpoint
+
+
+QComboBox = ScrollSafeComboBox
 
 
 TYPE_LABELS = {
@@ -89,7 +92,7 @@ def build_preview(entry: ClipboardEntry, length: int = 88) -> str:
 
 
 class ClipboardTableModel(QAbstractTableModel):
-    HEADERS = ["Pin", "Type", "Label", "Category", "Preview", "Captured", "Actions"]
+    HEADERS = ["Pin", "Type", "Label", "Category", "Preview", "Captured"]
 
     def __init__(self):
         super().__init__()
@@ -127,8 +130,6 @@ class ClipboardTableModel(QAbstractTableModel):
                 return row.preview
             if index.column() == 5:
                 return row.created_at
-            if index.column() == 6:
-                return ""
         if role == Qt.ItemDataRole.UserRole:
             return row
         return None
@@ -242,6 +243,8 @@ class ClipboardManagerPage(QWidget):
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._auto_capture_enabled = True
         self._suspend_capture_once = False
+        self._responsive_bucket = ""
+        self._responsive_refresh_pending = False
         self._build_ui()
         self._wire_events()
         self._refresh_entries()
@@ -263,51 +266,62 @@ class ClipboardManagerPage(QWidget):
         outer.addWidget(self.description_label)
 
         self.toolbar_card = QFrame()
-        toolbar = QGridLayout(self.toolbar_card)
-        toolbar.setContentsMargins(16, 14, 16, 14)
-        toolbar.setHorizontalSpacing(10)
-        toolbar.setVerticalSpacing(10)
+        self.toolbar_layout = QGridLayout(self.toolbar_card)
+        self.toolbar_layout.setContentsMargins(16, 14, 16, 14)
+        self.toolbar_layout.setHorizontalSpacing(10)
+        self.toolbar_layout.setVerticalSpacing(10)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search clipboard history...")
-        toolbar.addWidget(self.search_input, 0, 0, 1, 2)
+        self.toolbar_layout.addWidget(self.search_input, 0, 0, 1, 2)
 
         self.type_filter = QComboBox()
         for value, label in TYPE_LABELS.items():
             self.type_filter.addItem(label, value)
-        toolbar.addWidget(self.type_filter, 0, 2)
+        self.toolbar_layout.addWidget(self.type_filter, 0, 2)
 
         self.label_filter = QComboBox()
         self.label_filter.addItem("All Labels", "")
-        toolbar.addWidget(self.label_filter, 0, 3)
+        self.toolbar_layout.addWidget(self.label_filter, 0, 3)
 
         self.category_filter = QComboBox()
         self.category_filter.addItem("All Categories", "")
-        toolbar.addWidget(self.category_filter, 0, 4)
+        self.toolbar_layout.addWidget(self.category_filter, 0, 4)
 
         self.pinned_only_checkbox = QCheckBox("Pinned only")
-        toolbar.addWidget(self.pinned_only_checkbox, 1, 0)
+        self.toolbar_layout.addWidget(self.pinned_only_checkbox, 1, 0)
 
         self.auto_capture_checkbox = QCheckBox("Auto capture")
         self.auto_capture_checkbox.setChecked(True)
-        toolbar.addWidget(self.auto_capture_checkbox, 1, 1)
+        self.toolbar_layout.addWidget(self.auto_capture_checkbox, 1, 1)
+
+        self.action_host = QWidget()
+        self.action_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.action_host.setStyleSheet("background: transparent;")
+        self.action_host_layout = QGridLayout(self.action_host)
+        self.action_host_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_host_layout.setHorizontalSpacing(8)
+        self.action_host_layout.setVerticalSpacing(8)
 
         self.capture_button = QPushButton("Capture Current")
-        toolbar.addWidget(self.capture_button, 1, 2)
-
         self.manage_labels_button = QPushButton("Manage Labels")
-        toolbar.addWidget(self.manage_labels_button, 1, 3)
-
         self.manage_categories_button = QPushButton("Manage Categories")
-        toolbar.addWidget(self.manage_categories_button, 1, 4)
-
         self.clear_history_button = QPushButton("Clear History")
-        toolbar.addWidget(self.clear_history_button, 2, 4)
+        self._action_buttons = [
+            self.capture_button,
+            self.manage_labels_button,
+            self.manage_categories_button,
+            self.clear_history_button,
+        ]
+        for button in self._action_buttons:
+            button.setMinimumWidth(150)
+        self.toolbar_layout.addWidget(self.action_host, 1, 2, 2, 3)
+        self._relayout_action_buttons()
 
         outer.addWidget(self.toolbar_card)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
+        self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        outer.addWidget(self.content_splitter, 1)
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
@@ -328,11 +342,10 @@ class ClipboardManagerPage(QWidget):
         self.table_view.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.table_view.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_view.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         left_layout.addWidget(self.table_view, 1)
 
-        splitter.addWidget(left_panel)
+        self.content_splitter.addWidget(left_panel)
 
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
@@ -367,10 +380,11 @@ class ClipboardManagerPage(QWidget):
         self.metadata_view.setMaximumHeight(170)
         right_layout.addWidget(self.metadata_view)
 
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        self.content_splitter.addWidget(right_panel)
+        self.content_splitter.setStretchFactor(0, 3)
+        self.content_splitter.setStretchFactor(1, 2)
         self._apply_theme_styles()
+        self._apply_responsive_layout(force=True)
 
     def _wire_events(self) -> None:
         self.search_input.textChanged.connect(self._refresh_entries)
@@ -398,6 +412,77 @@ class ClipboardManagerPage(QWidget):
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
         self._update_detail_panel()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+        self._schedule_responsive_refresh()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        bucket = width_breakpoint(self.width(), compact_max=700, medium_max=1160)
+        compact = bucket == "compact"
+        structure_changed = force or bucket != self._responsive_bucket
+        self._responsive_bucket = bucket
+
+        if structure_changed:
+            self.content_splitter.setOrientation(Qt.Orientation.Horizontal)
+
+            while self.toolbar_layout.count():
+                item = self.toolbar_layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.setParent(self.toolbar_card)
+
+            if compact:
+                self.toolbar_layout.addWidget(self.search_input, 0, 0, 1, 5)
+                self.toolbar_layout.addWidget(self.type_filter, 1, 0, 1, 2)
+                self.toolbar_layout.addWidget(self.label_filter, 1, 2, 1, 3)
+                self.toolbar_layout.addWidget(self.category_filter, 2, 0, 1, 3)
+                self.toolbar_layout.addWidget(self.pinned_only_checkbox, 2, 3)
+                self.toolbar_layout.addWidget(self.auto_capture_checkbox, 2, 4)
+                self.toolbar_layout.addWidget(self.action_host, 3, 0, 1, 5)
+            else:
+                self.toolbar_layout.addWidget(self.search_input, 0, 0, 1, 2)
+                self.toolbar_layout.addWidget(self.type_filter, 0, 2)
+                self.toolbar_layout.addWidget(self.label_filter, 0, 3)
+                self.toolbar_layout.addWidget(self.category_filter, 0, 4)
+                self.toolbar_layout.addWidget(self.pinned_only_checkbox, 1, 0)
+                self.toolbar_layout.addWidget(self.auto_capture_checkbox, 1, 1)
+                self.toolbar_layout.addWidget(self.action_host, 2, 0, 1, 5)
+        self._relayout_action_buttons()
+
+    def _relayout_action_buttons(self) -> None:
+        if not hasattr(self, "action_host_layout"):
+            return
+        while self.action_host_layout.count():
+            item = self.action_host_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self.action_host)
+
+        available_width = self.action_host.contentsRect().width() or self.action_host.width() or self.toolbar_card.contentsRect().width()
+        columns = adaptive_grid_columns(
+            available_width,
+            item_widths=[button.sizeHint().width() for button in self._action_buttons],
+            spacing=self.action_host_layout.horizontalSpacing(),
+            min_columns=2,
+        )
+        for index, button in enumerate(self._action_buttons):
+            row = index // columns
+            column = index % columns
+            self.action_host_layout.addWidget(button, row, column)
+        for column in range(columns):
+            self.action_host_layout.setColumnStretch(column, 1)
+
+    def _schedule_responsive_refresh(self) -> None:
+        if self._responsive_refresh_pending:
+            return
+        self._responsive_refresh_pending = True
+        QTimer.singleShot(0, self._run_responsive_refresh)
+
+    def _run_responsive_refresh(self) -> None:
+        self._responsive_refresh_pending = False
+        self._apply_responsive_layout()
 
     def _bootstrap_existing_clipboard(self) -> None:
         QTimer.singleShot(0, self._capture_current_clipboard)
@@ -453,64 +538,6 @@ class ClipboardManagerPage(QWidget):
         self._refresh_label_filter()
         self._refresh_category_filter()
         self._update_detail_panel()
-        QTimer.singleShot(0, self._rebuild_row_action_widgets)
-
-    def _rebuild_row_action_widgets(self) -> None:
-        for proxy_row in range(self.proxy_model.rowCount()):
-            proxy_index = self.proxy_model.index(proxy_row, 0)
-            source_index = self.proxy_model.mapToSource(proxy_index)
-            row = self.model.row_at(source_index.row())
-            if row is None:
-                continue
-            action_index = self.proxy_model.index(proxy_row, 6)
-            self.table_view.setIndexWidget(action_index, self._row_action_widget(row))
-
-    def _row_action_widget(self, row: ClipboardRow) -> QWidget:
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        copy_button = QToolButton()
-        copy_button.setAutoRaise(True)
-        copy_button.setIcon(icon_from_name("copy", self) or self.style().standardIcon(self.style().StandardPixmap.SP_FileIcon))
-        copy_button.setToolTip("Copy item")
-        copy_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._copy_entry(entry_id))
-        layout.addWidget(copy_button)
-
-        pin_button = QToolButton()
-        pin_button.setAutoRaise(True)
-        pin_button.setIcon(
-            icon_from_name("unpin" if row.pinned else "pin", self)
-            or self.style().standardIcon(self.style().StandardPixmap.SP_DialogApplyButton)
-        )
-        pin_button.setToolTip("Unpin item" if row.pinned else "Pin item")
-        pin_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._toggle_pin(entry_id))
-        layout.addWidget(pin_button)
-
-        label_button = QToolButton()
-        label_button.setAutoRaise(True)
-        label_button.setIcon(icon_from_name("tag", self) or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogDetailedView))
-        label_button.setToolTip("Set label")
-        label_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._set_label_for_entry(entry_id))
-        layout.addWidget(label_button)
-
-        category_button = QToolButton()
-        category_button.setAutoRaise(True)
-        category_button.setIcon(icon_from_name("folder", self) or self.style().standardIcon(self.style().StandardPixmap.SP_DirIcon))
-        category_button.setToolTip("Set category")
-        category_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._set_category_for_entry(entry_id))
-        layout.addWidget(category_button)
-
-        delete_button = QToolButton()
-        delete_button.setAutoRaise(True)
-        delete_button.setIcon(icon_from_name("trash", self) or self.style().standardIcon(self.style().StandardPixmap.SP_TrashIcon))
-        delete_button.setToolTip("Delete item")
-        delete_button.clicked.connect(lambda _checked=False, entry_id=row.entry_id: self._delete_entry(entry_id))
-        layout.addWidget(delete_button)
-
-        layout.addStretch(1)
-        return container
 
     def _refresh_label_filter(self) -> None:
         current_label = self.label_filter.currentData()

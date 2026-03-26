@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
 class ConfirmDialog(QDialog):
@@ -13,6 +13,8 @@ class ConfirmDialog(QDialog):
         body: str,
         confirm_text: str = "Continue",
         cancel_text: str = "Cancel",
+        option_text: str | None = None,
+        option_checked: bool = False,
     ):
         super().__init__(
             None,
@@ -45,6 +47,12 @@ class ConfirmDialog(QDialog):
         layout.addWidget(body_label, 1)
 
         actions = QHBoxLayout()
+        self.option_checkbox: QCheckBox | None = None
+        if option_text:
+            self.option_checkbox = QCheckBox(option_text)
+            self.option_checkbox.setChecked(option_checked)
+            actions.addWidget(self.option_checkbox, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+
         actions.addStretch(1)
 
         cancel_button = QPushButton(cancel_text)
@@ -67,6 +75,9 @@ class ConfirmDialog(QDialog):
             rect.moveCenter(center)
             self.move(rect.topLeft())
 
+    def option_state(self) -> bool:
+        return self.option_checkbox.isChecked() if self.option_checkbox is not None else False
+
 
 def confirm_action(
     parent: QWidget | None,
@@ -84,3 +95,26 @@ def confirm_action(
         cancel_text=cancel_text,
     )
     return dialog.exec() == QDialog.DialogCode.Accepted
+
+
+def confirm_action_with_option(
+    parent: QWidget | None,
+    *,
+    title: str,
+    body: str,
+    confirm_text: str = "Continue",
+    cancel_text: str = "Cancel",
+    option_text: str,
+    option_checked: bool = False,
+) -> tuple[bool, bool]:
+    dialog = ConfirmDialog(
+        parent,
+        title=title,
+        body=body,
+        confirm_text=confirm_text,
+        cancel_text=cancel_text,
+        option_text=option_text,
+        option_checked=option_checked,
+    )
+    accepted = dialog.exec() == QDialog.DialogCode.Accepted
+    return accepted, dialog.option_state()

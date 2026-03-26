@@ -26,6 +26,10 @@ from PySide6.QtWidgets import (
 
 from micro_toolkit.core.media_utils import SUPPORTED_IMAGE_FILTER, apply_tag, pil_to_pixmap, safe_output_extension
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.widgets import ScrollSafeComboBox
+
+
+QComboBox = ScrollSafeComboBox
 
 
 def run_image_tagger_task(context, files: list[str], output_dir: str, name: str, date_mode: str, custom_date: str):

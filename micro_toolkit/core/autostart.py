@@ -104,6 +104,9 @@ class AutostartManager:
                 "Label": "com.debeski.microtoolkit",
                 "ProgramArguments": self._launch_args(start_minimized=start_minimized),
                 "RunAtLoad": True,
+                "LimitLoadToSessionType": ["Aqua"],
+                "ProcessType": "Interactive",
+                "WorkingDirectory": str(Path.home()),
             }
             with target.open("wb") as handle:
                 plistlib.dump(payload, handle)
@@ -112,6 +115,13 @@ class AutostartManager:
         target.write_text(command + "\n", encoding="utf-8")
 
     def _launch_args(self, *, start_minimized: bool) -> list[str]:
+        if sys.platform == "darwin":
+            mac_bundle_path = self._mac_bundle_path()
+            if mac_bundle_path is not None:
+                args = ["/usr/bin/open", str(mac_bundle_path), "--args"]
+                if start_minimized:
+                    args.append("--start-minimized")
+                return args
         if getattr(sys, "frozen", False):
             args = [sys.executable]
         else:
@@ -122,3 +132,12 @@ class AutostartManager:
 
     def _launch_command(self, *, start_minimized: bool) -> str:
         return " ".join(shlex.quote(part) for part in self._launch_args(start_minimized=start_minimized))
+
+    def _mac_bundle_path(self) -> Path | None:
+        if sys.platform != "darwin" or not getattr(sys, "frozen", False):
+            return None
+        executable_path = Path(sys.executable).resolve()
+        for parent in executable_path.parents:
+            if parent.suffix == ".app":
+                return parent
+        return None

@@ -22,6 +22,10 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.widgets import ScrollSafeComboBox
+
+
+QComboBox = ScrollSafeComboBox
 
 
 UNDO_FILE = ".micro_undo.json"

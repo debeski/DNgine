@@ -28,6 +28,8 @@ hiddenimports = collect_submodules("micro_toolkit.plugins")
 
 icon_path = project_root / "app.ico"
 exe_icon = str(icon_path) if icon_path.exists() else None
+app_icon_path = project_root / "app.icns"
+app_icon = str(app_icon_path) if app_icon_path.exists() else None
 
 a = Analysis(
     ["micro_toolkit/__main__.py"],
@@ -72,4 +74,11 @@ coll = COLLECT(
     upx=False,
     upx_exclude=[],
     name="micro-toolkit",
+)
+
+app = BUNDLE(
+    coll,
+    name="Micro Toolkit.app",
+    icon=app_icon,
+    bundle_identifier="com.debeski.microtoolkit",
 )

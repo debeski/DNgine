@@ -4,10 +4,13 @@ import json
 import shutil
 from pathlib import Path
 
+from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID
+
 
 DEFAULT_CONFIG = {
     "minimize_to_tray": False,
     "close_to_tray": False,
+    "confirm_on_exit": True,
     "run_on_startup": False,
     "start_minimized": False,
     "appearance_mode": "light",
@@ -22,6 +25,7 @@ DEFAULT_CONFIG = {
     "backup_schedule": "monthly",
     "backup_last_created_at": "",
     "default_output_path": "",
+    "default_start_plugin": DASHBOARD_PLUGIN_ID,
     "language": "en",
     "hotkeys": {},
     "quick_access": [],
@@ -36,6 +40,7 @@ DEFAULT_CONFIG = {
 _BOOL_KEYS = {
     "minimize_to_tray",
     "close_to_tray",
+    "confirm_on_exit",
     "run_on_startup",
     "start_minimized",
     "material_dark",
@@ -44,7 +49,7 @@ _BOOL_KEYS = {
     "high_contrast",
     "developer_mode",
 }
-_STR_KEYS = {"default_output_path", "language", "appearance_mode", "material_theme", "material_color", "backup_schedule", "backup_last_created_at", "activity_dock_state", "activity_dock_mode"}
+_STR_KEYS = {"default_output_path", "default_start_plugin", "language", "appearance_mode", "material_theme", "material_color", "backup_schedule", "backup_last_created_at", "activity_dock_state", "activity_dock_mode"}
 _NUM_KEYS = {"ui_scaling", "density_scale"}
 _DICT_KEYS = {"hotkeys", "collapsed_groups", "plugin_overrides"}
 _LIST_KEYS = {"quick_access"}

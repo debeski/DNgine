@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QPoint, QRect, QEvent, Signal, Qt
 from PySide6.QtGui import QColor, QCursor, QPainter, QPen
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+from PySide6.QtWidgets import QApplication, QAbstractButton, QLabel, QTreeWidget, QWidget
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,7 @@ class InspectorOverlay(QWidget):
 class UIInspector(QObject):
     snapshot_changed = Signal(dict)
     inspect_mode_changed = Signal(bool)
+    text_unlock_changed = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -87,6 +88,7 @@ class UIInspector(QObject):
         self._overlay: InspectorOverlay | None = None
         self._enabled = False
         self._inspect_mode = False
+        self._text_unlock_enabled = False
         self._last_payload: dict[str, object] = {}
 
     def attach_application(self, application: QApplication) -> None:
@@ -108,6 +110,7 @@ class UIInspector(QObject):
         self._enabled = bool(enabled)
         if not self._enabled:
             self.set_inspect_mode(False)
+            self.set_text_unlock_enabled(False)
 
     def inspect_mode(self) -> bool:
         return self._inspect_mode
@@ -125,10 +128,29 @@ class UIInspector(QObject):
     def toggle_inspect_mode(self) -> bool:
         return self.set_inspect_mode(not self._inspect_mode)
 
+    def text_unlock_enabled(self) -> bool:
+        return self._text_unlock_enabled
+
+    def set_text_unlock_enabled(self, enabled: bool) -> bool:
+        target = bool(enabled) and self._enabled and self._application is not None
+        if self._text_unlock_enabled == target:
+            return self._text_unlock_enabled
+        self._text_unlock_enabled = target
+        self._apply_text_unlock_to_all_widgets()
+        self.text_unlock_changed.emit(self._text_unlock_enabled)
+        return self._text_unlock_enabled
+
     def last_snapshot(self) -> dict[str, object]:
         return dict(self._last_payload)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if self._text_unlock_enabled:
+            if event.type() == QEvent.Type.ChildAdded:
+                child = getattr(event, "child", lambda: None)()
+                if isinstance(child, QWidget):
+                    self._apply_text_unlock_widget(child)
+            elif event.type() in {QEvent.Type.Show, QEvent.Type.Polish} and isinstance(watched, QWidget):
+                self._apply_text_unlock_widget(watched)
         if not self._inspect_mode or self._application is None or self._main_window is None:
             return False
         if event.type() == QEvent.Type.KeyPress and getattr(event, "key", lambda: None)() == Qt.Key.Key_Escape:
@@ -139,6 +161,12 @@ class UIInspector(QObject):
 
         widget = self._resolve_target_widget()
         self._highlight_widget(widget)
+
+        if event.type() in {QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick}:
+            button = getattr(event, "button", lambda: None)()
+            if button == Qt.MouseButton.RightButton and widget is not None:
+                if self._navigate_with_secondary_click(widget):
+                    return True
 
         if event.type() in {QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick}:
             button = getattr(event, "button", lambda: None)()
@@ -231,3 +259,68 @@ class UIInspector(QObject):
             parent_chain=parent_chain,
             child_count=len(widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)),
         )
+
+    def _apply_text_unlock_to_all_widgets(self) -> None:
+        if self._application is None:
+            return
+        for widget in self._application.allWidgets():
+            self._apply_text_unlock_widget(widget)
+
+    def _apply_text_unlock_widget(self, root: QWidget) -> None:
+        if isinstance(root, QLabel):
+            self._set_label_text_unlock(root)
+        for label in root.findChildren(QLabel):
+            self._set_label_text_unlock(label)
+
+    def _set_label_text_unlock(self, label: QLabel) -> None:
+        property_name = "_micro_inspector_original_text_flags"
+        if self._text_unlock_enabled:
+            if label.property(property_name) is None:
+                label.setProperty(property_name, label.textInteractionFlags())
+            label.setTextInteractionFlags(
+                label.textInteractionFlags()
+                | Qt.TextInteractionFlag.TextSelectableByMouse
+                | Qt.TextInteractionFlag.TextSelectableByKeyboard
+            )
+            return
+
+        original_flags = label.property(property_name)
+        if original_flags is not None:
+            label.setTextInteractionFlags(original_flags)
+            label.setProperty(property_name, None)
+
+    def _navigate_with_secondary_click(self, widget: QWidget) -> bool:
+        tree = self._find_tree_ancestor(widget)
+        if tree is not None:
+            item = tree.itemAt(tree.viewport().mapFromGlobal(QCursor.pos()))
+            if item is not None:
+                plugin_role = Qt.ItemDataRole.UserRole + 1
+                if item.data(0, plugin_role):
+                    tree.setCurrentItem(item)
+                elif item.childCount() > 0:
+                    item.setExpanded(not item.isExpanded())
+                else:
+                    return False
+                return True
+
+        button = self._find_button_ancestor(widget)
+        if button is not None and button.isEnabled():
+            button.click()
+            return True
+        return False
+
+    def _find_button_ancestor(self, widget: QWidget | None) -> QAbstractButton | None:
+        current = widget
+        while current is not None:
+            if isinstance(current, QAbstractButton):
+                return current
+            current = current.parentWidget()
+        return None
+
+    def _find_tree_ancestor(self, widget: QWidget | None) -> QTreeWidget | None:
+        current = widget
+        while current is not None:
+            if isinstance(current, QTreeWidget):
+                return current
+            current = current.parentWidget()
+        return None

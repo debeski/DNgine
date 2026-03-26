@@ -46,6 +46,7 @@ ICON_CHOICES: tuple[IconChoice, ...] = (
     IconChoice("shield", "Shield", QStyle.StandardPixmap.SP_MessageBoxWarning, "shield.svg"),
     IconChoice("lock", "Lock", QStyle.StandardPixmap.SP_MessageBoxWarning, "lock.svg"),
     IconChoice("terminal", "Terminal", QStyle.StandardPixmap.SP_ComputerIcon, "terminal.svg"),
+    IconChoice("console", "Console", QStyle.StandardPixmap.SP_FileDialogContentsView, "window-dash.svg"),
     IconChoice("plugin", "Plugin", QStyle.StandardPixmap.SP_FileIcon, "plugin.svg"),
     IconChoice("puzzle", "Puzzle", QStyle.StandardPixmap.SP_FileIcon, "puzzle.svg"),
     IconChoice("code", "Code", QStyle.StandardPixmap.SP_FileIcon, "code-slash.svg"),
