@@ -192,7 +192,7 @@ def convert_markdown_to_docx(
     output_path: str | Path,
     *,
     layout_mode: str = "auto",
-    font_name: str = "Dubai",
+    font_name: str = "Amiri",
     image_width_inches: float = 5.4,
     log_cb=None,
     progress_cb=None,

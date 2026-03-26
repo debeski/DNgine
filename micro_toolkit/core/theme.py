@@ -96,7 +96,7 @@ class ThemeManager(QObject):
         super().__init__()
         self.config = config
         self.assets_root = Path(assets_root)
-        self._font_family = "Dubai"
+        self._font_family = "Amiri"
         self._loaded_font_families: list[str] = []
         self._color_key = "pink"
         self._dark_mode = False
@@ -266,7 +266,7 @@ class ThemeManager(QObject):
     def _ensure_font_loaded(self) -> None:
         preferred: list[str] = []
         font_candidates = [
-            self.assets_root / "fonts" / "dubai-VF.ttf",
+            self.assets_root / "fonts" / "Amiri.ttf",
             self.assets_root / "fonts" / "DejaVuSans.ttf",
             self.assets_root / "fonts" / "DejaVuSans-Bold.ttf",
         ]
@@ -279,7 +279,7 @@ class ThemeManager(QObject):
             for family in QFontDatabase.applicationFontFamilies(font_id):
                 if family and family not in preferred:
                     preferred.append(family)
-        for family in ["Dubai", "DejaVu Sans", "Noto Sans Arabic", "Sans Serif"]:
+        for family in ["Amiri", "DejaVu Sans", "Noto Sans Arabic", "Sans Serif"]:
             if family not in preferred:
                 preferred.append(family)
         self._loaded_font_families = preferred

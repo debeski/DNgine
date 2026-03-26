@@ -254,7 +254,7 @@ The shell handles:
 - RTL-aware app chrome
 - plugin metadata localization
 - plugin UI strings through `services.plugin_text(...)`
-- global Dubai-based font stack with fallbacks
+- global Amiri-based font stack with fallbacks
 
 ## Performance Model
 
@@ -788,7 +788,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 | 0.6.3 | Current | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
 | 0.6.2 | Previous milestone | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
 | 0.6.1 | Internal milestone | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
-| 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Dubai font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
+| 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
 | 0.5.2 | Internal milestone | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
 | 0.5.1 | Internal milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
 | 0.5.0 | Stable milestone | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |

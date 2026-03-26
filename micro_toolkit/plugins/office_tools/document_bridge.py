@@ -55,7 +55,7 @@ def markdown_to_docx_task(context, markdown_path: str, output_path: str, layout_
         markdown_path,
         output_path,
         layout_mode=layout_mode,
-        font_name=font_name or "Dubai",
+        font_name=font_name or "Amiri",
         log_cb=context.log,
         progress_cb=context.progress,
     )
@@ -104,7 +104,7 @@ class DocumentBridgePlugin(QtPlugin):
             "tool.doc_bridge.md_to_docx",
             "Markdown To DOCX",
             "Convert a markdown file into a styled DOCX document.",
-            lambda markdown_path, output_path="", output_dir="", layout_mode="auto", font_name="Dubai": _run_headless(
+            lambda markdown_path, output_path="", output_dir="", layout_mode="auto", font_name="Amiri": _run_headless(
                 self.plugin_id,
                 services,
                 task_fn=lambda: markdown_to_docx_task(
@@ -228,7 +228,7 @@ class DocumentBridgePage(QWidget):
         md_form.addRow(self.layout_mode_label, self.layout_mode_combo)
 
         self.font_name_label = QLabel()
-        self.font_name_input = QLineEdit("Dubai")
+        self.font_name_input = QLineEdit("Amiri")
         md_form.addRow(self.font_name_label, self.font_name_input)
         self.options_stack.addWidget(self.md_options)
 
@@ -423,7 +423,7 @@ class DocumentBridgePage(QWidget):
                     source_path,
                     output_path,
                     self.layout_mode_combo.currentData() or "auto",
-                    self.font_name_input.text().strip() or "Dubai",
+                    self.font_name_input.text().strip() or "Amiri",
                 ),
                 on_result=self._handle_result,
                 on_error=self._handle_error,
