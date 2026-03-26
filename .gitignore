@@ -16,12 +16,14 @@ imports/
 .backups/
 .secrets/
 .xpose/
+.agents/
+.tmp-home/
 venv/
 dist/
-*.egg-info/
 build/
 output/
 data/
+*.egg-info/
 
 # Ignore celery-related files
 celerybeat-schedule

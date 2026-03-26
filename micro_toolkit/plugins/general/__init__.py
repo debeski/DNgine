@@ -1,1 +1,0 @@
-"""General Qt plugins."""

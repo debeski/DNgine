@@ -505,18 +505,18 @@ class MicroToolkitWindow(QMainWindow):
         self.top_system_tools.setSpacing(8)
 
         for plugin_id, fallback_icon, fallback_label in (
-            (DASHBOARD_PLUGIN_ID, QStyle.StandardPixmap.SP_DirHomeIcon, "Dashboard"),
-            ("clip_manager", QStyle.StandardPixmap.SP_FileDialogContentsView, "Clipboard"),
+            (DASHBOARD_PLUGIN_ID, QStyle.StandardPixmap.SP_DirHomeIcon, "Dash Hub"),
+            ("clip_snip", QStyle.StandardPixmap.SP_FileDialogContentsView, "Clip Snip"),
             ("workflow_studio", QStyle.StandardPixmap.SP_BrowserReload, "Workflows"),
             ("plugin_manager", QStyle.StandardPixmap.SP_FileIcon, "Plugins"),
-            ("about_center", QStyle.StandardPixmap.SP_FileDialogInfoView, "About"),
-            ("settings_center", QStyle.StandardPixmap.SP_FileDialogDetailedView, "Settings"),
-            (INSPECTOR_PLUGIN_ID, QStyle.StandardPixmap.SP_FileDialogDetailedView, "Inspector"),
+            ("about_info", QStyle.StandardPixmap.SP_FileDialogInfoView, "About Info"),
+            ("command_center", QStyle.StandardPixmap.SP_FileDialogDetailedView, "Command Center"),
+            (INSPECTOR_PLUGIN_ID, QStyle.StandardPixmap.SP_FileDialogDetailedView, "Dev Lab"),
         ):
             button = self._make_tool_button(
                 icon=self._system_component_icon(plugin_id),
                 tooltip=fallback_label,
-                handler=lambda _checked=False, pid=plugin_id: self.open_settings_center() if pid == "settings_center" else (self.open_plugin_manager() if pid == "plugin_manager" else (self.open_inspector_center() if pid == INSPECTOR_PLUGIN_ID else self.open_plugin(pid))),
+                handler=lambda _checked=False, pid=plugin_id: self.open_command_center() if pid == "command_center" else (self.open_plugin_manager() if pid == "plugin_manager" else (self.open_dev_lab() if pid == INSPECTOR_PLUGIN_ID else self.open_plugin(pid))),
                 checkable=True,
             )
             button.setIconSize(QSize(20, 20))
@@ -1123,13 +1123,13 @@ class MicroToolkitWindow(QMainWindow):
         tr = self.services.i18n.tr
         self.search_input.setPlaceholderText(tr("shell.search", "Search..."))
         for plugin_id, label in (
-            (DASHBOARD_PLUGIN_ID, tr("shell.dashboard", "Dashboard")),
-            ("clip_manager", tr("shell.clipboard", "Clipboard")),
+            (DASHBOARD_PLUGIN_ID, tr("shell.dashboard", "Dash Hub")),
+            ("clip_snip", tr("shell.clipboard", "Clip Snip")),
             ("workflow_studio", tr("shell.workflows", "Workflows")),
             ("plugin_manager", tr("shell.plugins", "Plugins")),
-            ("about_center", tr("shell.about", "About")),
-            ("settings_center", tr("shell.settings", "Settings")),
-            (INSPECTOR_PLUGIN_ID, tr("shell.inspector", "Inspector")),
+            ("about_info", tr("shell.about", "About Info")),
+            ("command_center", tr("shell.settings", "Command Center")),
+            (INSPECTOR_PLUGIN_ID, tr("shell.inspector", "Dev Lab")),
         ):
             button = self.system_toolbar_buttons.get(plugin_id)
             if button is not None:
@@ -1160,10 +1160,10 @@ class MicroToolkitWindow(QMainWindow):
 
     def _register_shortcuts(self) -> None:
         self.services.shortcut_manager.register_action("focus_search", "Focus search", "Ctrl+K", self.focus_search)
-        self.services.shortcut_manager.register_action("open_settings", "Open settings", "Ctrl+,", self.open_settings_center)
+        self.services.shortcut_manager.register_action("open_settings", "Open settings", "Ctrl+,", self.open_command_center)
         self.services.shortcut_manager.register_action("open_workflows", "Open workflows", "Ctrl+Shift+W", lambda: self.open_plugin("workflow_studio"))
-        self.services.shortcut_manager.register_action("open_clipboard", "Open clipboard", "Ctrl+Shift+V", lambda: self.open_plugin("clip_manager"))
-        self.services.shortcut_manager.register_action("open_inspector", "Open inspector", "Ctrl+Shift+I", self.open_inspector_center)
+        self.services.shortcut_manager.register_action("open_clipboard", "Open clipboard", "Ctrl+Shift+V", lambda: self.open_plugin("clip_snip"))
+        self.services.shortcut_manager.register_action("open_inspector", "Open inspector", "Ctrl+Shift+I", self.open_dev_lab)
         self.services.shortcut_manager.register_action(
             "show_clipboard_quick_panel",
             "Quick clipboard history",
@@ -1180,30 +1180,36 @@ class MicroToolkitWindow(QMainWindow):
         self.search_input.selectAll()
 
     def open_plugin_manager(self) -> None:
-        self.open_plugin("settings_center")
-        settings_page = self._plugin_content_widget("settings_center")
+        self.open_plugin("command_center")
+        settings_page = self._plugin_content_widget("command_center")
         if settings_page is not None:
             open_plugins_tab = getattr(settings_page, "open_plugins_tab", None)
             if callable(open_plugins_tab):
                 open_plugins_tab()
-        self._sync_system_toolbar_selection("settings_center")
+        self._sync_system_toolbar_selection("command_center")
 
-    def open_settings_center(self) -> None:
-        self.open_plugin("settings_center")
-        settings_page = self._plugin_content_widget("settings_center")
+    def open_command_center(self) -> None:
+        self.open_plugin("command_center")
+        settings_page = self._plugin_content_widget("command_center")
         if settings_page is not None:
             open_general_tab = getattr(settings_page, "open_general_tab", None)
             if callable(open_general_tab):
                 open_general_tab()
-        self._sync_system_toolbar_selection("settings_center")
+        self._sync_system_toolbar_selection("command_center")
 
-    def open_inspector_center(self) -> None:
+    def open_settings_center(self) -> None:
+        self.open_command_center()
+
+    def open_dev_lab(self) -> None:
         if not self.services.developer_mode_enabled():
             self.services.logger.set_status(self.services.i18n.tr("shell.inspector.locked", "Enable developer mode to use the inspector."))
             return {"opened": False, "reason": "developer_mode_disabled"}
         self.open_plugin(INSPECTOR_PLUGIN_ID)
         self._sync_system_toolbar_selection(INSPECTOR_PLUGIN_ID)
         return {"opened": True}
+
+    def open_inspector_center(self) -> None:
+        return self.open_dev_lab()
 
     def toggle_activity_dock(self):
         return self.toggle_dock_mode("activity")
@@ -1376,21 +1382,21 @@ class MicroToolkitWindow(QMainWindow):
     def _system_component_icon(self, plugin_id: str) -> QIcon:
         named = {
             DASHBOARD_PLUGIN_ID: "dashboard",
-            "clip_manager": "clipboard",
+            "clip_snip": "clipboard",
             "workflow_studio": "workflow",
             "plugin_manager": "plugin",
-            "about_center": "info",
-            "settings_center": "settings",
+            "about_info": "info",
+            "command_center": "settings",
             INSPECTOR_PLUGIN_ID: "inspect",
         }
         if plugin_id in named:
             fallback_map = {
                 DASHBOARD_PLUGIN_ID: QStyle.StandardPixmap.SP_DirHomeIcon,
-                "clip_manager": QStyle.StandardPixmap.SP_FileDialogContentsView,
+                "clip_snip": QStyle.StandardPixmap.SP_FileDialogContentsView,
                 "workflow_studio": QStyle.StandardPixmap.SP_BrowserReload,
                 "plugin_manager": QStyle.StandardPixmap.SP_FileIcon,
-                "about_center": QStyle.StandardPixmap.SP_FileDialogInfoView,
-                "settings_center": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+                "about_info": QStyle.StandardPixmap.SP_FileDialogInfoView,
+                "command_center": QStyle.StandardPixmap.SP_FileDialogDetailedView,
                 INSPECTOR_PLUGIN_ID: QStyle.StandardPixmap.SP_FileDialogDetailedView,
             }
             return self._named_icon(
@@ -1399,10 +1405,10 @@ class MicroToolkitWindow(QMainWindow):
             )
         mapping = {
             DASHBOARD_PLUGIN_ID: QStyle.StandardPixmap.SP_DirHomeIcon,
-            "clip_manager": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "clip_snip": QStyle.StandardPixmap.SP_FileDialogContentsView,
             "workflow_studio": QStyle.StandardPixmap.SP_BrowserReload,
-            "about_center": QStyle.StandardPixmap.SP_FileDialogInfoView,
-            "settings_center": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            "about_info": QStyle.StandardPixmap.SP_FileDialogInfoView,
+            "command_center": QStyle.StandardPixmap.SP_FileDialogDetailedView,
             INSPECTOR_PLUGIN_ID: QStyle.StandardPixmap.SP_FileDialogDetailedView,
         }
         return self.style().standardIcon(mapping.get(plugin_id, QStyle.StandardPixmap.SP_FileIcon))
@@ -1464,8 +1470,8 @@ class MicroToolkitWindow(QMainWindow):
 
     def _sync_system_toolbar_selection(self, plugin_id: str | None) -> None:
         active_id = plugin_id if plugin_id in SYSTEM_TOOLBAR_PLUGIN_IDS else None
-        if plugin_id == "settings_center":
-            settings_page = self._plugin_content_widget("settings_center")
+        if plugin_id == "command_center":
+            settings_page = self._plugin_content_widget("command_center")
             current_section_id = getattr(settings_page, "current_section_id", None)
             if callable(current_section_id) and current_section_id() == "plugins":
                 active_id = "plugin_manager"
@@ -1485,7 +1491,7 @@ class MicroToolkitWindow(QMainWindow):
         for plugin_id, button in self.system_toolbar_buttons.items():
             button.setVisible(self._system_toolbar_button_visible(plugin_id))
         if not self._system_toolbar_button_visible(INSPECTOR_PLUGIN_ID) and self.current_plugin_id == INSPECTOR_PLUGIN_ID:
-            self.open_settings_center()
+            self.open_command_center()
         self._sync_system_toolbar_selection(self.current_plugin_id)
 
     def _plugin_icon_candidates(self, spec: PluginSpec) -> list[Path]:
@@ -1516,11 +1522,11 @@ class MicroToolkitWindow(QMainWindow):
 
     def _default_plugin_icon(self, spec: PluginSpec) -> QIcon | None:
         by_id = {
-            "welcome_overview": "home",
-            "clip_manager": "clipboard",
+            "dash_hub": "home",
+            "clip_snip": "clipboard",
             "workflow_studio": "workflow",
-            "about_center": "info",
-            "settings_center": "settings",
+            "about_info": "info",
+            "command_center": "settings",
             INSPECTOR_PLUGIN_ID: "inspect",
         }
         if spec.plugin_id in by_id:
@@ -1617,7 +1623,7 @@ class MicroToolkitWindow(QMainWindow):
                     f"Custom plugin '{spec.plugin_id}' was quarantined after repeated failures.",
                     "WARNING",
                 )
-                self.reload_plugin_catalog(preferred_plugin_id="settings_center")
+                self.reload_plugin_catalog(preferred_plugin_id="command_center")
         self.page_stack.setCurrentIndex(0)
         self.page_title.setText(spec.localized_name(self.services.i18n.current_language()))
         self.page_description.setText(message)

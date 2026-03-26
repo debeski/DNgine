@@ -72,7 +72,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Chart Builder",
         "Shape workbook data, build charts, and return a result table.",
         "chart_builder",
-        "micro_toolkit.plugins.core_tools.chart_builder",
+        "micro_toolkit.plugins.data_tools.chart_builder",
         "run_chart_builder_task",
         argument_adapter=chart_builder_payload,
     )
@@ -81,7 +81,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Quick Analytics",
         "Backward-compatible alias for Chart Builder.",
         "chart_builder",
-        "micro_toolkit.plugins.core_tools.chart_builder",
+        "micro_toolkit.plugins.data_tools.chart_builder",
         "run_chart_builder_task",
         argument_adapter=chart_builder_payload,
     )
@@ -123,7 +123,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Folder Mapper",
         "Map file metadata from a folder tree into an Excel workbook.",
         "folder_mapper",
-        "micro_toolkit.plugins.core_tools.folder_mapper",
+        "micro_toolkit.plugins.data_tools.folder_mapper",
         "map_folder_contents_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -135,7 +135,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Data-Link Auditor",
         "Audit workbook-linked filenames against one or more source folders.",
         "data_link_auditor",
-        "micro_toolkit.plugins.core_tools.data_link_auditor",
+        "micro_toolkit.plugins.data_tools.data_link_auditor",
         "audit_data_links_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -151,7 +151,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Sequence Auditor",
         "Audit a folder listing or workbook column for sequence gaps.",
         "sequence_auditor",
-        "micro_toolkit.plugins.core_tools.sequence_auditor",
+        "micro_toolkit.plugins.data_tools.sequence_auditor",
         "sequence_auditor_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -163,7 +163,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Deep-Scan Auditor (Excel)",
         "Audit workbook rows for duplicate combinations.",
         "deep_scan_auditor",
-        "micro_toolkit.plugins.core_tools.deep_scan_auditor",
+        "micro_toolkit.plugins.data_tools.deep_scan_auditor",
         "audit_excel_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -175,7 +175,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Deep-Scan Auditor (Folder)",
         "Audit folder trees for duplicate files.",
         "deep_scan_auditor",
-        "micro_toolkit.plugins.core_tools.deep_scan_auditor",
+        "micro_toolkit.plugins.data_tools.deep_scan_auditor",
         "audit_folder_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -327,7 +327,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         if clipboard is not None:
             clipboard.setText(target.content)
             copied = True
-        services.record_run("clip_manager", "SUCCESS", f"Clipboard entry {target.entry_id} copied")
+        services.record_run("clip_snip", "SUCCESS", f"Clipboard entry {target.entry_id} copied")
         return {
             "entry_id": target.entry_id,
             "content_type": target.content_type,
@@ -340,7 +340,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         store = ClipboardStore(services.database_path)
         count = len(store.list_entries())
         store.clear_entries()
-        services.record_run("clip_manager", "SUCCESS", f"Cleared {count} clipboard entrie(s)")
+        services.record_run("clip_snip", "SUCCESS", f"Cleared {count} clipboard entrie(s)")
         return {"cleared": count}
 
     registry.register(

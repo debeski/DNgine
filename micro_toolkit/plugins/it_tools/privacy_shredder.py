@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import shutil
+import re
+from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -13,47 +17,61 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
-    QSlider,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
+    QListWidget,
 )
 
 from micro_toolkit.core.plugin_api import QtPlugin
-from micro_toolkit.core.widgets import ScrollSafeSlider
 
 
-QSlider = ScrollSafeSlider
+def run_shred_task(context, services, plugin_id: str, paths: list[Path], passes: int):
+    def _pt(key: str, default: str, **kwargs) -> str:
+        return services.plugin_text(plugin_id, key, default, **kwargs)
 
+    def _ensure_western(text: str) -> str:
+        eastern = "٠١٢٣٤٥٦٧٨٩"
+        western = "0123456789"
+        trans = str.maketrans(eastern, western)
+        return text.translate(trans)
 
-def secure_shred_task(context, file_path: str, passes: int):
-    size = os.path.getsize(file_path)
-    context.log(
-        f"Starting {passes}-pass shred on '{os.path.basename(file_path)}' ({size} bytes)..."
-    )
+    total = len(paths)
+    context.log(_pt("log.start", "Starting secure shredding of {count} items with {passes} passes...", count=_ensure_western(str(total)), passes=_ensure_western(str(passes))))
+    
+    for i, path in enumerate(paths, 1):
+        if not path.exists():
+            context.log(_pt("log.not_found", "Skipping non-existent path: {path}", path=str(path)), "WARNING")
+            continue
+            
+        context.log(_pt("log.shredding", "Shredding: {name}", name=path.name))
+        try:
+            if path.is_file():
+                length = path.stat().st_size
+                with open(path, "wb") as f:
+                    for _ in range(passes):
+                        f.seek(0)
+                        f.write(os.urandom(length))
+                        f.flush()
+                        os.fsync(f.fileno())
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+            context.log(_pt("log.success", "Permanently deleted: {name}", name=path.name))
+        except Exception as e:
+            context.log(_pt("log.error", "Failed to shred {name}: {error}", name=path.name, error=str(e)), "ERROR")
+            
+        context.progress(i / total)
 
-    with open(file_path, "ba+", buffering=0) as handle:
-        for current_pass in range(passes):
-            handle.seek(0)
-            handle.write(os.urandom(size))
-            context.progress((current_pass + 1) / float(passes))
-
-    directory = os.path.dirname(file_path)
-    random_name = os.urandom(12).hex()
-    random_path = os.path.join(directory, random_name)
-    os.rename(file_path, random_path)
-    os.remove(random_path)
-    context.log("File shredded and deleted successfully.")
-    return {
-        "file_name": os.path.basename(file_path),
-        "passes": passes,
-    }
+    context.log(_pt("log.done", "Privacy shredding operation complete."))
+    return {"shredded_count": _ensure_western(str(total))}
 
 
 class PrivacyShredderPlugin(QtPlugin):
-    plugin_id = "shredder"
-    name = "Privacy Data Shredder"
-    description = "Overwrite a file with random bytes, rename it, and delete it after explicit confirmation."
-    category = "IT Toolkit"
+    plugin_id = "privacy_shred"
+    name = "Privacy Shredder"
+    description = "Securely wipe files and directories by overwriting them multiple times before deletion."
+    category = "IT Utilities"
 
     def create_widget(self, services) -> QWidget:
         return PrivacyShredderPage(services, self.plugin_id)
@@ -64,136 +82,134 @@ class PrivacyShredderPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self._paths: list[Path] = []
         self._build_ui()
+        self.services.i18n.language_changed.connect(self._refresh)
+
+    def _pt(self, key: str, default: str, **kwargs) -> str:
+        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 28, 28, 28)
-        layout.setSpacing(16)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(28, 28, 28, 28)
+        self.main_layout.setSpacing(16)
 
-        title = QLabel("Privacy Data Shredder")
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #8a1f11;")
-        layout.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #b71c1c;")
+        self.main_layout.addWidget(self.title_label)
 
-        description = QLabel(
-            "This permanently destroys a file by overwriting it with random bytes before deletion. Use it carefully."
-        )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #6a382f;")
-        layout.addWidget(description)
+        self.desc_label = QLabel()
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
+        self.main_layout.addWidget(self.desc_label)
 
-        file_row = QHBoxLayout()
-        file_row.setSpacing(10)
-        self.file_input = QLineEdit()
-        self.file_input.setPlaceholderText("Select a file to shred...")
-        file_row.addWidget(self.file_input, 1)
-        browse_button = QPushButton("Browse")
-        browse_button.clicked.connect(self._browse_file)
-        file_row.addWidget(browse_button)
-        layout.addLayout(file_row)
+        list_header = QHBoxLayout()
+        self.queue_label = QLabel()
+        self.queue_label.setStyleSheet("font-weight: 600; color: #10232c;")
+        list_header.addWidget(self.queue_label)
+        list_header.addStretch()
+        
+        self.add_file_btn = QPushButton()
+        self.add_file_btn.clicked.connect(self._add_files)
+        list_header.addWidget(self.add_file_btn)
+        
+        self.add_dir_btn = QPushButton()
+        self.add_dir_btn.clicked.connect(self._add_dir)
+        list_header.addWidget(self.add_dir_btn)
+        
+        self.clear_btn = QPushButton()
+        self.clear_btn.clicked.connect(self._clear_queue)
+        list_header.addWidget(self.clear_btn)
+        self.main_layout.addLayout(list_header)
 
-        passes_card = QFrame()
-        passes_card.setStyleSheet(
-            "QFrame { background: #fff7f2; border: 1px solid #efd3c9; border-radius: 14px; }"
-        )
-        passes_layout = QVBoxLayout(passes_card)
-        passes_layout.setContentsMargins(16, 14, 16, 14)
-        passes_layout.setSpacing(8)
+        self.path_list = QListWidget()
+        self.main_layout.addWidget(self.path_list, 1)
 
-        passes_title = QLabel("Overwrite Passes")
-        passes_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #6a2218;")
-        passes_layout.addWidget(passes_title)
-
-        slider_row = QHBoxLayout()
-        slider_row.setSpacing(10)
-        self.passes_slider = QSlider(Qt.Orientation.Horizontal)
-        self.passes_slider.setRange(1, 35)
-        self.passes_slider.setValue(3)
-        self.passes_slider.valueChanged.connect(self._sync_passes_label)
-        slider_row.addWidget(self.passes_slider, 1)
-
-        self.passes_value_label = QLabel("3")
-        self.passes_value_label.setFixedWidth(30)
-        slider_row.addWidget(self.passes_value_label)
-        passes_layout.addLayout(slider_row)
-
-        note = QLabel("Higher pass counts increase runtime substantially.")
-        note.setWordWrap(True)
-        note.setStyleSheet("font-size: 12px; color: #7c5c57;")
-        passes_layout.addWidget(note)
-        layout.addWidget(passes_card)
+        pass_row = QHBoxLayout()
+        self.passes_label_widget = QLabel()
+        pass_row.addWidget(self.passes_label_widget)
+        self.passes_input = QSpinBox()
+        self.passes_input.setRange(1, 35)
+        self.passes_input.setValue(3)
+        pass_row.addWidget(self.passes_input)
+        pass_row.addStretch()
+        self.main_layout.addLayout(pass_row)
 
         controls = QHBoxLayout()
-        controls.setSpacing(12)
-        self.run_button = QPushButton("Shred File")
-        self.run_button.setStyleSheet(
-            "QPushButton { background: #b63f26; color: white; border-radius: 12px; padding: 10px 14px; font-weight: 700; }"
-            "QPushButton:hover { background: #9e341e; }"
-            "QPushButton:disabled { background: #d79a8b; }"
-        )
+        self.run_button = QPushButton()
+        self.run_button.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 8px 16px;")
         self.run_button.clicked.connect(self._run)
-        controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
+        controls.addWidget(self.run_button)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         controls.addWidget(self.progress, 1)
-        layout.addLayout(controls)
-
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fff7f2; border: 1px solid #efd3c9; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
-        summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel("Choose a file to shred.")
-        self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #6a382f;")
-        summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        self.main_layout.addLayout(controls)
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
-        self.output.setPlaceholderText("Shred activity will appear here.")
-        layout.addWidget(self.output, 1)
+        self.main_layout.addWidget(self.output, 1)
+        
+        self._refresh()
 
-    def _sync_passes_label(self, value: int) -> None:
-        self.passes_value_label.setText(str(value))
+    def _refresh(self) -> None:
+        self.title_label.setText(self._pt("title", "Privacy Shredder"))
+        self.desc_label.setText(self._pt("description", "Permanently destroy sensitive files. Warning: Data deleted this way cannot be recovered even with specialized forensics software."))
+        self.queue_label.setText(self._pt("queue.label", "Shredding Queue"))
+        self.add_file_btn.setText(self._pt("button.add_files", "Add Files"))
+        self.add_dir_btn.setText(self._pt("button.add_folder", "Add Folder"))
+        self.clear_btn.setText(self._pt("button.clear", "Clear"))
+        self.passes_label_widget.setText(self._pt("passes.label", "Overwriting Passes:"))
+        self.run_button.setText(self._pt("button.run", "Wipe Selected Data"))
+        self.output.setPlaceholderText(self._pt("output.placeholder", "Operation logs will appear here..."))
 
-    def _browse_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select File To Shred",
-            str(self.services.default_output_path()),
-            "All Files (*)",
-        )
-        if file_path:
-            self.file_input.setText(file_path)
+    def _add_files(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(self, self._pt("dialog.select_files", "Select Files to Shred"))
+        if files:
+            for f in files:
+                p = Path(f)
+                if p not in self._paths:
+                    self._paths.append(p)
+                    self.path_list.addItem(str(p))
+
+    def _add_dir(self) -> None:
+        dir_path = QFileDialog.getExistingDirectory(self, self._pt("dialog.select_folder", "Select Folder to Shred"))
+        if dir_path:
+            p = Path(dir_path)
+            if p not in self._paths:
+                self._paths.append(p)
+                self.path_list.addItem(str(p))
+
+    def _clear_queue(self) -> None:
+        self._paths.clear()
+        self.path_list.clear()
 
     def _run(self) -> None:
-        file_path = self.file_input.text().strip()
-        if not file_path or not os.path.exists(file_path):
-            QMessageBox.warning(self, "Missing Input", "Choose a valid file to shred.")
+        if not self._paths:
+            QMessageBox.information(self, self._pt("dialog.empty.title", "Queue Empty"), self._pt("dialog.empty.body", "Please add files or folders to shred first."))
             return
 
-        answer = QMessageBox.warning(
+        confirm = QMessageBox.critical(
             self,
-            "Critical Warning",
-            "This will permanently overwrite and delete the selected file. Recovery should be considered impossible.\n\nDo you want to continue?",
+            self._pt("dialog.confirm.title", "Final Warning"),
+            self._pt("dialog.confirm.body", "Are you absolutely sure? This will IRREVERSIBLY destroy {count} items. This cannot be undone.", count=str(len(self._paths))),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
 
         self.run_button.setEnabled(False)
-        self.progress.setValue(0)
+        self.add_file_btn.setEnabled(False)
+        self.add_dir_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText("Shredding file...")
-
-        passes = int(self.passes_slider.value())
+        
+        passes = self.passes_input.value()
+        
         self.services.run_task(
-            lambda context: secure_shred_task(context, file_path, passes),
+            lambda context: run_shred_task(context, self.services, self.plugin_id, self._paths, passes),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
@@ -204,26 +220,17 @@ class PrivacyShredderPage(QWidget):
         self.progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def _handle_result(self, payload: object) -> None:
-        result = dict(payload)
-        self.file_input.clear()
-        self.summary_label.setText(
-            f"Shredded {result['file_name']} using {result['passes']} overwrite passes."
-        )
-        self.output.setPlainText(
-            f"File shredded successfully.\nFile: {result['file_name']}\nPasses: {result['passes']}"
-        )
-        self.services.record_run(
-            self.plugin_id,
-            "SUCCESS",
-            f"Shredded {result['file_name']} with {result['passes']} passes",
-        )
+        self._clear_queue()
+        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("log.done", "Privacy shredding operation complete."))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", "Unknown shredder error") if isinstance(payload, dict) else str(payload)
-        self.output.setPlainText(message)
-        self.summary_label.setText(message)
+        message = payload.get("message", "Unknown shred error") if isinstance(payload, dict) else str(payload)
+        self.output.appendPlainText(f"\nERROR: {message}")
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log("Privacy shredder failed.", "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
+        self.add_file_btn.setEnabled(True)
+        self.add_dir_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+        self.progress.setValue(100)

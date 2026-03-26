@@ -60,11 +60,11 @@ class TrayManager:
         menu.addAction(quick_clipboard_action)
 
         clipboard_action = QAction(tr("tray.menu.clipboard", "Clipboard"), menu)
-        clipboard_action.triggered.connect(lambda: self._window.open_plugin("clip_manager"))
+        clipboard_action.triggered.connect(lambda: self._window.open_plugin("clip_snip"))
         menu.addAction(clipboard_action)
 
         settings_action = QAction(tr("tray.menu.settings", "Settings"), menu)
-        settings_action.triggered.connect(lambda: self._window.open_plugin("settings_center"))
+        settings_action.triggered.connect(lambda: self._window.open_plugin("command_center"))
         menu.addAction(settings_action)
 
         workflows_action = QAction(tr("tray.menu.workflows", "Workflows"), menu)

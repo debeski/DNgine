@@ -6,26 +6,8 @@
     "custom"
   ],
   "files": {
-    "about_center.py": {
-      "sha256": "0e0fcd02e2972ee5582650e0b5ae7810f16d79194ca9c6c0e3c75f0bd4ed05d7",
-      "plugins": [
-        {
-          "plugin_id": "about_center",
-          "class_name": "AboutCenterPlugin"
-        }
-      ]
-    },
-    "clipboard_manager.py": {
-      "sha256": "668a896f060ef74f10ac3b4a888d25f77ac3cfd683df98989670dfbd78dc461b",
-      "plugins": [
-        {
-          "plugin_id": "clip_manager",
-          "class_name": "ClipboardManagerPlugin"
-        }
-      ]
-    },
-    "core_tools/chart_builder.py": {
-      "sha256": "fe8a6c47a8b76cc9038d2e71d69efb47fa585283af67ac25556dc5e764de5940",
+    "data_tools/chart_builder.py": {
+      "sha256": "11aada4600e8d2b534b40de030164eb105576556cf7ffdf25e3572f7d2cb728e",
       "plugins": [
         {
           "plugin_id": "chart_builder",
@@ -33,8 +15,8 @@
         }
       ]
     },
-    "core_tools/data_link_auditor.py": {
-      "sha256": "8bd3284a55d6917e157525b141612fe2eaa1f3d5a4b1daafb3956366ecef87f3",
+    "data_tools/data_link_auditor.py": {
+      "sha256": "309cd4309ca01ae05dd9a14608ec5c2f9a2fb44889cc3fd40774b59046452a6f",
       "plugins": [
         {
           "plugin_id": "data_link_auditor",
@@ -42,8 +24,8 @@
         }
       ]
     },
-    "core_tools/deep_scan_auditor.py": {
-      "sha256": "be2014e502d349cc8e3b872a409b569d5306bd1fe38b3ab8d8e4739993f7c7ba",
+    "data_tools/deep_scan_auditor.py": {
+      "sha256": "dd3fe3a26ad9ca762c4cbc93f79f7bf304cc1124a0e8e60d009a3764cdd8efa4",
       "plugins": [
         {
           "plugin_id": "deep_scan_auditor",
@@ -51,8 +33,8 @@
         }
       ]
     },
-    "core_tools/folder_mapper.py": {
-      "sha256": "b97a33a430bea24c88be2258d169e817498c1a9de51c9392c57f24051b88e1cf",
+    "data_tools/folder_mapper.py": {
+      "sha256": "3333fb3de430fd8f536c575aaa0c3238fd56ec3758858c84226178bc9c431f36",
       "plugins": [
         {
           "plugin_id": "folder_mapper",
@@ -60,8 +42,8 @@
         }
       ]
     },
-    "core_tools/sequence_auditor.py": {
-      "sha256": "86e3e589a4cdd940e5640d1c1e0e5537608c1e37352eceba8f8d159f73470bce",
+    "data_tools/sequence_auditor.py": {
+      "sha256": "378f36691723f13c9430209c59e799509241442112d88f05797476ce5a95ca50",
       "plugins": [
         {
           "plugin_id": "sequence_auditor",
@@ -70,7 +52,7 @@
       ]
     },
     "file_tools/batch_renamer.py": {
-      "sha256": "d63312004b81628921181fb30e53bd1155f8ae872ff609e1cc1bf158c42ee321",
+      "sha256": "142d96cbc750776d3c7757eb739567c7c14a53d8e34f0b19032c517faa41ea94",
       "plugins": [
         {
           "plugin_id": "batch_renamer",
@@ -79,7 +61,7 @@
       ]
     },
     "file_tools/deep_searcher.py": {
-      "sha256": "03e615f1ef406300cfecbcd40494c02b348744bca83259b57b9ef075dbb99c3a",
+      "sha256": "588e349feed64b43912963907cc2a6cdb7df6af7a57b061937d267541bee5cfb",
       "plugins": [
         {
           "plugin_id": "deep_searcher",
@@ -88,7 +70,7 @@
       ]
     },
     "file_tools/smart_organizer.py": {
-      "sha256": "5850a3a769a3a091fc00d9ac29d4e48711992e8e7740ca3ed8db776edb7dd466",
+      "sha256": "040ce84b28836d046173bb77c5f996658f626037489e46d2a5690f2623c8cbad",
       "plugins": [
         {
           "plugin_id": "smart_org",
@@ -97,7 +79,7 @@
       ]
     },
     "file_tools/usage_analyzer.py": {
-      "sha256": "1a5697a99a0740296c5a398be7bfed094fdf9a3e25daa03f5fe4f37dd8e13cf4",
+      "sha256": "ab649f4a40f615983d600ca01d76df661e72da472d7ecee0d15c0882c21a5cb3",
       "plugins": [
         {
           "plugin_id": "usage_analyzer",
@@ -105,26 +87,8 @@
         }
       ]
     },
-    "general/welcome.py": {
-      "sha256": "e683eb53dfbcb1afd48dcc1807ee17eaf4aeb24f679f10e2ce3991c81719bc52",
-      "plugins": [
-        {
-          "plugin_id": "welcome_overview",
-          "class_name": "WelcomeOverviewPlugin"
-        }
-      ]
-    },
-    "inspector_center.py": {
-      "sha256": "f97bb8b9474c89b569be2f72553fcf66b430af7ebb4bdf4d8e8a124fa7de01fa",
-      "plugins": [
-        {
-          "plugin_id": "inspector_center",
-          "class_name": "InspectorCenterPlugin"
-        }
-      ]
-    },
     "it_tools/credential_scanner.py": {
-      "sha256": "81acfe4b73ac1edd7902a0e5fdb2db1532458d02807c58d4a767cc600fdd32ba",
+      "sha256": "6007b0036d7df894e49121e89b87ceae88671266ecf68160c65f096ba58d3c07",
       "plugins": [
         {
           "plugin_id": "cred_scanner",
@@ -133,7 +97,7 @@
       ]
     },
     "it_tools/network_scanner.py": {
-      "sha256": "6a126a2f2e19b9f9bb9d5eba57fe99439b757941381f43ffcda4471f371378ed",
+      "sha256": "21f64f8a419edea8f4261cf0e592a35712f55acc971e388b11405e7a892e9ba2",
       "plugins": [
         {
           "plugin_id": "net_scan",
@@ -142,16 +106,16 @@
       ]
     },
     "it_tools/privacy_shredder.py": {
-      "sha256": "fde4c8be488f9c20748a736d70de7d34b1c34ff278c52842e138a1c13d713839",
+      "sha256": "a55e1c107afcc8dd731f446d87b1a543d7b7194e28fb6c3f2f27762fbbb01225",
       "plugins": [
         {
-          "plugin_id": "shredder",
+          "plugin_id": "privacy_shred",
           "class_name": "PrivacyShredderPlugin"
         }
       ]
     },
     "it_tools/system_audit.py": {
-      "sha256": "9d94ad191d9473d7b201be23e89bab082eeea9c1120dc9a0dfc8d4fb0c2d26ae",
+      "sha256": "4a177513afb5592d2444526e76d97f449851bb220e5d1f53972ea3f6cede7316",
       "plugins": [
         {
           "plugin_id": "sys_audit",
@@ -160,7 +124,7 @@
       ]
     },
     "it_tools/wifi_profiles.py": {
-      "sha256": "e2e4091797dd771a13ecbf6b14da38053b9808d5743ad8884a0bdfbddc60fa0d",
+      "sha256": "b1d9031a803a69dcd13f69f3b87f4dcca8ea0944e740e55a13882097497cf747",
       "plugins": [
         {
           "plugin_id": "wifi_profiles",
@@ -178,7 +142,7 @@
       ]
     },
     "media_tools/image_tagger.py": {
-      "sha256": "d7a35d13c74a98269ac645c7877cd934259b15cea4067d9baa2770783367afb5",
+      "sha256": "49bdec8c52999202f1d4d95397d34fb08772afe4b0bd4279cc96e96c7829b408",
       "plugins": [
         {
           "plugin_id": "tagger",
@@ -187,7 +151,7 @@
       ]
     },
     "media_tools/image_transformer.py": {
-      "sha256": "8a32458f0988ab6f83000a0cbf105eda3fbe46fcf9cc5b73b761c813c66c8d6f",
+      "sha256": "8b04a25945e105593ffca9ca589848029a7b12971446ae1ae567992d15824f2f",
       "plugins": [
         {
           "plugin_id": "img_trans",
@@ -196,7 +160,7 @@
       ]
     },
     "office_tools/cross_joiner.py": {
-      "sha256": "b08756409d30532c708f61e79b4fd2902127d740d64eb7286d0d1048e945f566",
+      "sha256": "bee4006b6bf7a9889a849415a4101be8a0bad9fa02446ea25c8fec5aa2577aa1",
       "plugins": [
         {
           "plugin_id": "cross_joiner",
@@ -205,7 +169,7 @@
       ]
     },
     "office_tools/data_cleaner.py": {
-      "sha256": "0617568b83d34a331c4053f2d35945d51a88ddc9d8f96b54f529471b7367652a",
+      "sha256": "80f5d0072e68d05e394a23a084692ce436393272e648a4f00e355000f484d3bc",
       "plugins": [
         {
           "plugin_id": "cleaner",
@@ -214,7 +178,7 @@
       ]
     },
     "office_tools/document_bridge.py": {
-      "sha256": "55ece6b72e27f62d45e01aa3db87a383108edf3f6f5a436206b9e0444fdad59a",
+      "sha256": "abc2040a61d216f00d45274bde0e26657cebf4b434bdfcdc559d1e5f65c5f5ca",
       "plugins": [
         {
           "plugin_id": "doc_bridge",
@@ -223,7 +187,7 @@
       ]
     },
     "office_tools/pdf_suite.py": {
-      "sha256": "cc465ad235496b7bd4d882f60864f880ed3dee52eeef9af1860a2ac8adc0bc7b",
+      "sha256": "7f7845d0f4b2254c98e91f3b997277e01cd21e770f964f54570c56407ec35f18",
       "plugins": [
         {
           "plugin_id": "pdf_suite",
@@ -231,17 +195,53 @@
         }
       ]
     },
-    "settings_center.py": {
-      "sha256": "345a09ebaae80ef900829b91aa355f7c9caee65a7558e31af9de87985965b7c7",
+    "system/about_info.py": {
+      "sha256": "11667140bdd07a1b6028d99a70c8c651ed0c52e9e20a618aea063ef8ce4837f4",
       "plugins": [
         {
-          "plugin_id": "settings_center",
-          "class_name": "SettingsCenterPlugin"
+          "plugin_id": "about_info",
+          "class_name": "AboutInfoPlugin"
         }
       ]
     },
-    "workflow_studio.py": {
-      "sha256": "6b6a6f580eb6bb9f7bce15b4bc237c91160ee31e931b108b5a3c80151360c4d2",
+    "system/clip_snip.py": {
+      "sha256": "b0d4f589a1f672d8eed4cd666d0b32f002f8e312cf75cee40ee33dbcf1f6f84c",
+      "plugins": [
+        {
+          "plugin_id": "clip_snip",
+          "class_name": "ClipSnipPlugin"
+        }
+      ]
+    },
+    "system/command_center.py": {
+      "sha256": "81b4efa4ff1cd93134810197d084c3b4516d06a084092a471588107a7bd4fa70",
+      "plugins": [
+        {
+          "plugin_id": "command_center",
+          "class_name": "CommandCenterPlugin"
+        }
+      ]
+    },
+    "system/dash_hub.py": {
+      "sha256": "e3d7e64f820bb807f51ca3d16cb5bde7c2a647ad4d9d43409925eb4b4fa3d297",
+      "plugins": [
+        {
+          "plugin_id": "dash_hub",
+          "class_name": "DashHubPlugin"
+        }
+      ]
+    },
+    "system/dev_lab.py": {
+      "sha256": "e0835ba9807b93efe2ba4b7533c0f9d0a3a117ba5d5c15c20d86954c16e9253f",
+      "plugins": [
+        {
+          "plugin_id": "dev_lab",
+          "class_name": "DevLabPlugin"
+        }
+      ]
+    },
+    "system/workflow_studio.py": {
+      "sha256": "26d5fadd9d3545c7efccdd42fe33767f964929d4fe5fda9b2cb36f9146498b67",
       "plugins": [
         {
           "plugin_id": "workflow_studio",

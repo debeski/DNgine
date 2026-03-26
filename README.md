@@ -2,7 +2,7 @@
 
 Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
-Current app version: `0.6.4`
+Current app version: `0.6.5`
 
 ## Overview
 
@@ -368,7 +368,7 @@ python -m micro_toolkit gui
 Open a specific plugin on startup:
 
 ```bash
-python -m micro_toolkit gui --plugin-id clip_manager
+python -m micro_toolkit gui --plugin-id clip_snip
 ```
 
 ## CLI Examples
@@ -786,7 +786,8 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Version | Status | Highlights |
 | --- | --- | --- |
-| 0.6.4 | Current | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
+| 0.6.5 | Current | Completed full Arabic localization and Western numeral enforcement for all IT Utilities plugins (`Credential Scanner`, `Network Port Scanner`, `Privacy Data Shredder`, `System Audit`, and `Wi-Fi Profiles`). Migrated plugin-local translations to external JSON catalogs and implemented real-time UI refreshing via the `language_changed` signal. |
+| 0.6.4 | Previous milestone | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
 | 0.6.3 | Previous milestone | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
 | 0.6.2 | Previous milestone | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
 | 0.6.1 | Internal milestone | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |

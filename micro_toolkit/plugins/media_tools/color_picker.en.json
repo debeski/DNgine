@@ -1,4 +1,7 @@
 {
+  "plugin.name": "Color Picker",
+  "plugin.description": "Pick a color from anywhere on the screen and inspect its preview, RGB, HEX, and HSL values.",
+  "plugin.category": "Media Utilities",
   "title": "Color Picker",
   "description": "Pick a color from anywhere on the screen, then inspect its preview, RGB, HEX, and HSL values.",
   "status.ready": "Ready to sample a color from the screen.",

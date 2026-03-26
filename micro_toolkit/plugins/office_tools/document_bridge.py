@@ -86,18 +86,18 @@ class DocumentBridgePlugin(QtPlugin):
     name = "Document Bridge"
     description = "Convert Markdown reports into DOCX files and DOCX documents back into Markdown."
     category = "Office Utilities"
-    translations = {
-        "en": {
-            "plugin.name": "Document Bridge",
-            "plugin.description": "Convert Markdown reports into DOCX files and DOCX documents back into Markdown.",
-            "plugin.category": "Office Utilities",
-        },
-        "ar": {
-            "plugin.name": "جسر المستندات",
-            "plugin.description": "حوّل تقارير Markdown إلى DOCX وأعد تحويل ملفات DOCX إلى Markdown.",
-            "plugin.category": "أدوات المكتب",
-        },
-    }
+    # translations = {
+    #     "en": {
+    #         "plugin.name": "Document Bridge",
+    #         "plugin.description": "Convert Markdown reports into DOCX files and DOCX documents back into Markdown.",
+    #         "plugin.category": "Office Utilities",
+    #     },
+    #     "ar": {
+    #         "plugin.name": "جسر المستندات",
+    #         "plugin.description": "حوّل تقارير Markdown إلى DOCX وأعد تحويل ملفات DOCX إلى Markdown.",
+    #         "plugin.category": "أدوات المكتب",
+    #     },
+    # }
 
     def register_commands(self, registry, services) -> None:
         registry.register(

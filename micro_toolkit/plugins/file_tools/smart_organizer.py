@@ -31,12 +31,21 @@ QComboBox = ScrollSafeComboBox
 UNDO_FILE = ".micro_undo.json"
 
 
-def organize_files_task(context, folder_path: str, logic_type: str):
+def organize_files_task(context, services, plugin_id: str, folder_path: str, logic_type: str):
+    def _pt(key: str, default: str, **kwargs) -> str:
+        return services.plugin_text(plugin_id, key, default, **kwargs)
+
+    def _ensure_western(text: str) -> str:
+        eastern = "٠١٢٣٤٥٦٧٨٩"
+        western = "0123456789"
+        trans = str.maketrans(eastern, western)
+        return text.translate(trans)
+
     files = [name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name))]
     if not files:
-        raise ValueError("No root-level files were found in the selected directory.")
+        raise ValueError(_pt("error.no_files", "No root-level files were found in the selected directory."))
 
-    context.log(f"Organizing '{folder_path}' using '{logic_type}' mode...")
+    context.log(_pt("log.start", "Organizing '{folder}' using '{mode}' mode...", folder=folder_path, mode=logic_type))
     undo_map: dict[str, str] = {}
 
     for index, file_name in enumerate(files, start=1):
@@ -47,7 +56,8 @@ def organize_files_task(context, folder_path: str, logic_type: str):
 
         if logic_type == "date":
             timestamp = os.path.getmtime(source_path)
-            target_subdir = datetime.datetime.fromtimestamp(timestamp).strftime("%Y-%m")
+            # Use Western numerals for the folder name
+            target_subdir = _ensure_western(datetime.datetime.fromtimestamp(timestamp).strftime("%Y-%m"))
 
         target_dir = os.path.join(folder_path, target_subdir)
         os.makedirs(target_dir, exist_ok=True)
@@ -57,13 +67,13 @@ def organize_files_task(context, folder_path: str, logic_type: str):
             shutil.move(source_path, target_path)
             undo_map[source_path] = target_path
         except Exception as exc:
-            context.log(f"Move failed for '{file_name}': {exc}", "WARNING")
+            context.log(_pt("log.warning.move", "Move failed for '{file}': {exc}", file=file_name, exc=str(exc)), "WARNING")
 
     undo_path = os.path.join(folder_path, UNDO_FILE)
     with open(undo_path, "w", encoding="utf-8") as handle:
         json.dump(undo_map, handle, indent=2)
 
-    context.log(f"Organization complete. Moved {len(undo_map)} files.")
+    context.log(_pt("log.done", "Organization complete. Moved {count} files.", count=_ensure_western(str(len(undo_map)))))
     return {
         "moved_count": len(undo_map),
         "undo_path": undo_path,
@@ -71,19 +81,29 @@ def organize_files_task(context, folder_path: str, logic_type: str):
     }
 
 
-def undo_organization_task(context, folder_path: str):
+def undo_organization_task(context, services, plugin_id: str, folder_path: str):
+    def _pt(key: str, default: str, **kwargs) -> str:
+        return services.plugin_text(plugin_id, key, default, **kwargs)
+
+    def _ensure_western(text: str) -> str:
+        eastern = "٠١٢٣٤٥٦٧٨٩"
+        western = "0123456789"
+        trans = str.maketrans(eastern, western)
+        return text.translate(trans)
+
     undo_path = os.path.join(folder_path, UNDO_FILE)
     if not os.path.exists(undo_path):
-        raise ValueError("No undo registry was found in the selected directory.")
+        raise ValueError(_pt("error.no_undo", "No undo registry was found in the selected directory."))
 
     with open(undo_path, "r", encoding="utf-8") as handle:
         undo_map = json.load(handle)
 
     if not undo_map:
-        raise ValueError("Undo registry exists but is empty.")
+        raise ValueError(_pt("error.empty_undo", "Undo registry exists but is empty."))
 
     restored = 0
     items = list(undo_map.items())
+    context.log(_pt("log.undo_start", "Restoring files from undo registry..."))
     for index, (original_path, moved_path) in enumerate(items, start=1):
         context.progress(index / float(len(items)))
         if not os.path.exists(moved_path):
@@ -93,10 +113,10 @@ def undo_organization_task(context, folder_path: str):
             shutil.move(moved_path, original_path)
             restored += 1
         except Exception as exc:
-            context.log(f"Undo failed for '{moved_path}': {exc}", "WARNING")
+            context.log(_pt("log.warning.undo", "Undo failed for '{file}': {exc}", file=moved_path, exc=str(exc)), "WARNING")
 
     os.remove(undo_path)
-    context.log(f"Rollback complete. Restored {restored} files.")
+    context.log(_pt("log.undo_done", "Rollback complete. Restored {count} files.", count=_ensure_western(str(restored))))
     return {
         "restored_count": restored,
         "folder_path": folder_path,
@@ -119,50 +139,50 @@ class SmartOrganizerPage(QWidget):
         self.services = services
         self.plugin_id = plugin_id
         self._build_ui()
+        self.services.i18n.language_changed.connect(self._refresh)
+
+    def _pt(self, key: str, default: str, **kwargs) -> str:
+        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 28, 28, 28)
-        layout.setSpacing(16)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(28, 28, 28, 28)
+        self.main_layout.setSpacing(16)
 
-        title = QLabel("Smart File Organizer")
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
-        layout.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
+        self.main_layout.addWidget(self.title_label)
 
-        description = QLabel(
-            "Organize root-level files by extension or last modified date, then reverse the operation later using the saved undo registry."
-        )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #43535c;")
-        layout.addWidget(description)
+        self.desc_label = QLabel()
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
+        self.main_layout.addWidget(self.desc_label)
 
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
         self.folder_input = QLineEdit()
-        self.folder_input.setPlaceholderText("Select a directory...")
         folder_row.addWidget(self.folder_input, 1)
-        browse_button = QPushButton("Browse")
-        browse_button.clicked.connect(self._browse_folder)
-        folder_row.addWidget(browse_button)
-        layout.addLayout(folder_row)
+        self.browse_button = QPushButton()
+        self.browse_button.clicked.connect(self._browse_folder)
+        folder_row.addWidget(self.browse_button)
+        self.main_layout.addLayout(folder_row)
 
         mode_row = QHBoxLayout()
         mode_row.setSpacing(10)
-        mode_label = QLabel("Mode")
-        mode_label.setFixedWidth(90)
-        mode_row.addWidget(mode_label)
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["extension", "date"])
+        self.mode_label_widget = QLabel()
+        self.mode_label_widget.setFixedWidth(90)
+        mode_row.addWidget(self.mode_label_widget)
+        self.mode_combo = ScrollSafeComboBox()
         mode_row.addWidget(self.mode_combo, 1)
-        layout.addLayout(mode_row)
+        self.main_layout.addLayout(mode_row)
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
-        self.organize_button = QPushButton("Organize Files")
+        self.organize_button = QPushButton()
         self.organize_button.clicked.connect(self._run_organize)
         controls.addWidget(self.organize_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.undo_button = QPushButton("Undo Organization")
+        self.undo_button = QPushButton()
         self.undo_button.clicked.connect(self._run_undo)
         controls.addWidget(self.undo_button, 0, Qt.AlignmentFlag.AlignLeft)
 
@@ -170,7 +190,7 @@ class SmartOrganizerPage(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         controls.addWidget(self.progress, 1)
-        layout.addLayout(controls)
+        self.main_layout.addLayout(controls)
 
         summary_card = QFrame()
         summary_card.setStyleSheet(
@@ -178,21 +198,44 @@ class SmartOrganizerPage(QWidget):
         )
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel("Choose a directory to organize.")
+        self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        self.main_layout.addWidget(summary_card)
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
-        self.output.setPlaceholderText("Organizer activity will appear here.")
-        layout.addWidget(self.output, 1)
+        self.main_layout.addWidget(self.output, 1)
+        
+        self._refresh()
+
+    def _refresh(self) -> None:
+        self.title_label.setText(self._pt("title", "Smart File Organizer"))
+        self.desc_label.setText(self._pt("description", "Organize root-level files by extension or last modified date, then reverse the operation later using the saved undo registry."))
+        self.folder_input.setPlaceholderText(self._pt("folder.placeholder", "Select a directory..."))
+        self.browse_button.setText(self._pt("browse", "Browse"))
+        self.mode_label_widget.setText(self._pt("mode.label", "Mode"))
+        
+        current_mode = self.mode_combo.currentData()
+        self.mode_combo.clear()
+        self.mode_combo.addItem(self._pt("mode.extension", "extension"), "extension")
+        self.mode_combo.addItem(self._pt("mode.date", "date"), "date")
+        
+        if current_mode:
+            idx = self.mode_combo.findData(current_mode)
+            if idx >= 0:
+                self.mode_combo.setCurrentIndex(idx)
+        
+        self.organize_button.setText(self._pt("run.organize", "Organize Files"))
+        self.undo_button.setText(self._pt("run.undo", "Undo Organization"))
+        self.summary_label.setText(self._pt("summary.initial", "Choose a directory to organize."))
+        self.output.setPlaceholderText(self._pt("output.placeholder", "Organizer activity will appear here."))
 
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            "Select Directory",
+            self._pt("dialog.browse", "Select Directory"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -205,16 +248,26 @@ class SmartOrganizerPage(QWidget):
     def _run_organize(self) -> None:
         folder_path = self.folder_input.text().strip()
         if not folder_path:
-            QMessageBox.warning(self, "Missing Input", "Choose a directory to organize.")
+            QMessageBox.warning(
+                self, 
+                self._pt("dialog.missing.title", "Missing Input"), 
+                self._pt("dialog.missing.body.organize", "Choose a directory to organize.")
+            )
             return
 
         self._set_busy(True)
         self.progress.setValue(0)
         self.output.setPlainText("")
-        self.summary_label.setText("Organizing files...")
+        self.summary_label.setText(self._pt("summary.organizing", "Organizing files..."))
 
         self.services.run_task(
-            lambda context: organize_files_task(context, folder_path, self.mode_combo.currentText()),
+            lambda context: organize_files_task(
+                context, 
+                self.services, 
+                self.plugin_id, 
+                folder_path, 
+                self.mode_combo.currentData()
+            ),
             on_result=self._handle_organize_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
@@ -224,16 +277,25 @@ class SmartOrganizerPage(QWidget):
     def _run_undo(self) -> None:
         folder_path = self.folder_input.text().strip()
         if not folder_path:
-            QMessageBox.warning(self, "Missing Input", "Choose a directory to restore.")
+            QMessageBox.warning(
+                self, 
+                self._pt("dialog.missing.title", "Missing Input"), 
+                self._pt("dialog.missing.body.undo", "Choose a directory to restore.")
+            )
             return
 
         self._set_busy(True)
         self.progress.setValue(0)
         self.output.setPlainText("")
-        self.summary_label.setText("Restoring organized files...")
+        self.summary_label.setText(self._pt("summary.undoing", "Restoring organized files..."))
 
         self.services.run_task(
-            lambda context: undo_organization_task(context, folder_path),
+            lambda context: undo_organization_task(
+                context, 
+                self.services, 
+                self.plugin_id, 
+                folder_path
+            ),
             on_result=self._handle_undo_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
@@ -246,29 +308,29 @@ class SmartOrganizerPage(QWidget):
     def _handle_organize_result(self, payload: object) -> None:
         result = dict(payload)
         self.summary_label.setText(
-            f"Moved {result['moved_count']} files and wrote an undo registry to {result['undo_path']}."
+            self._pt("summary.done", "Moved {count} files and wrote an undo registry to {path}.", count=str(result['moved_count']), path=result['undo_path'])
         )
         self.output.setPlainText(
-            f"Organization complete.\nFolder: {result['folder_path']}\nUndo registry: {result['undo_path']}"
+            self._pt("output.done", "Organization complete.\nFolder: {folder}\nUndo registry: {path}", folder=result['folder_path'], path=result['undo_path'])
         )
         self.services.record_run(
             self.plugin_id,
             "SUCCESS",
-            f"Organized {result['moved_count']} files in {result['folder_path']}",
+            self._pt("summary.done", "Moved {count} files in {folder}", count=str(result['moved_count']), folder=result['folder_path']),
         )
 
     def _handle_undo_result(self, payload: object) -> None:
         result = dict(payload)
         self.summary_label.setText(
-            f"Restored {result['restored_count']} files in {result['folder_path']}."
+            self._pt("summary.undo_done", "Restored {count} files in {folder}.", count=str(result['restored_count']), folder=result['folder_path'])
         )
         self.output.setPlainText(
-            f"Rollback complete.\nFolder: {result['folder_path']}\nRestored files: {result['restored_count']}"
+            self._pt("output.undo_done", "Rollback complete.\nFolder: {folder}\nRestored files: {count}", folder=result['folder_path'], count=str(result['restored_count']))
         )
         self.services.record_run(
             self.plugin_id,
             "SUCCESS",
-            f"Restored {result['restored_count']} files in {result['folder_path']}",
+            self._pt("summary.undo_done", "Restored {count} files in {folder}", count=str(result['restored_count']), folder=result['folder_path']),
         )
 
     def _handle_error(self, payload: object) -> None:
@@ -276,7 +338,7 @@ class SmartOrganizerPage(QWidget):
         self.output.setPlainText(message)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log("Smart organizer failed.", "ERROR")
+        self.services.log(self._pt("log.failed", "Smart organizer failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self._set_busy(False)

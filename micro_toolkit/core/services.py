@@ -35,6 +35,11 @@ PLUGIN_ID_MIGRATIONS = {
     "exporter": "folder_mapper",
     "dups": "deep_scan_auditor",
     "quick_analytics": "chart_builder",
+    "about_center": "about_info",
+    "clip_manager": "clip_snip",
+    "inspector_center": "dev_lab",
+    "settings_center": "command_center",
+    "welcome_overview": "dash_hub",
 }
 
 
@@ -444,7 +449,7 @@ class AppServices(QObject):
         self.plugin_manager.invalidate_cache(clear_instances=True)
         self.reset_command_registry()
         if self.main_window is not None:
-            self.main_window.reload_plugin_catalog(preferred_plugin_id="settings_center")
+            self.main_window.reload_plugin_catalog(preferred_plugin_id="command_center")
 
     def register_core_commands(self) -> None:
         self.command_registry.register(
@@ -540,7 +545,7 @@ class AppServices(QObject):
             "app.show_settings",
             "Open Settings",
             "Open the settings page.",
-            lambda: self._command_open_plugin("settings_center"),
+            lambda: self._command_open_plugin("command_center"),
         )
         self.command_registry.register(
             "app.show_workflows",
@@ -552,7 +557,7 @@ class AppServices(QObject):
             "app.show_clipboard",
             "Open Clipboard",
             "Open the clipboard page.",
-            lambda: self._command_open_plugin("clip_manager"),
+            lambda: self._command_open_plugin("clip_snip"),
         )
         self.command_registry.register(
             "app.show_clipboard_quick_panel",
