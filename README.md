@@ -2,7 +2,7 @@
 
 Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
-Current app version: `0.6.3`
+Current app version: `0.6.4`
 
 ## Overview
 
@@ -25,6 +25,7 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - English and Arabic support with RTL-aware layout direction
 - Five curated theme colors with a dark-mode toggle
 - Live preview for language, direction, density, and UI scaling
+- Top-bar visual refresh indicator with active-page-first restyling
 - Standardized per-user runtime storage across Windows, macOS, and Linux
 - Tray integration for all-day companion use
 - Dashboard shell with a workspace pulse panel, usage snapshots, and recent activity
@@ -785,7 +786,8 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Version | Status | Highlights |
 | --- | --- | --- |
-| 0.6.3 | Current | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
+| 0.6.4 | Current | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
+| 0.6.3 | Previous milestone | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
 | 0.6.2 | Previous milestone | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
 | 0.6.1 | Internal milestone | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
 | 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |

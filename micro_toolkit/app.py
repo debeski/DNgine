@@ -106,13 +106,23 @@ class SidebarItemDelegate(QStyledItemDelegate):
 
 
 class SpinnerIndicator(QWidget):
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        size: int = 270,
+        inset: int = 34,
+        thickness: int = 22,
+        interval_ms: int = 80,
+    ):
         super().__init__(parent)
         self._angle = 0
+        self._inset = max(6, int(inset))
+        self._thickness = max(2, int(thickness))
         self._timer = QTimer(self)
-        self._timer.setInterval(80)
+        self._timer.setInterval(max(16, int(interval_ms)))
         self._timer.timeout.connect(self._advance)
-        self.setFixedSize(270, 270)
+        self.setFixedSize(int(size), int(size))
 
     def start(self) -> None:
         if not self._timer.isActive():
@@ -135,10 +145,10 @@ class SpinnerIndicator(QWidget):
         accent = QColor(palette.color(palette.ColorRole.Highlight))
         base.setAlpha(90)
         accent.setAlpha(255)
-        rect = self.rect().adjusted(34, 34, -34, -34)
-        painter.setPen(QPen(base, 22))
+        rect = self.rect().adjusted(self._inset, self._inset, -self._inset, -self._inset)
+        painter.setPen(QPen(base, self._thickness))
         painter.drawArc(rect, 0, 360 * 16)
-        painter.setPen(QPen(accent, 22))
+        painter.setPen(QPen(accent, self._thickness))
         painter.drawArc(rect, int((-self._angle + 90) * 16), int(-110 * 16))
 
 
@@ -387,11 +397,14 @@ class MicroToolkitWindow(QMainWindow):
         self.plugin_by_id: dict[str, PluginSpec] = {}
         self.system_toolbar_buttons: dict[str, QToolButton] = {}
         self.page_indices: dict[str, int] = {}
+        self._stale_theme_pages: set[str] = set()
         self.initial_plugin_id = initial_plugin_id
         self.current_plugin_id: str | None = None
         self.current_dock_mode = "activity"
         self._quitting = False
         self._busy_depth = 0
+        self._visual_busy_depth = 0
+        self._visual_status_restore = ""
         self._dock_state_timer = QTimer(self)
         self._dock_state_timer.setSingleShot(True)
         self._dock_state_timer.setInterval(220)
@@ -481,6 +494,11 @@ class MicroToolkitWindow(QMainWindow):
         search_host.setFixedHeight(28)
         search_host_layout.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         utility_layout.addWidget(search_host, 1, Qt.AlignmentFlag.AlignTop)
+
+        self.top_refresh_spinner = SpinnerIndicator(self, size=24, inset=7, thickness=4, interval_ms=80)
+        self.top_refresh_spinner.setObjectName("TopRefreshSpinner")
+        self.top_refresh_spinner.hide()
+        utility_layout.addWidget(self.top_refresh_spinner, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
 
         self.top_system_tools = QHBoxLayout()
         self.top_system_tools.setContentsMargins(0, 0, 0, 0)
@@ -646,6 +664,21 @@ class MicroToolkitWindow(QMainWindow):
             yield
         finally:
             self.end_loading()
+
+    def begin_visual_refresh(self, message: str = "Refreshing...") -> None:
+        if self._visual_busy_depth == 0:
+            self._visual_status_restore = getattr(self.status_label, "_full_text", self.status_label.text())
+        self._visual_busy_depth += 1
+        self.top_refresh_spinner.start()
+        self.status_label.setText(message)
+        QApplication.processEvents()
+
+    def end_visual_refresh(self) -> None:
+        self._visual_busy_depth = max(0, self._visual_busy_depth - 1)
+        if self._visual_busy_depth == 0:
+            self.top_refresh_spinner.stop()
+            if self._visual_status_restore:
+                self.status_label.setText(self._visual_status_restore)
 
     def _bind_signals(self) -> None:
         self.search_input.textChanged.connect(self._apply_filter)
@@ -915,6 +948,40 @@ class MicroToolkitWindow(QMainWindow):
         )
         return {"pinned": pinned}
 
+    def _build_plugin_page_widget(self, spec: PluginSpec) -> QWidget:
+        plugin = self.plugin_manager.load_plugin(spec.plugin_id)
+        plugin_widget = plugin.create_widget(self.services)
+        self._normalize_theme_styles(plugin_widget)
+        self._configure_tables(plugin_widget)
+        self._suppress_duplicate_page_header(plugin_widget, spec)
+        if spec.plugin_id in UNSCROLLED_PLUGIN_IDS:
+            return plugin_widget
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setWidget(plugin_widget)
+        return scroll_area
+
+    def _ensure_plugin_page(self, spec: PluginSpec) -> None:
+        if spec.plugin_id in self.page_indices:
+            return
+        page_index = self.page_stack.addWidget(self._build_plugin_page_widget(spec))
+        self.page_indices[spec.plugin_id] = page_index
+
+    def _rebuild_plugin_page(self, spec: PluginSpec) -> None:
+        page_index = self.page_indices.get(spec.plugin_id)
+        if page_index is None:
+            self._ensure_plugin_page(spec)
+            return
+        old_page = self.page_stack.widget(page_index)
+        new_page = self._build_plugin_page_widget(spec)
+        self.page_stack.insertWidget(page_index, new_page)
+        self.page_stack.removeWidget(old_page)
+        if old_page is not None:
+            old_page.deleteLater()
+        self.page_indices[spec.plugin_id] = page_index
+        self._stale_theme_pages.discard(spec.plugin_id)
+
     def open_plugin(self, plugin_id: str) -> None:
         spec = self.plugin_by_id.get(plugin_id)
         if spec is None:
@@ -922,23 +989,10 @@ class MicroToolkitWindow(QMainWindow):
 
         try:
             with self.loading_context(self.services.i18n.tr("shell.loading", "Loading...")):
-                if plugin_id not in self.page_indices:
-                    plugin = self.plugin_manager.load_plugin(plugin_id)
-                    plugin_widget = plugin.create_widget(self.services)
-                    self._normalize_theme_styles(plugin_widget)
-                    self._configure_tables(plugin_widget)
-                    self._suppress_duplicate_page_header(plugin_widget, spec)
-                    if plugin_id in UNSCROLLED_PLUGIN_IDS:
-                        page_widget = plugin_widget
-                    else:
-                        scroll_area = QScrollArea()
-                        scroll_area.setWidgetResizable(True)
-                        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-                        scroll_area.setWidget(plugin_widget)
-                        page_widget = scroll_area
-
-                    page_index = self.page_stack.addWidget(page_widget)
-                    self.page_indices[plugin_id] = page_index
+                if plugin_id in self._stale_theme_pages:
+                    self._rebuild_plugin_page(spec)
+                else:
+                    self._ensure_plugin_page(spec)
         except Exception as exc:
             self._handle_plugin_open_error(spec, exc)
             return
@@ -1242,6 +1296,7 @@ class MicroToolkitWindow(QMainWindow):
             current_plugin_id = preferred_plugin_id or self.current_plugin_id
             self._refresh_specs()
             self.page_indices.clear()
+            self._stale_theme_pages.clear()
 
             self.sidebar_tree.blockSignals(True)
             self._populate_sidebar()
@@ -1522,14 +1577,16 @@ class MicroToolkitWindow(QMainWindow):
         self._sync_system_toolbar_selection(current_plugin_id)
 
     def _handle_theme_change(self, _mode: str) -> None:
+        active_plugin_id = self.current_plugin_id
         for plugin_id, page_index in list(self.page_indices.items()):
+            if plugin_id != active_plugin_id:
+                self._stale_theme_pages.add(plugin_id)
+                continue
             page = self.page_stack.widget(page_index)
-            if isinstance(page, QScrollArea):
-                widget = page.widget()
-            else:
-                widget = page
+            widget = page.widget() if isinstance(page, QScrollArea) else page
             if isinstance(widget, QWidget):
                 self._normalize_theme_styles(widget)
+            self._stale_theme_pages.discard(plugin_id)
         self.refresh_plugin_visuals()
 
     def _confirm_exit(self) -> bool:

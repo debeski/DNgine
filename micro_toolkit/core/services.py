@@ -327,7 +327,7 @@ class AppServices(QObject):
         if self.application is None:
             return
         if self.main_window is not None and not self._visual_refresh_pending:
-            self.main_window.begin_loading(message)
+            self.main_window.begin_visual_refresh(message)
             self._visual_refresh_pending = True
         self._visual_refresh_timer.start(90)
 
@@ -339,7 +339,7 @@ class AppServices(QObject):
             self.theme_manager.apply(self.application)
         finally:
             if self.main_window is not None and self._visual_refresh_pending:
-                self.main_window.end_loading()
+                self.main_window.end_visual_refresh()
             self._visual_refresh_pending = False
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
