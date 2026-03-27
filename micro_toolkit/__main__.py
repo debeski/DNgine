@@ -11,5 +11,11 @@ if __name__ == "__main__":
     parser = build_parser()
     parsed = parser.parse_args()
     if parsed.command in {None, "gui"}:
-        raise SystemExit(launch_gui(initial_plugin_id=getattr(parsed, "plugin_id", None), start_minimized=getattr(parsed, "start_minimized", False)))
+        raise SystemExit(
+            launch_gui(
+                initial_plugin_id=getattr(parsed, "plugin_id", None),
+                start_minimized=getattr(parsed, "start_minimized", False),
+                force_visible=getattr(parsed, "force_visible", False),
+            )
+        )
     raise SystemExit(execute_cli(parsed))

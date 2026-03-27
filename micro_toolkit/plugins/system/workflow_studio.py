@@ -389,15 +389,8 @@ class WorkflowStudioPage(QWidget):
         self.left_panel.setStyleSheet("background: transparent;")
         self.right_panel.setStyleSheet("background: transparent;")
         self.splitter.setStyleSheet("background: transparent;")
-        field_style = (
-            f"background: {palette.input_bg};"
-            f"border: 1px solid {palette.border};"
-            "border-radius: 12px;"
-            f"color: {palette.text_primary};"
-            "padding: 6px 10px;"
-        )
-        self.name_input.setStyleSheet(field_style)
-        self.description_input.setStyleSheet(field_style)
+        self.name_input.setStyleSheet("")
+        self.description_input.setStyleSheet("")
         self.command_output.setStyleSheet(
             f"background: {'#11161d' if palette.mode != 'dark' else '#0d131b'};"
             f"color: {'#d9f7df' if palette.mode != 'dark' else '#d7e3ee'};"

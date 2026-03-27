@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -141,10 +140,6 @@ class PrivacyShredderPage(QWidget):
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        controls.addWidget(self.progress, 1)
         self.main_layout.addLayout(controls)
 
         self.output = QPlainTextEdit()
@@ -213,11 +208,8 @@ class PrivacyShredderPage(QWidget):
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
-            on_progress=self._handle_progress,
+            status_text=self._pt("log.start", "Starting secure shredding..."),
         )
-
-    def _handle_progress(self, value: float) -> None:
-        self.progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def _handle_result(self, payload: object) -> None:
         self._clear_queue()
@@ -233,4 +225,3 @@ class PrivacyShredderPage(QWidget):
         self.add_file_btn.setEnabled(True)
         self.add_dir_btn.setEnabled(True)
         self.clear_btn.setEnabled(True)
-        self.progress.setValue(100)

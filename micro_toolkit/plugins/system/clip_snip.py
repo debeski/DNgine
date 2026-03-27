@@ -253,14 +253,11 @@ class ClipSnipPage(QWidget):
         self.proxy_model = QSortFilterProxyModel(self)
         self.proxy_model.setSourceModel(self.model)
         self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self._auto_capture_enabled = True
-        self._suspend_capture_once = False
         self._responsive_bucket = ""
         self._responsive_refresh_pending = False
         self._build_ui()
         self._wire_events()
         self._refresh_entries()
-        self._bootstrap_existing_clipboard()
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
@@ -306,9 +303,9 @@ class ClipSnipPage(QWidget):
         self.pinned_only_checkbox = QCheckBox(self._pt("checkbox.pinned_only", "Pinned only"))
         self.toolbar_layout.addWidget(self.pinned_only_checkbox, 1, 0)
 
-        self.auto_capture_checkbox = QCheckBox(self._pt("checkbox.auto_capture", "Auto capture"))
-        self.auto_capture_checkbox.setChecked(True)
-        self.toolbar_layout.addWidget(self.auto_capture_checkbox, 1, 1)
+        self.clip_monitor_checkbox = QCheckBox(self._pt("checkbox.clip_monitor", "Enable Clip-Monitor"))
+        self.clip_monitor_checkbox.setChecked(self.services.clip_monitor_enabled())
+        self.toolbar_layout.addWidget(self.clip_monitor_checkbox, 1, 1)
 
         self.action_host = QWidget()
         self.action_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
@@ -407,14 +404,13 @@ class ClipSnipPage(QWidget):
         self.label_filter.currentIndexChanged.connect(self._refresh_entries)
         self.category_filter.currentIndexChanged.connect(self._refresh_entries)
         self.pinned_only_checkbox.toggled.connect(self._refresh_entries)
-        self.auto_capture_checkbox.toggled.connect(self._set_auto_capture)
+        self.clip_monitor_checkbox.toggled.connect(self._set_clip_monitor_enabled)
         self.capture_button.clicked.connect(self._capture_current_clipboard)
         self.manage_labels_button.clicked.connect(self._manage_labels)
         self.manage_categories_button.clicked.connect(self._manage_categories)
         self.clear_history_button.clicked.connect(self._clear_history)
         self.table_view.selectionModel().selectionChanged.connect(self._update_detail_panel)
         self.table_view.customContextMenuRequested.connect(self._show_context_menu)
-        self.clipboard.dataChanged.connect(self._handle_clipboard_changed)
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
@@ -454,7 +450,7 @@ class ClipSnipPage(QWidget):
                 self.toolbar_layout.addWidget(self.label_filter, 1, 2, 1, 3)
                 self.toolbar_layout.addWidget(self.category_filter, 2, 0, 1, 3)
                 self.toolbar_layout.addWidget(self.pinned_only_checkbox, 2, 3)
-                self.toolbar_layout.addWidget(self.auto_capture_checkbox, 2, 4)
+                self.toolbar_layout.addWidget(self.clip_monitor_checkbox, 2, 4)
                 self.toolbar_layout.addWidget(self.action_host, 3, 0, 1, 5)
             else:
                 self.toolbar_layout.addWidget(self.search_input, 0, 0, 1, 2)
@@ -462,7 +458,7 @@ class ClipSnipPage(QWidget):
                 self.toolbar_layout.addWidget(self.label_filter, 0, 3)
                 self.toolbar_layout.addWidget(self.category_filter, 0, 4)
                 self.toolbar_layout.addWidget(self.pinned_only_checkbox, 1, 0)
-                self.toolbar_layout.addWidget(self.auto_capture_checkbox, 1, 1)
+                self.toolbar_layout.addWidget(self.clip_monitor_checkbox, 1, 1)
                 self.toolbar_layout.addWidget(self.action_host, 2, 0, 1, 5)
         self._relayout_action_buttons()
 
@@ -499,12 +495,13 @@ class ClipSnipPage(QWidget):
         self._responsive_refresh_pending = False
         self._apply_responsive_layout()
 
-    def _bootstrap_existing_clipboard(self) -> None:
-        QTimer.singleShot(0, self._capture_current_clipboard)
-
-    def _set_auto_capture(self, enabled: bool) -> None:
-        self._auto_capture_enabled = enabled
-        self.services.log("Clipboard auto-capture enabled." if enabled else "Clipboard auto-capture paused.")
+    def _set_clip_monitor_enabled(self, enabled: bool) -> None:
+        self.services.set_clip_monitor_enabled(enabled)
+        self.services.log(
+            self._pt("log.clip_monitor.enabled", "Clip-Monitor enabled.")
+            if enabled
+            else self._pt("log.clip_monitor.disabled", "Clip-Monitor disabled.")
+        )
 
     def _selected_row(self) -> ClipboardRow | None:
         selection_model = self.table_view.selectionModel()
@@ -577,13 +574,6 @@ class ClipSnipPage(QWidget):
         index = self.category_filter.findData(current_category)
         self.category_filter.setCurrentIndex(index if index >= 0 else 0)
         self.category_filter.blockSignals(False)
-
-    def _handle_clipboard_changed(self) -> None:
-        if self._suspend_capture_once:
-            self._suspend_capture_once = False
-            return
-        if self._auto_capture_enabled:
-            self._capture_current_clipboard()
 
     def _capture_current_clipboard(self) -> None:
         inserted = self.store.add_mime_entry(self.clipboard.mimeData())
@@ -672,11 +662,8 @@ class ClipSnipPage(QWidget):
         entry = self.store.get_entry(entry_id)
         if entry is None:
             return
-        self._suspend_capture_once = True
         if self.store.restore_entry_to_clipboard(entry, self.clipboard):
             self.services.log(self._pt("log.restored", "Clipboard item restored to the system clipboard."))
-        else:
-            self._suspend_capture_once = False
 
     def _toggle_pin_selected(self) -> None:
         row = self._selected_row()

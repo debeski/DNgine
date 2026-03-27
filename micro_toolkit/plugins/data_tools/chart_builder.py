@@ -6,7 +6,7 @@ import os
 
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QLineSeries, QPieSeries, QScatterSeries, QValueAxis
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -29,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.table_model import DataFrameTableModel
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
@@ -227,6 +227,8 @@ class ChartBuilderPage(QWidget):
         self._table_model = None
         self._latest_result = None
         self._build_ui()
+        self._apply_theme_styles()
+        self.services.theme_manager.theme_changed.connect(self._apply_theme_styles)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -236,19 +238,18 @@ class ChartBuilderPage(QWidget):
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel(self._pt("title", "Chart Builder"))
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
-        layout.addWidget(title)
+        self.title_label = QLabel(self._pt("title", "Chart Builder"))
+        layout.addWidget(self.title_label)
 
-        description = QLabel(
+        self.description_label = QLabel(
             self._pt("description", "Build charts and analysis tables from Excel workbooks using a guided pipeline. "
             "Start simple with grouped summaries, or enable advanced controls for pivots, melts, joins, filters, slicing, and export workflows.")
         )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #43535c;")
-        layout.addWidget(description)
+        self.description_label.setWordWrap(True)
+        layout.addWidget(self.description_label)
 
         source_card = QFrame()
+        self.source_card = source_card
         source_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         source_layout = QGridLayout(source_card)
         source_layout.setContentsMargins(16, 14, 16, 14)
@@ -275,8 +276,14 @@ class ChartBuilderPage(QWidget):
         source_layout.addWidget(self.advanced_checkbox, 1, 2)
         layout.addWidget(source_card)
 
+        self.operation_card = QFrame()
+        operation_layout = QVBoxLayout(self.operation_card)
+        operation_layout.setContentsMargins(16, 14, 16, 14)
+        operation_layout.setSpacing(0)
+
         self.operation_stack = QStackedWidget()
-        layout.addWidget(self.operation_stack)
+        operation_layout.addWidget(self.operation_stack)
+        layout.addWidget(self.operation_card)
 
         self._build_summarize_page()
         self._build_pivot_page()
@@ -285,6 +292,7 @@ class ChartBuilderPage(QWidget):
         self._build_merge_page()
 
         chart_card = QFrame()
+        self.chart_card = chart_card
         chart_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         chart_layout = QGridLayout(chart_card)
         chart_layout.setContentsMargins(16, 14, 16, 14)
@@ -367,24 +375,21 @@ class ChartBuilderPage(QWidget):
         self.export_png_button.clicked.connect(self._export_png)
         controls.addWidget(self.export_png_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        controls.addWidget(self.progress, 1)
         layout.addLayout(controls)
 
         summary_card = QFrame()
+        self.summary_card = summary_card
         summary_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel(self._pt("summary.empty", "Configure the pipeline, then run the builder to preview a chart and result table."))
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
         layout.addWidget(summary_card)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
         self.chart_view = QChartView()
+        self.chart_view.setFrameShape(QFrame.Shape.NoFrame)
         self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.chart_view.setMinimumHeight(260)
         splitter.addWidget(self.chart_view)
@@ -402,6 +407,34 @@ class ChartBuilderPage(QWidget):
         self._set_placeholder_chart(self._pt("preview.placeholder", "Chart preview will appear here."))
         self._update_operation_ui()
         self._update_advanced_ui()
+
+    def _apply_theme_styles(self, *_args) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=800))
+        self.description_label.setStyleSheet(muted_text_style(palette, size=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        for card in (self.source_card, self.operation_card, self.chart_card, self.advanced_card, self.summary_card):
+            card.setStyleSheet(card_style(palette, radius=14))
+        self.operation_stack.setStyleSheet("background: transparent; border: none;")
+        for index in range(self.operation_stack.count()):
+            page = self.operation_stack.widget(index)
+            if page is not None:
+                page.setStyleSheet("background: transparent;")
+        self.chart_view.setStyleSheet(
+            f"""
+            QChartView {{
+                background: {palette.surface_bg};
+                border: 1px solid {palette.border};
+                border-radius: 14px;
+            }}
+            """
+        )
+        self.chart_view.viewport().setStyleSheet(
+            f"background: {palette.surface_bg}; border: none;"
+        )
+        chart = self.chart_view.chart()
+        if chart is not None:
+            self._configure_chart_theme(chart)
 
     def _build_summarize_page(self) -> None:
         page = QWidget()
@@ -601,7 +634,6 @@ class ChartBuilderPage(QWidget):
         self.export_xlsx_button.setEnabled(False)
         self.export_html_button.setEnabled(False)
         self.export_png_button.setEnabled(False)
-        self.progress.setValue(0)
         self.summary_label.setText(self._pt("summary.running", "Running chart builder..."))
         self.table.setModel(None)
         self._table_model = None
@@ -613,11 +645,7 @@ class ChartBuilderPage(QWidget):
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
-            on_progress=self._handle_progress,
         )
-
-    def _handle_progress(self, value: float) -> None:
-        self.progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def _handle_result(self, payload: object) -> None:
         result = dict(payload)
@@ -655,6 +683,7 @@ class ChartBuilderPage(QWidget):
         chart = QChart()
         chart.setTitle(title)
         chart.legend().hide()
+        self._configure_chart_theme(chart)
         self.chart_view.setChart(chart)
 
     def _refresh_chart_preview(self) -> None:
@@ -694,6 +723,7 @@ class ChartBuilderPage(QWidget):
         if dataframe.empty:
             chart.setTitle(self._pt("preview.error.nodata", "No data available for chart preview."))
             chart.legend().hide()
+            self._configure_chart_theme(chart)
             return chart
 
         if chart_type in {"bar", "line"} and (not x_column or not y_columns):
@@ -705,6 +735,7 @@ class ChartBuilderPage(QWidget):
             if not x_column or not y_columns:
                 chart.setTitle(self._pt("preview.error.pie", "Pie charts need one label column and one numeric value column."))
                 chart.legend().hide()
+                self._configure_chart_theme(chart)
                 return chart
             series = QPieSeries()
             if chart_type == "donut":
@@ -715,12 +746,14 @@ class ChartBuilderPage(QWidget):
                 slice_.setBrush(colors[index % len(colors)])
             chart.addSeries(series)
             chart.setTitle(f"{self._pt(f'chart.{chart_type}', chart_type.title())}: {x_column} vs {y_columns[0]}")
+            self._configure_chart_theme(chart)
             return chart
 
         if chart_type == "scatter":
             if not y_columns:
                 chart.setTitle(self._pt("preview.error.scatter", "Scatter charts need at least one numeric Y column."))
                 chart.legend().hide()
+                self._configure_chart_theme(chart)
                 return chart
             x_values = dataframe[x_column] if x_column in dataframe.columns else dataframe.index
             try:
@@ -745,6 +778,7 @@ class ChartBuilderPage(QWidget):
                 series.attachAxis(axis_x)
                 series.attachAxis(axis_y)
             chart.setTitle(f"{self._pt('chart.scatter', 'Scatter')}: {', '.join(y_columns[:3])}")
+            self._configure_chart_theme(chart)
             return chart
 
         if chart_type == "line":
@@ -767,6 +801,7 @@ class ChartBuilderPage(QWidget):
                 series.attachAxis(axis_x)
                 series.attachAxis(axis_y)
             chart.setTitle(f"{self._pt('chart.line', 'Line')}: {', '.join(y_columns[:4])}")
+            self._configure_chart_theme(chart)
             return chart
 
         series = QBarSeries()
@@ -789,7 +824,40 @@ class ChartBuilderPage(QWidget):
         series.attachAxis(axis_x)
         series.attachAxis(axis_y)
         chart.setTitle(f"{self._pt('chart.bar', 'Bar')}: {', '.join(y_columns[:4])}")
+        self._configure_chart_theme(chart)
         return chart
+
+    def _configure_chart_theme(self, chart: QChart) -> None:
+        palette = self.services.theme_manager.current_palette()
+        border = QColor(palette.border)
+        text = QColor(palette.text_primary)
+        surface = QColor(palette.surface_bg)
+        plot_surface = QColor(palette.window_bg)
+        chart.setBackgroundVisible(True)
+        chart.setBackgroundBrush(surface)
+        chart.setBackgroundPen(QPen(border))
+        chart.setPlotAreaBackgroundVisible(True)
+        chart.setPlotAreaBackgroundBrush(plot_surface)
+        chart.setPlotAreaBackgroundPen(QPen(border))
+        chart.setTitleBrush(text)
+        chart.legend().setLabelColor(text)
+        for axis in chart.axes():
+            try:
+                axis.setLabelsColor(text)
+            except Exception:
+                pass
+            try:
+                axis.setTitleBrush(text)
+            except Exception:
+                pass
+            try:
+                axis.setGridLineColor(border)
+            except Exception:
+                pass
+            try:
+                axis.setLinePen(QPen(border))
+            except Exception:
+                pass
 
     def _export_xlsx(self) -> None:
         if not self._latest_result:

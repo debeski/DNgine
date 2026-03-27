@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -164,10 +163,6 @@ class DataCleanerPage(QWidget):
         self.open_output_button.clicked.connect(self._open_output)
         controls.addWidget(self.open_output_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        controls.addWidget(self.progress, 1)
         layout.addLayout(controls)
 
         summary_card = QFrame()
@@ -226,7 +221,6 @@ class DataCleanerPage(QWidget):
 
         self.run_button.setEnabled(False)
         self.open_output_button.setEnabled(False)
-        self.progress.setValue(0)
         self.output.setPlainText("")
         self.summary_label.setText(self._pt("summary.running", "Cleaning workbook..."))
 
@@ -244,11 +238,7 @@ class DataCleanerPage(QWidget):
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
-            on_progress=self._handle_progress,
         )
-
-    def _handle_progress(self, value: float) -> None:
-        self.progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def _handle_result(self, payload: object) -> None:
         result = dict(payload)

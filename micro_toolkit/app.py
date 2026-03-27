@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPlainTextEdit,
+    QProgressBar,
     QProxyStyle,
     QScrollArea,
     QSizePolicy,
@@ -79,8 +80,8 @@ class SidebarItemDelegate(QStyledItemDelegate):
             depth += 1
             parent = parent.parent()
 
-        left_gutter = 2 + (depth * 6)
-        row_rect = opt.rect.adjusted(left_gutter, 4, -3, -4)
+        left_gutter = 2 + (depth * 4)
+        row_rect = opt.rect.adjusted(left_gutter, 2, -2, -2)
 
         painter.save()
         if opt.state & QStyle.StateFlag.State_Selected:
@@ -101,7 +102,7 @@ class SidebarItemDelegate(QStyledItemDelegate):
 
         opt.state &= ~QStyle.StateFlag.State_Selected
         opt.state &= ~QStyle.StateFlag.State_MouseOver
-        opt.rect = row_rect.adjusted(6, 0, -2, 0)
+        opt.rect = row_rect.adjusted(5, 0, -2, 0)
         super().paint(painter, opt, index)
 
 
@@ -404,6 +405,7 @@ class MicroToolkitWindow(QMainWindow):
         self._quitting = False
         self._busy_depth = 0
         self._visual_busy_depth = 0
+        self._busy_cursor_active = False
         self._visual_status_restore = ""
         self._dock_state_timer = QTimer(self)
         self._dock_state_timer.setSingleShot(True)
@@ -435,20 +437,20 @@ class MicroToolkitWindow(QMainWindow):
         sidebar_card = QFrame()
         self.sidebar_card = sidebar_card
         sidebar_card.setObjectName("SidebarCard")
-        sidebar_card.setFixedWidth(286)
+        sidebar_card.setFixedWidth(254)
         sidebar_layout = QVBoxLayout(sidebar_card)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
 
         sidebar_header = QFrame()
         sidebar_header.setObjectName("SidebarHeader")
-        sidebar_header.setFixedHeight(57)
+        sidebar_header.setFixedHeight(48)
         brand_row = QHBoxLayout(sidebar_header)
         brand_row.setContentsMargins(0, 0, 0, 0)
         brand_row.setSpacing(0)
         self.app_title_label = QLabel("Micro Toolkit")
         self.app_title_label.setObjectName("AppTitle")
-        self.app_title_label.setContentsMargins(20, 0, 20, 0)
+        self.app_title_label.setContentsMargins(16, 0, 14, 0)
         brand_row.addWidget(self.app_title_label, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         brand_row.addStretch(1)
         sidebar_layout.addWidget(sidebar_header)
@@ -460,11 +462,13 @@ class MicroToolkitWindow(QMainWindow):
         self.sidebar_tree.setItemDelegate(SidebarItemDelegate(self.sidebar_tree))
         self.sidebar_tree.setHeaderHidden(True)
         self.sidebar_tree.setRootIsDecorated(False)
-        self.sidebar_tree.setIndentation(14)
+        self.sidebar_tree.setIndentation(10)
+        self.sidebar_tree.setIconSize(QSize(18, 18))
         self.sidebar_tree.setExpandsOnDoubleClick(False)
         self.sidebar_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.sidebar_tree.setUniformRowHeights(True)
         self.sidebar_tree.setAnimated(True)
+        self.sidebar_tree.viewport().setProperty("_micro_sidebar_pointer", True)
         sidebar_layout.addWidget(self.sidebar_tree, 1)
 
         content_shell = QWidget()
@@ -472,28 +476,36 @@ class MicroToolkitWindow(QMainWindow):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
+        utility_bar_height = 48
+        utility_vertical_margin = 7
+        utility_actions_height = utility_bar_height - (utility_vertical_margin * 2)
+        utility_button_size = max(28, utility_actions_height - 2)
+
         utility_card = QFrame()
         utility_card.setObjectName("UtilityBar")
-        utility_card.setFixedHeight(57)
+        utility_card.setFixedHeight(utility_bar_height)
         utility_layout = QHBoxLayout(utility_card)
-        utility_layout.setContentsMargins(18, 12, 18, 12)
-        utility_layout.setSpacing(14)
+        utility_layout.setContentsMargins(12, utility_vertical_margin, 12, utility_vertical_margin)
+        utility_layout.setSpacing(8)
+
+        search_input_height = max(26, utility_actions_height - 4)
 
         search_host = QWidget()
         search_host.setObjectName("UtilitySearchHost")
-        search_host_layout = QVBoxLayout(search_host)
+        search_host_layout = QHBoxLayout(search_host)
         search_host_layout.setContentsMargins(0, 0, 0, 0)
         search_host_layout.setSpacing(0)
 
         self.search_input = QLineEdit()
         self.search_input.setObjectName("ShellSearchInput")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setMinimumWidth(380)
+        self.search_input.setMinimumWidth(340)
         self.search_input.setMaximumWidth(520)
-        self.search_input.setFixedHeight(28)
-        search_host.setFixedHeight(28)
-        search_host_layout.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        utility_layout.addWidget(search_host, 1, Qt.AlignmentFlag.AlignTop)
+        self.search_input.setFixedHeight(search_input_height)
+        search_host.setFixedHeight(utility_actions_height)
+        search_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        search_host_layout.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        utility_layout.addWidget(search_host, 1, Qt.AlignmentFlag.AlignVCenter)
 
         self.top_refresh_spinner = SpinnerIndicator(self, size=24, inset=7, thickness=4, interval_ms=80)
         self.top_refresh_spinner.setObjectName("TopRefreshSpinner")
@@ -502,7 +514,7 @@ class MicroToolkitWindow(QMainWindow):
 
         self.top_system_tools = QHBoxLayout()
         self.top_system_tools.setContentsMargins(0, 0, 0, 0)
-        self.top_system_tools.setSpacing(8)
+        self.top_system_tools.setSpacing(6)
 
         for plugin_id, fallback_icon, fallback_label in (
             (DASHBOARD_PLUGIN_ID, QStyle.StandardPixmap.SP_DirHomeIcon, "Dash Hub"),
@@ -519,8 +531,12 @@ class MicroToolkitWindow(QMainWindow):
                 handler=lambda _checked=False, pid=plugin_id: self.open_command_center() if pid == "command_center" else (self.open_plugin_manager() if pid == "plugin_manager" else (self.open_dev_lab() if pid == INSPECTOR_PLUGIN_ID else self.open_plugin(pid))),
                 checkable=True,
             )
-            button.setIconSize(QSize(20, 20))
-            button.setFixedSize(36, 36)
+            button.setIconSize(QSize(18, 18))
+            button.setFixedSize(utility_button_size, utility_button_size)
+            button.setStyleSheet(
+                f"QToolButton {{ min-width: {utility_button_size}px; max-width: {utility_button_size}px; "
+                f"min-height: {utility_button_size}px; max-height: {utility_button_size}px; padding: 0px; }}"
+            )
             button.setObjectName("SystemToolbarButton")
             self.system_toolbar_buttons[plugin_id] = button
             self.top_system_tools.addWidget(button)
@@ -529,23 +545,24 @@ class MicroToolkitWindow(QMainWindow):
         system_tools_host = QWidget()
         system_tools_host.setObjectName("UtilityActionsHost")
         system_tools_host.setLayout(self.top_system_tools)
-        system_tools_host.setFixedHeight(36)
-        utility_layout.addWidget(system_tools_host, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        system_tools_host.setFixedHeight(utility_actions_height)
+        system_tools_host.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        utility_layout.addWidget(system_tools_host, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         content_layout.addWidget(utility_card)
 
         header_card = QFrame()
         header_card.setObjectName("HeaderCard")
         header_layout = QVBoxLayout(header_card)
-        header_layout.setContentsMargins(24, 18, 24, 18)
-        header_layout.setSpacing(10)
+        header_layout.setContentsMargins(16, 10, 16, 10)
+        header_layout.setSpacing(5)
 
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(12)
+        top_row.setSpacing(8)
 
         title_column = QVBoxLayout()
         title_column.setContentsMargins(0, 0, 0, 0)
-        title_column.setSpacing(4)
+        title_column.setSpacing(1)
 
         self.page_context = QLabel()
         self.page_context.setObjectName("SectionEyebrow")
@@ -565,6 +582,7 @@ class MicroToolkitWindow(QMainWindow):
         self.pin_current_button.setObjectName("HeaderActionButton")
         self.pin_current_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.pin_current_button.setAutoRaise(False)
+        self.pin_current_button.setFixedSize(28, 28)
         top_row.addWidget(self.pin_current_button)
 
         header_layout.addLayout(top_row)
@@ -608,6 +626,13 @@ class MicroToolkitWindow(QMainWindow):
         status = QStatusBar()
         self.status_label = StatusElidedLabel()
         status.addWidget(self.status_label, 1)
+        self.task_progress = QProgressBar()
+        self.task_progress.setObjectName("ShellTaskProgressBar")
+        self.task_progress.setTextVisible(False)
+        self.task_progress.setFixedWidth(132)
+        self.task_progress.setFixedHeight(8)
+        self.task_progress.hide()
+        status.addPermanentWidget(self.task_progress)
         self.terminal_button = self._make_tool_button(
             icon=self._named_icon("terminal", fallback=QStyle.StandardPixmap.SP_ComputerIcon),
             tooltip="Show terminal",
@@ -616,8 +641,8 @@ class MicroToolkitWindow(QMainWindow):
         )
         self.terminal_button.setObjectName("TerminalToggle")
         self.terminal_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self.terminal_button.setIconSize(QSize(18, 18))
-        self.terminal_button.setFixedSize(32, 24)
+        self.terminal_button.setIconSize(QSize(14, 14))
+        self.terminal_button.setFixedSize(28, 20)
         status.addPermanentWidget(self.terminal_button)
         self.console_button = self._make_tool_button(
             icon=self._named_icon("console", fallback=QStyle.StandardPixmap.SP_FileDialogContentsView),
@@ -627,8 +652,8 @@ class MicroToolkitWindow(QMainWindow):
         )
         self.console_button.setObjectName("ConsoleToggle")
         self.console_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self.console_button.setIconSize(QSize(22, 22))
-        self.console_button.setFixedSize(32, 24)
+        self.console_button.setIconSize(QSize(14, 14))
+        self.console_button.setFixedSize(28, 20)
         status.addPermanentWidget(self.console_button)
         self.setStatusBar(status)
         self.loading_overlay = LoadingOverlay(self)
@@ -649,6 +674,7 @@ class MicroToolkitWindow(QMainWindow):
 
     def begin_loading(self, message: str = "Loading...") -> None:
         self._busy_depth += 1
+        self._sync_busy_cursor()
         self.loading_overlay.show_message(message)
         QApplication.processEvents()
 
@@ -656,6 +682,7 @@ class MicroToolkitWindow(QMainWindow):
         self._busy_depth = max(0, self._busy_depth - 1)
         if self._busy_depth == 0:
             self.loading_overlay.hide_overlay()
+        self._sync_busy_cursor()
 
     @contextmanager
     def loading_context(self, message: str = "Loading..."):
@@ -669,6 +696,7 @@ class MicroToolkitWindow(QMainWindow):
         if self._visual_busy_depth == 0:
             self._visual_status_restore = getattr(self.status_label, "_full_text", self.status_label.text())
         self._visual_busy_depth += 1
+        self._sync_busy_cursor()
         self.top_refresh_spinner.start()
         self.status_label.setText(message)
         QApplication.processEvents()
@@ -679,6 +707,32 @@ class MicroToolkitWindow(QMainWindow):
             self.top_refresh_spinner.stop()
             if self._visual_status_restore:
                 self.status_label.setText(self._visual_status_restore)
+        self._sync_busy_cursor()
+
+    def _sync_busy_cursor(self) -> None:
+        app = QApplication.instance()
+        if app is None:
+            return
+        should_be_busy = (self._busy_depth + self._visual_busy_depth) > 0
+        if should_be_busy and not self._busy_cursor_active:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self._busy_cursor_active = True
+        elif not should_be_busy and self._busy_cursor_active:
+            QApplication.restoreOverrideCursor()
+            self._busy_cursor_active = False
+
+    def show_task_progress(self, progress_value: int | None = None) -> None:
+        if progress_value is None:
+            self.task_progress.setRange(0, 0)
+        else:
+            self.task_progress.setRange(0, 100)
+            self.task_progress.setValue(max(0, min(100, int(progress_value))))
+        self.task_progress.show()
+
+    def hide_task_progress(self) -> None:
+        self.task_progress.hide()
+        self.task_progress.setRange(0, 100)
+        self.task_progress.setValue(0)
 
     def _bind_signals(self) -> None:
         self.search_input.textChanged.connect(self._apply_filter)
@@ -778,7 +832,7 @@ class MicroToolkitWindow(QMainWindow):
         quick_group.setIcon(0, self._named_icon("bolt", fallback=QStyle.StandardPixmap.SP_DialogOpenButton))
         quick_group.setFont(0, group_font)
         quick_group.setForeground(0, group_brush)
-        quick_group.setSizeHint(0, QSize(0, 54))
+        quick_group.setSizeHint(0, QSize(0, 42))
         self.sidebar_tree.addTopLevelItem(quick_group)
 
         quick_specs = [self.plugin_by_id[plugin_id] for plugin_id in self.services.quick_access_ids() if plugin_id in self.plugin_by_id]
@@ -790,7 +844,7 @@ class MicroToolkitWindow(QMainWindow):
             child.setIcon(0, self._plugin_icon(spec))
             child.setFont(0, item_font)
             child.setForeground(0, item_brush)
-            child.setSizeHint(0, QSize(0, 40))
+            child.setSizeHint(0, QSize(0, 34))
             quick_group.addChild(child)
 
         categories: dict[str, list[PluginSpec]] = defaultdict(list)
@@ -812,7 +866,7 @@ class MicroToolkitWindow(QMainWindow):
             category_item.setIcon(0, self._group_icon(categories[category]))
             category_item.setFont(0, group_font)
             category_item.setForeground(0, group_brush)
-            category_item.setSizeHint(0, QSize(0, 54))
+            category_item.setSizeHint(0, QSize(0, 42))
             self.sidebar_tree.addTopLevelItem(category_item)
 
             for spec in sorted(categories[category], key=lambda item: self.services.plugin_display_name(item).lower()):
@@ -823,7 +877,7 @@ class MicroToolkitWindow(QMainWindow):
                 child.setIcon(0, self._plugin_icon(spec))
                 child.setFont(0, item_font)
                 child.setForeground(0, item_brush)
-                child.setSizeHint(0, QSize(0, 40))
+                child.setSizeHint(0, QSize(0, 34))
                 category_item.addChild(child)
         self._adjust_sidebar_width()
 
@@ -1168,7 +1222,7 @@ class MicroToolkitWindow(QMainWindow):
             "show_clipboard_quick_panel",
             "Quick clipboard history",
             "Ctrl+Alt+V",
-            self.services.clipboard_quick_panel.toggle,
+            self.services.show_clipboard_quick_panel,
             default_scope="global",
         )
         self.services.shortcut_manager.register_action("toggle_activity", "Toggle activity panel", "F12", self.toggle_activity_dock)
@@ -1286,6 +1340,10 @@ class MicroToolkitWindow(QMainWindow):
             self.terminal_output.shutdown()
         super().closeEvent(event)
         if event.isAccepted():
+            if self.services.clip_monitor_enabled():
+                self.services.tray_manager.hide()
+                QApplication.processEvents()
+            self.services.notify_clip_monitor_app_state(False)
             app = QApplication.instance()
             if app is not None:
                 app.quit()
@@ -1464,8 +1522,8 @@ class MicroToolkitWindow(QMainWindow):
             max_text = max(max_text, fm.horizontalAdvance(top.text(0)))
             for j in range(top.childCount()):
                 child = top.child(j)
-                max_text = max(max_text, fm.horizontalAdvance(child.text(0)) + 22)
-        width = max(236, min(312, max_text + 88))
+                max_text = max(max_text, fm.horizontalAdvance(child.text(0)) + 18)
+        width = max(214, min(278, max_text + 66))
         self.sidebar_card.setFixedWidth(width)
 
     def _sync_system_toolbar_selection(self, plugin_id: str | None) -> None:
@@ -1598,13 +1656,16 @@ class MicroToolkitWindow(QMainWindow):
     def _confirm_exit(self) -> bool:
         if not bool(self.services.config.get("confirm_on_exit")):
             return True
+        body_key = "confirm.exit.body.monitor" if self.services.clip_monitor_enabled() else "confirm.exit.body"
+        body_default = (
+            "This will close the application window. Clip-Monitor will keep running in the background for this session. Do you want to continue?"
+            if self.services.clip_monitor_enabled()
+            else "This will close the application window and stop background features for this session. Do you want to continue?"
+        )
         confirmed, always_ask = confirm_action_with_option(
             self,
             title=self.services.i18n.tr("confirm.exit.title", "Exit Micro Toolkit?"),
-            body=self.services.i18n.tr(
-                "confirm.exit.body",
-                "This will close the application window and stop background features for this session. Do you want to continue?",
-            ),
+            body=self.services.i18n.tr(body_key, body_default),
             confirm_text=self.services.i18n.tr("confirm.exit.confirm", "Exit"),
             cancel_text=self.services.i18n.tr("confirm.cancel", "Cancel"),
             option_text=self.services.i18n.tr("confirm.exit.ask_always", "Always ask on exit"),

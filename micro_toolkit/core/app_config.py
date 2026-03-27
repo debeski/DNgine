@@ -8,6 +8,7 @@ from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID
 
 
 DEFAULT_CONFIG = {
+    "clip_monitor_enabled": True,
     "minimize_to_tray": False,
     "close_to_tray": False,
     "confirm_on_exit": True,
@@ -38,6 +39,7 @@ DEFAULT_CONFIG = {
 }
 
 _BOOL_KEYS = {
+    "clip_monitor_enabled",
     "minimize_to_tray",
     "close_to_tray",
     "confirm_on_exit",

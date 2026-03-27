@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal, Slot
 from micro_toolkit.core.app_config import AppConfig
 from micro_toolkit.core.autostart import AutostartManager
 from micro_toolkit.core.backup_manager import BackupManager
+from micro_toolkit.core.clip_monitor import ClipMonitorManager
 from micro_toolkit.core.clipboard_quick_panel import ClipboardQuickPanelController
 from micro_toolkit.core.commands import CommandRegistry
 from micro_toolkit.core.command_runtime import serialize_command_result
@@ -17,6 +18,7 @@ from micro_toolkit.core.elevated_broker import ElevatedBrokerManager
 from micro_toolkit.core.elevation import ElevationManager
 from micro_toolkit.core.hotkey_helper import HotkeyHelperManager
 from micro_toolkit.core.i18n import TranslationManager
+from micro_toolkit.core.plugin_dependencies import PluginDependencyManager
 from micro_toolkit.core.plugin_manager import PluginManager
 from micro_toolkit.core.plugin_packages import PluginPackageManager
 from micro_toolkit.core.plugin_state import PluginStateManager
@@ -100,9 +102,12 @@ class AppServices(QObject):
         self.config_path = self.data_root / "micro_toolkit_config.json"
         self.database_path = self.data_root / "micro_toolkit.db"
         self.plugin_state_path = self.data_root / "plugin_state.json"
+        self.plugin_dependency_state_path = self.data_root / "plugin_dependency_state.json"
+        self.plugin_dependency_root = self.data_root / "plugin_deps"
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.custom_plugins_root.mkdir(parents=True, exist_ok=True)
+        self.plugin_dependency_root.mkdir(parents=True, exist_ok=True)
         self.config = AppConfig(self.config_path, self.output_root)
         self.config.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
         self.session_manager = SessionManager(self.database_path)
@@ -111,6 +116,8 @@ class AppServices(QObject):
         self.application = None
         self.main_window = None
         self._visual_refresh_pending = False
+        self._shell_task_sequence = 0
+        self._shell_task_entries: dict[int, dict[str, object]] = {}
         self._visual_refresh_timer = QTimer(self)
         self._visual_refresh_timer.setSingleShot(True)
         self._visual_refresh_timer.timeout.connect(self._apply_pending_visual_refresh)
@@ -134,6 +141,14 @@ class AppServices(QObject):
             builtin_manifest_path=self.builtin_manifest_path,
             enforce_builtin_manifest=getattr(sys, "frozen", False),
         )
+        self.plugin_dependency_manager = PluginDependencyManager(
+            self.plugin_manager,
+            self.plugin_dependency_root,
+            self.plugin_dependency_state_path,
+        )
+        self.plugin_dependency_manager.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
+        self.plugin_manager.dependency_paths_resolver = self.plugin_dependency_manager.dependency_paths_for_spec
+        self.plugin_manager.dependency_summary_resolver = self.plugin_dependency_manager.summary_for_spec
         self.plugin_package_manager = PluginPackageManager(
             self.plugin_manager,
             self.custom_plugins_root,
@@ -148,6 +163,7 @@ class AppServices(QObject):
         self.autostart_manager = AutostartManager()
         self.workflow_manager = WorkflowManager(self.workflows_root)
         self.shortcut_manager = ShortcutManager(self.config, self.logger, helper_manager=self.hotkey_helper_manager)
+        self.clip_monitor_manager = ClipMonitorManager(self.config, self.data_root)
         self.clipboard_quick_panel = ClipboardQuickPanelController(self)
         self.tray_manager = TrayManager(self)
         self.ui_inspector = UIInspector()
@@ -247,6 +263,7 @@ class AppServices(QObject):
         self.shortcut_manager.attach(main_window)
         self.tray_manager.attach(main_window)
         self.ui_inspector.attach_main_window(main_window)
+        self._sync_clip_monitor_runtime()
 
     def log(self, message: str, level: str = "INFO") -> None:
         self.logger.log(message, level)
@@ -291,34 +308,41 @@ class AppServices(QObject):
 
     def set_theme(self, theme_name: str) -> str:
         selected = self.theme_manager.set_color(theme_name)
+        self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_theme_selection(self, color_key: str, dark_enabled: bool) -> str:
         selected = self.theme_manager.theme_name_for(color_key, dark_enabled)
         self.theme_manager.set_theme(selected)
+        self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_dark_mode(self, enabled: bool) -> str:
         selected = self.theme_manager.set_dark_mode(enabled)
+        self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_density_scale(self, density: int) -> int:
         selected = self.theme_manager.set_density_scale(density)
+        self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Refreshing layout...")
         return selected
 
     def set_ui_scaling(self, scale: float) -> float:
         normalized = self.theme_manager.set_ui_scaling(scale)
+        self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Refreshing layout...")
         return normalized
 
     def set_language(self, language: str) -> str:
         self.i18n.set_language(language)
+        self.i18n.save_to_config()
         if self.application is not None:
             self.i18n.apply(self.application)
+        self.clip_monitor_manager.refresh_preferences()
         return self.i18n.current_language()
 
     def restore_live_preferences_from_config(self) -> None:
@@ -342,10 +366,92 @@ class AppServices(QObject):
             return
         try:
             self.theme_manager.apply(self.application)
+            self.clip_monitor_manager.refresh_preferences()
         finally:
             if self.main_window is not None and self._visual_refresh_pending:
                 self.main_window.end_visual_refresh()
             self._visual_refresh_pending = False
+
+    def _start_shell_task_progress(self, status_text: str | None = None) -> int | None:
+        if self.main_window is None:
+            return None
+        self._shell_task_sequence += 1
+        task_id = self._shell_task_sequence
+        self._shell_task_entries[task_id] = {
+            "has_progress": False,
+            "progress": 0.0,
+        }
+        if status_text:
+            self.logger.set_status(status_text)
+        self._refresh_shell_task_progress()
+        return task_id
+
+    def _update_shell_task_progress(self, task_id: int, value: float) -> None:
+        entry = self._shell_task_entries.get(task_id)
+        if entry is None:
+            return
+        entry["has_progress"] = True
+        entry["progress"] = max(0.0, min(1.0, float(value)))
+        self._refresh_shell_task_progress()
+
+    def _finish_shell_task_progress(self, task_id: int) -> None:
+        self._shell_task_entries.pop(task_id, None)
+        self._refresh_shell_task_progress()
+
+    def _refresh_shell_task_progress(self) -> None:
+        if self.main_window is None:
+            return
+        if not self._shell_task_entries:
+            self.main_window.hide_task_progress()
+            return
+        task_id = next(reversed(self._shell_task_entries))
+        entry = self._shell_task_entries.get(task_id, {})
+        if entry.get("has_progress"):
+            self.main_window.show_task_progress(int(round(float(entry.get("progress", 0.0)) * 100)))
+        else:
+            self.main_window.show_task_progress(None)
+
+    def clip_monitor_enabled(self) -> bool:
+        return bool(self.config.get("clip_monitor_enabled"))
+
+    def set_clip_monitor_enabled(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        self.config.set("clip_monitor_enabled", enabled)
+        self.autostart_manager.set_clip_monitor_enabled(enabled)
+        self._sync_clip_monitor_runtime()
+        self.tray_manager.sync_visibility()
+        return enabled
+
+    def show_clipboard_quick_panel(self) -> bool:
+        if self.main_window is not None:
+            self.clipboard_quick_panel.toggle()
+            return True
+        if self.clip_monitor_enabled() and self.clip_monitor_manager.ensure_running():
+            return self.clip_monitor_manager.toggle_quick_panel()
+        return True
+
+    def notify_clip_monitor_app_state(self, active: bool) -> None:
+        if not self.clip_monitor_enabled():
+            return
+        if self.clip_monitor_manager.ensure_running():
+            self.clip_monitor_manager.set_app_active(
+                active,
+                os.getpid() if active else None,
+                prefer_helper=self.hotkey_helper_manager.is_active(),
+            )
+
+    def _sync_clip_monitor_runtime(self) -> None:
+        if self.clip_monitor_enabled():
+            self.clip_monitor_manager.ensure_running()
+            self.clip_monitor_manager.set_app_active(
+                self.main_window is not None,
+                os.getpid() if self.main_window is not None else None,
+                prefer_helper=self.hotkey_helper_manager.is_active(),
+            )
+            self.clip_monitor_manager.refresh_preferences()
+        else:
+            if self.clip_monitor_manager.is_running():
+                self.clip_monitor_manager.stop(persist_disabled=False)
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
         if is_system_component(plugin_id):
@@ -604,8 +710,10 @@ class AppServices(QObject):
         on_error=None,
         on_finished=None,
         on_progress=None,
+        status_text: str | None = None,
     ) -> Worker:
         worker = Worker(task_fn)
+        shell_task_id = self._start_shell_task_progress(status_text)
         worker.signals.log.connect(self.logger.log)
         if on_result is not None:
             worker.signals.result.connect(on_result)
@@ -617,6 +725,13 @@ class AppServices(QObject):
             worker.signals.finished.connect(on_finished)
         if on_progress is not None:
             worker.signals.progress.connect(on_progress)
+        if shell_task_id is not None:
+            worker.signals.progress.connect(
+                lambda value, task_id=shell_task_id: self._update_shell_task_progress(task_id, value)
+            )
+            worker.signals.finished.connect(
+                lambda task_id=shell_task_id: self._finish_shell_task_progress(task_id)
+            )
         self.thread_pool.start(worker)
         return worker
 
@@ -663,7 +778,7 @@ class AppServices(QObject):
 
     def _toggle_clipboard_quick_panel(self):
         self._require_window()
-        self.clipboard_quick_panel.toggle()
+        self.show_clipboard_quick_panel()
         return {"visible": True}
 
     def _restart_elevated(self):

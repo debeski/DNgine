@@ -61,19 +61,19 @@ class PluginPackageManager:
         self.plugin_manager.invalidate_cache(clear_instances=True)
         return [spec.plugin_id for spec in specs]
 
-    def import_backup(self, archive_path: Path) -> list[str]:
+    def import_plugin_package(self, archive_path: Path) -> list[str]:
         archive_path = Path(archive_path)
         if not archive_path.exists():
-            raise ValueError("Choose a valid backup archive.")
+            raise ValueError("Choose a valid plugin package archive.")
         imported_ids: list[str] = []
         with zipfile.ZipFile(archive_path, "r") as archive:
             try:
                 manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             except Exception as exc:
-                raise ValueError(f"Invalid plugin backup file: {exc}") from exc
+                raise ValueError(f"Invalid plugin package file: {exc}") from exc
             plugins = manifest.get("plugins", [])
             if not isinstance(plugins, list) or not plugins:
-                raise ValueError("Backup archive does not contain any plugins.")
+                raise ValueError("Plugin package archive does not contain any plugins.")
 
             existing_by_id = {spec.plugin_id: spec for spec in self.plugin_manager.discover_plugins(include_disabled=True)}
             for entry in plugins:
@@ -81,7 +81,7 @@ class PluginPackageManager:
                 package_name = entry.get("package_name")
                 source_type = entry.get("source_type", "custom")
                 if not plugin_id or not package_name:
-                    raise ValueError("Backup manifest is missing plugin metadata.")
+                    raise ValueError("Plugin package manifest is missing plugin metadata.")
                 existing = existing_by_id.get(plugin_id)
                 if existing is not None and not (existing.source_type == "custom" and existing.package_name == package_name):
                     raise ValueError(f"Cannot import '{plugin_id}' because that plugin id already exists.")
@@ -112,6 +112,9 @@ class PluginPackageManager:
                     raise
         self.plugin_manager.invalidate_cache(clear_instances=True)
         return imported_ids
+
+    def import_backup(self, archive_path: Path) -> list[str]:
+        return self.import_plugin_package(archive_path)
 
     def export_plugins(self, specs: list[PluginSpec], destination: Path) -> Path:
         destination = Path(destination)
@@ -212,4 +215,4 @@ class PluginPackageManager:
         resolved_target = target_path.resolve()
         resolved_root = root.resolve()
         if resolved_target != resolved_root and resolved_root not in resolved_target.parents:
-            raise ValueError("Backup archive contains an unsafe path.")
+            raise ValueError("Plugin package archive contains an unsafe path.")

@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -557,11 +556,6 @@ class WifiProfilesPage(QWidget):
 
         controls.addStretch(1)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        controls.addWidget(self.progress, 1)
         hero_layout.addLayout(controls)
 
         self.status_label = QLabel()
@@ -604,7 +598,13 @@ class WifiProfilesPage(QWidget):
                 value.setWordWrap(True)
                 host_layout.addWidget(value, 1)
                 toggle = QToolButton()
+                toggle.setObjectName("InlineIconButton")
                 toggle.setAutoRaise(True)
+                toggle.setIconSize(QSize(16, 16))
+                toggle.setFixedSize(28, 28)
+                toggle.setStyleSheet(
+                    "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
+                )
                 toggle.clicked.connect(self._toggle_current_password_visibility)
                 host_layout.addWidget(toggle, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.current_grid.addWidget(host, row, 1)
@@ -681,18 +681,13 @@ class WifiProfilesPage(QWidget):
     def _refresh(self) -> None:
         self.refresh_button.setEnabled(False)
         self.copy_current_button.setEnabled(False)
-        self.progress.setValue(14)
         self.status_label.setText(self._pt("status_ready", "Ready to inspect Wi-Fi profiles."))
         self.services.run_task(
             lambda context: collect_wifi_payload(context, translate=self._pt),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._handle_finished,
-            on_progress=self._handle_progress,
         )
-
-    def _handle_progress(self, value: float) -> None:
-        self.progress.setValue(int(max(0.0, min(1.0, value)) * 100))
 
     def _handle_result(self, payload: object) -> None:
         self._payload = dict(payload) if isinstance(payload, dict) else {}
@@ -722,8 +717,6 @@ class WifiProfilesPage(QWidget):
 
     def _handle_finished(self) -> None:
         self.refresh_button.setEnabled(True)
-        if self.progress.value() < 100:
-            self.progress.setValue(100)
 
     def _render_current_network(self) -> None:
         current = self._payload.get("current")
@@ -801,7 +794,13 @@ class WifiProfilesPage(QWidget):
             action_layout.addStretch(1)
 
             reveal_button = QToolButton()
+            reveal_button.setObjectName("InlineIconButton")
             reveal_button.setAutoRaise(True)
+            reveal_button.setIconSize(QSize(16, 16))
+            reveal_button.setFixedSize(28, 28)
+            reveal_button.setStyleSheet(
+                "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
+            )
             reveal_button.setIcon(self._password_toggle_icon(row_index in self._revealed_profile_rows))
             reveal_button.setToolTip(
                 self._pt("tooltip.reveal", "Reveal password")
@@ -813,7 +812,13 @@ class WifiProfilesPage(QWidget):
             action_layout.addWidget(reveal_button)
 
             copy_button = QToolButton()
+            copy_button.setObjectName("InlineIconButton")
             copy_button.setAutoRaise(True)
+            copy_button.setIconSize(QSize(16, 16))
+            copy_button.setFixedSize(28, 28)
+            copy_button.setStyleSheet(
+                "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
+            )
             copy_button.setIcon(
                 icon_from_name("clipboard", self)
                 or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogContentsView)

@@ -303,12 +303,16 @@ class PluginManager:
         *,
         builtin_manifest_path: Path | None = None,
         enforce_builtin_manifest: bool | None = None,
+        dependency_paths_resolver=None,
+        dependency_summary_resolver=None,
     ):
         self.builtin_root = Path(builtin_root)
         self.custom_root = Path(custom_root) if custom_root is not None else None
         self.state_manager = state_manager
         self.builtin_manifest_path = Path(builtin_manifest_path) if builtin_manifest_path is not None else None
         self.enforce_builtin_manifest = bool(enforce_builtin_manifest) if enforce_builtin_manifest is not None else False
+        self.dependency_paths_resolver = dependency_paths_resolver
+        self.dependency_summary_resolver = dependency_summary_resolver
         self._builtin_manifest = (
             load_builtin_manifest(self.builtin_manifest_path)
             if self.builtin_manifest_path is not None
@@ -408,6 +412,30 @@ class PluginManager:
             raise RuntimeError(f"Plugin '{plugin_id}' is not trusted yet. Review it in Settings before loading it.")
         if spec.quarantined:
             raise RuntimeError(f"Plugin '{plugin_id}' is quarantined because it previously failed or was flagged unsafe.")
+
+        if callable(self.dependency_summary_resolver):
+            try:
+                dependency_summary = self.dependency_summary_resolver(spec)
+            except Exception:
+                dependency_summary = None
+            if (
+                dependency_summary is not None
+                and getattr(dependency_summary, "has_manifest", False)
+                and str(getattr(dependency_summary, "status", "")) not in {"installed", "conflict"}
+            ):
+                raise RuntimeError(
+                    f"Plugin '{plugin_id}' requires dependency installation. "
+                    "Open Command Center -> Plugins and install its dependency sidecar first."
+                )
+
+        if callable(self.dependency_paths_resolver):
+            try:
+                for dependency_path in reversed(list(self.dependency_paths_resolver(spec))):
+                    dependency_text = str(dependency_path).strip()
+                    if dependency_text and dependency_text not in sys.path:
+                        sys.path.insert(0, dependency_text)
+            except Exception:
+                pass
 
         spec_obj = importlib.util.spec_from_file_location(spec.module_name, spec.file_path)
         if spec_obj is None or spec_obj.loader is None:

@@ -79,21 +79,35 @@ class DevLabPage(QWidget):
         control_layout.setContentsMargins(18, 18, 18, 18)
         control_layout.setSpacing(12)
 
-        self.status_label = QLabel()
-        self.status_label.setWordWrap(True)
-        control_layout.addWidget(self.status_label)
+        self.control_title = QLabel()
+        control_layout.addWidget(self.control_title)
+
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 0, 0, 0)
+        button_row.setSpacing(10)
+
+        self.inspect_button = QPushButton()
+        self.inspect_button.clicked.connect(self._toggle_inspecting)
+        button_row.addWidget(
+            self.inspect_button,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+
+        button_row.addStretch(1)
 
         self.text_unlock_checkbox = QCheckBox()
         self.text_unlock_checkbox.toggled.connect(self._toggle_text_unlock)
-        control_layout.addWidget(self.text_unlock_checkbox)
-
-        button_row = QHBoxLayout()
-        button_row.setSpacing(10)
-        self.inspect_button = QPushButton()
-        self.inspect_button.clicked.connect(self._toggle_inspecting)
-        button_row.addWidget(self.inspect_button)
-        button_row.addStretch(1)
+        button_row.addWidget(
+            self.text_unlock_checkbox,
+            0,
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        )
         control_layout.addLayout(button_row)
+
+        self.status_label = QLabel()
+        self.status_label.setWordWrap(True)
+        control_layout.addWidget(self.status_label)
         outer.addWidget(control_card)
 
         content_row = QHBoxLayout()
@@ -143,6 +157,7 @@ class DevLabPage(QWidget):
         palette = self.services.theme_manager.current_palette()
         self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=800))
         self.description_label.setStyleSheet(muted_text_style(palette, size=14))
+        self.control_title.setStyleSheet(section_title_style(palette, size=18))
         self.path_title.setStyleSheet(section_title_style(palette, size=18))
         self.details_title.setStyleSheet(section_title_style(palette, size=18))
         self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
@@ -180,6 +195,7 @@ class DevLabPage(QWidget):
         )
         self.path_title.setText(self._pt("path.title", "Parent Chain"))
         self.details_title.setText(self._pt("details.title", "Widget Details"))
+        self.control_title.setText(self._pt("tools.title", "Tools"))
         self._reset_copy_button_text()
         self.text_unlock_checkbox.setText(
             self._pt("text_unlock", "Unlock static text selection across the app")

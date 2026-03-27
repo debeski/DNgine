@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -260,6 +260,13 @@ class ColorPickerPage(QWidget):
         self.pick_button.clicked.connect(self._start_pick)
         button_row.addWidget(self.pick_button)
         self.copy_hex_button = QToolButton()
+        self.copy_hex_button.setObjectName("InlineIconButton")
+        self.copy_hex_button.setAutoRaise(True)
+        self.copy_hex_button.setIconSize(QSize(16, 16))
+        self.copy_hex_button.setFixedSize(28, 28)
+        self.copy_hex_button.setStyleSheet(
+            "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
+        )
         self.copy_hex_button.clicked.connect(lambda: self._copy_value(self.hex_value.text()))
         button_row.addWidget(self.copy_hex_button)
         button_row.addStretch(1)

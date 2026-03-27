@@ -25,6 +25,7 @@ datas += collect_tree("micro_toolkit/i18n")
 datas += collect_tree("micro_toolkit/plugins")
 
 hiddenimports = collect_submodules("micro_toolkit.plugins")
+hiddenimports += collect_submodules("pip")
 
 icon_path = project_root / "app.ico"
 exe_icon = str(icon_path) if icon_path.exists() else None

@@ -4,7 +4,7 @@ import platform
 from importlib import metadata
 
 import psutil
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
@@ -67,11 +67,17 @@ class AboutInfoPage(QWidget):
         title_row.addWidget(self.title_label, 1)
 
         self.github_button = QToolButton()
+        self.github_button.setObjectName("InlineIconButton")
         self.github_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.github_button.setIcon(
             icon_from_name("github", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView)
         )
         self.github_button.setAutoRaise(True)
+        self.github_button.setIconSize(QSize(16, 16))
+        self.github_button.setFixedSize(28, 28)
+        self.github_button.setStyleSheet(
+            "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
+        )
         self.github_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://github.com/debeski/micro-Toolkit"))
         )

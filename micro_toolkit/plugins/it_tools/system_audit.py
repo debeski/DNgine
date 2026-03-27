@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -201,10 +200,6 @@ class SystemAuditPage(QWidget):
         controls.addWidget(self.timestamp_label, 0, Qt.AlignmentFlag.AlignVCenter)
         controls.addStretch(1)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        controls.addWidget(self.progress, 1)
         hero_layout.addLayout(controls)
         layout.addWidget(self.hero_card)
 
@@ -266,23 +261,30 @@ class SystemAuditPage(QWidget):
 
     def _run_audit(self) -> None:
         self.refresh_button.setEnabled(False)
-        self.progress.setValue(16)
         self.services.log(self._pt("log.refresh", "Refreshing system overview."))
-        try:
-            self.progress.setValue(48)
-            self._audit_payload = collect_system_audit_payload(translate=self._pt)
-            self.progress.setValue(82)
-            self._apply_audit_payload()
-            self._refresh_live_metrics()
-            self.services.record_run(self.plugin_id, "SUCCESS", "Updated system overview")
-            self.services.log(self._pt("log.success", "System overview refreshed successfully."))
-        except Exception as exc:
-            message = str(exc)
-            self.timestamp_label.setText(message)
-            self.services.record_run(self.plugin_id, "ERROR", message[:500])
-            self.services.log(self._pt("log.failed", "System overview refresh failed."), "ERROR")
+        self.services.run_task(
+            lambda context: collect_system_audit_payload(translate=self._pt),
+            on_result=self._handle_audit_result,
+            on_error=self._handle_audit_error,
+            on_finished=self._finish_audit_refresh,
+            status_text=self._pt("log.refresh", "Refreshing system overview."),
+        )
+
+    def _handle_audit_result(self, payload: object) -> None:
+        self._audit_payload = dict(payload) if isinstance(payload, dict) else {}
+        self._apply_audit_payload()
+        self._refresh_live_metrics()
+        self.services.record_run(self.plugin_id, "SUCCESS", "Updated system overview")
+        self.services.log(self._pt("log.success", "System overview refreshed successfully."))
+
+    def _handle_audit_error(self, payload: object) -> None:
+        message = payload.get("message", self._pt("log.failed", "System overview refresh failed.")) if isinstance(payload, dict) else str(payload)
+        self.timestamp_label.setText(message)
+        self.services.record_run(self.plugin_id, "ERROR", message[:500])
+        self.services.log(self._pt("log.failed", "System overview refresh failed."), "ERROR")
+
+    def _finish_audit_refresh(self) -> None:
         self.refresh_button.setEnabled(True)
-        self.progress.setValue(100)
         self._timer.start()
 
     def _apply_audit_payload(self) -> None:

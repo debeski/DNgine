@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from micro_toolkit.core.clip_monitor import build_clip_monitor_parser, run_clip_monitor_service
 from micro_toolkit.core.elevated_broker import build_elevated_broker_parser, run_elevated_broker_service
 from micro_toolkit.core.hotkey_helper import build_helper_parser, run_hotkey_helper_service
 from micro_toolkit.core.services import AppServices
@@ -15,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     gui = subparsers.add_parser("gui", help="Launch the desktop application")
     gui.add_argument("--plugin-id", default=None)
     gui.add_argument("--start-minimized", action="store_true")
+    gui.add_argument("--force-visible", action="store_true")
 
     plugins = subparsers.add_parser("plugins", help="Inspect discovered plugins")
     plugins_sub = plugins.add_subparsers(dest="plugins_command", required=True)
@@ -57,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     broker_run.add_argument("--payload", default="{}", help="JSON object payload")
 
     build_helper_parser(subparsers)
+    build_clip_monitor_parser(subparsers)
     build_elevated_broker_parser(subparsers)
 
     return parser
@@ -147,6 +150,9 @@ def execute_cli(args) -> int:
 
     if args.command == "hotkey-helper":
         return run_hotkey_helper_service(args)
+
+    if args.command == "clip-monitor":
+        return run_clip_monitor_service(args)
 
     if args.command == "elevated-broker":
         return run_elevated_broker_service(args)

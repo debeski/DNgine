@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QSize, Qt, QTimer, Signal, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractScrollArea,
@@ -361,6 +361,7 @@ class CommandCenterPage(QWidget):
         self._editing_plugin_id: str | None = None
         self._editing_snapshot: dict[str, str] = {}
         self._suspend_live_updates = False
+        self._building_shortcut_table = False
         self._density_interaction_start_value: int | None = None
         self._scaling_interaction_start_value: int | None = None
         self._responsive_bucket = ""
@@ -474,9 +475,11 @@ class CommandCenterPage(QWidget):
         self.output_browse_button = QPushButton()
         self.output_browse_button.clicked.connect(self._browse_output_dir)
         row.addWidget(self.output_browse_button)
+        self.output_dir_input.editingFinished.connect(self._commit_output_dir)
         output_form.addRow(self.output_label, row)
 
         self.startup_page_combo = QComboBox()
+        self.startup_page_combo.currentIndexChanged.connect(self._handle_startup_page_changed)
         output_form.addRow(self.startup_page_label, self.startup_page_combo)
         output_layout.addLayout(output_form)
         layout.addWidget(self.output_card)
@@ -512,7 +515,8 @@ class CommandCenterPage(QWidget):
             self.theme_button_group.addButton(button)
             self.theme_color_buttons[color_key] = button
             theme_picker_layout.addWidget(button)
-        self.dark_mode_checkbox = QCheckBox()
+        self.dark_mode_checkbox = ChoiceChipButton("", theme_picker_host)
+        self.dark_mode_checkbox.setObjectName("DarkModeToggle")
         self.dark_mode_checkbox.toggled.connect(self._handle_live_theme_change)
         theme_picker_layout.addWidget(self.dark_mode_checkbox)
         theme_picker_layout.addStretch(1)
@@ -591,16 +595,25 @@ class CommandCenterPage(QWidget):
         card_layout.addWidget(self.behavior_note)
 
         self.minimize_to_tray_checkbox = QCheckBox()
+        self.minimize_to_tray_checkbox.toggled.connect(self._handle_minimize_to_tray_toggled)
         card_layout.addWidget(self.minimize_to_tray_checkbox)
         self.close_to_tray_checkbox = QCheckBox()
+        self.close_to_tray_checkbox.toggled.connect(self._handle_close_to_tray_toggled)
         card_layout.addWidget(self.close_to_tray_checkbox)
+        self.clip_monitor_checkbox = QCheckBox()
+        self.clip_monitor_checkbox.toggled.connect(self._handle_clip_monitor_toggled)
+        card_layout.addWidget(self.clip_monitor_checkbox)
         self.confirm_on_exit_checkbox = QCheckBox()
+        self.confirm_on_exit_checkbox.toggled.connect(self._handle_confirm_on_exit_toggled)
         card_layout.addWidget(self.confirm_on_exit_checkbox)
         self.run_on_startup_checkbox = QCheckBox()
+        self.run_on_startup_checkbox.toggled.connect(self._handle_run_on_startup_toggled)
         card_layout.addWidget(self.run_on_startup_checkbox)
         self.start_minimized_checkbox = QCheckBox()
+        self.start_minimized_checkbox.toggled.connect(self._handle_start_minimized_toggled)
         card_layout.addWidget(self.start_minimized_checkbox)
         self.developer_mode_checkbox = QCheckBox()
+        self.developer_mode_checkbox.toggled.connect(self._handle_developer_mode_toggled)
         card_layout.addWidget(self.developer_mode_checkbox)
         self.autostart_status_label = QLabel()
         self.autostart_status_label.setWordWrap(True)
@@ -621,7 +634,7 @@ class CommandCenterPage(QWidget):
         self.backup_schedule_combo.addItem("Daily", "daily")
         self.backup_schedule_combo.addItem("Weekly", "weekly")
         self.backup_schedule_combo.addItem("Monthly", "monthly")
-        self.backup_schedule_combo.currentIndexChanged.connect(self._refresh_backup_status)
+        self.backup_schedule_combo.currentIndexChanged.connect(self._handle_backup_schedule_changed)
         backup_schedule_row = QHBoxLayout()
         backup_schedule_row.setContentsMargins(0, 0, 0, 0)
         backup_schedule_row.setSpacing(8)
@@ -651,9 +664,6 @@ class CommandCenterPage(QWidget):
         self.general_reset_button = QPushButton()
         self.general_reset_button.clicked.connect(self._reset_general_defaults)
         self.general_actions.addWidget(self.general_reset_button)
-        self.general_save_button = QPushButton()
-        self.general_save_button.clicked.connect(self._save_general_settings)
-        self.general_actions.addWidget(self.general_save_button)
         layout.addLayout(self.general_actions)
 
     def _build_quick_access_tab(self) -> None:
@@ -756,6 +766,7 @@ class CommandCenterPage(QWidget):
         self.shortcut_table.setAlternatingRowColors(True)
         self.shortcut_table.verticalHeader().setVisible(False)
         self.shortcut_table.horizontalHeader().setStretchLastSection(True)
+        self.shortcut_table.itemChanged.connect(self._handle_shortcut_item_changed)
         layout.addWidget(self.shortcut_table, 1)
 
         self.shortcuts_footer_actions = QHBoxLayout()
@@ -763,9 +774,6 @@ class CommandCenterPage(QWidget):
         self.shortcuts_reset_button = QPushButton()
         self.shortcuts_reset_button.clicked.connect(self._reset_shortcut_defaults)
         self.shortcuts_footer_actions.addWidget(self.shortcuts_reset_button)
-        self.shortcuts_save_button = QPushButton()
-        self.shortcuts_save_button.clicked.connect(self._save_shortcuts)
-        self.shortcuts_footer_actions.addWidget(self.shortcuts_save_button)
         layout.addLayout(self.shortcuts_footer_actions)
 
     def _build_plugins_tab(self) -> None:
@@ -785,6 +793,7 @@ class CommandCenterPage(QWidget):
         self.plugins_table.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self.plugins_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.plugins_table.customContextMenuRequested.connect(self._show_plugins_context_menu)
+        self.plugins_table.itemChanged.connect(self._handle_plugin_item_changed)
         header = self.plugins_table.horizontalHeader()
         header.setSectionsMovable(False)
         header.setStretchLastSection(False)
@@ -807,21 +816,19 @@ class CommandCenterPage(QWidget):
         self.plugins_actions_layout = QGridLayout()
         self.plugins_actions_layout.setHorizontalSpacing(8)
         self.plugins_actions_layout.setVerticalSpacing(8)
+        self.import_package_button = self._make_action_button("download", self._import_plugin_package)
         self.import_file_button = self._make_action_button("open", self._import_plugin_file)
         self.import_folder_button = self._make_action_button("folder-open", self._import_plugin_folder)
-        self.import_backup_button = self._make_action_button("download", self._import_backup)
         self.export_selected_button = self._make_action_button("save", self._export_selected_plugins)
         self.export_all_button = self._make_action_button("database", self._export_all_plugins)
-        self.apply_plugin_state_button = self._make_action_button("check", self._apply_plugin_states)
         self.reset_plugins_button = self._make_action_button("repeat", self._reset_plugin_defaults)
         self.refresh_plugins_button = self._make_action_button("sync", self._populate_plugin_table)
         self._plugin_action_buttons = [
+            self.import_package_button,
             self.import_file_button,
             self.import_folder_button,
-            self.import_backup_button,
             self.export_selected_button,
             self.export_all_button,
-            self.apply_plugin_state_button,
             self.reset_plugins_button,
             self.refresh_plugins_button,
         ]
@@ -840,6 +847,7 @@ class CommandCenterPage(QWidget):
         self.scaling_value_label.setText(f"{self.scaling_slider.value()}%")
         self.minimize_to_tray_checkbox.setChecked(bool(self.services.config.get("minimize_to_tray")))
         self.close_to_tray_checkbox.setChecked(bool(self.services.config.get("close_to_tray")))
+        self.clip_monitor_checkbox.setChecked(self.services.clip_monitor_enabled())
         self.confirm_on_exit_checkbox.setChecked(bool(self.services.config.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(self.services.autostart_manager.is_enabled()))
         self.start_minimized_checkbox.setChecked(bool(self.services.config.get("start_minimized")))
@@ -1149,6 +1157,7 @@ class CommandCenterPage(QWidget):
     def _populate_shortcuts(self) -> None:
         bindings = self.services.shortcut_manager.list_bindings()
         self.shortcut_action_ids = [binding.action_id for binding in bindings]
+        self._building_shortcut_table = True
         self.shortcut_table.setRowCount(len(bindings))
         self.shortcut_table.setHorizontalHeaderLabels(
             [
@@ -1169,7 +1178,11 @@ class CommandCenterPage(QWidget):
             for scope_id, label in scope_options:
                 combo.addItem(self._pt(f"shortcut.scope.{scope_id}", label), scope_id)
             self._set_combo_value(combo, binding.scope)
+            combo.currentIndexChanged.connect(
+                lambda _index, action_id=binding.action_id, widget=combo: self._handle_shortcut_scope_changed(action_id, widget)
+            )
             self.shortcut_table.setCellWidget(row_index, 2, combo)
+        self._building_shortcut_table = False
         self._refresh_shortcut_status()
 
     def _populate_plugin_table(self) -> None:
@@ -1410,6 +1423,90 @@ class CommandCenterPage(QWidget):
         current = item.checkState() == Qt.CheckState.Checked
         item.setCheckState(Qt.CheckState.Unchecked if current else Qt.CheckState.Checked)
 
+    def _set_plugin_item_check_state(self, item: QTableWidgetItem | None, checked: bool) -> None:
+        if item is None:
+            return
+        previous = self._building_plugin_table
+        self._building_plugin_table = True
+        try:
+            item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        finally:
+            self._building_plugin_table = previous
+
+    def _handle_plugin_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._building_plugin_table or item.column() not in {5, 6, 7}:
+            return
+
+        row = item.row()
+        spec = self._plugin_spec_for_row(row)
+        if spec is None:
+            return
+
+        trusted_item = self.plugins_table.item(row, 5)
+        enabled_item = self.plugins_table.item(row, 6)
+        hidden_item = self.plugins_table.item(row, 7)
+        trusted = trusted_item.checkState() == Qt.CheckState.Checked if trusted_item is not None else spec.trusted
+        enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else spec.enabled
+        hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else spec.hidden
+
+        if spec.source_type == "builtin":
+            trusted = True
+            self._set_plugin_item_check_state(trusted_item, True)
+
+        if spec.source_type == "custom" and spec.risk_level == "critical" and (trusted or enabled):
+            self.services.plugin_state_manager.quarantine(
+                spec.plugin_id,
+                self._pt(
+                    "plugins.blocked.reason",
+                    "The static safety scan detected critical-risk patterns. This plugin remains quarantined until removed or replaced.",
+                ),
+            )
+            trusted = False
+            enabled = False
+            self._set_plugin_item_check_state(trusted_item, False)
+            self._set_plugin_item_check_state(enabled_item, False)
+            QMessageBox.warning(
+                self,
+                self._pt("plugins.blocked.title", "Plugins blocked"),
+                self._pt(
+                    "plugins.blocked.body",
+                    "These custom plugins remain blocked because the static scan detected critical-risk patterns:\n\n{plugins}",
+                    plugins=f"- {self.services.plugin_display_name(spec)}",
+                ),
+            )
+        elif spec.source_type == "custom" and trusted and not spec.trusted and spec.risk_level in {"medium", "high"}:
+            confirmed = confirm_action(
+                self,
+                title=self._pt("plugins.review_prompt.title", "Trust custom plugins?"),
+                body=self._pt(
+                    "plugins.review_prompt.body",
+                    "The following custom plugins contain medium or high risk markers from the static safety scan:\n\n{plugins}\n\nTrusting them will allow the app to import and run their code. Only continue if you trust the author and reviewed the plugin contents.",
+                    plugins=f"- {self.services.plugin_display_name(spec)}",
+                ),
+                confirm_text=self._pt("plugins.review_prompt.confirm", "Trust and apply"),
+                cancel_text=self._pt("confirm.cancel", "Cancel"),
+            )
+            if not confirmed:
+                trusted = False
+                self._set_plugin_item_check_state(trusted_item, False)
+
+        if spec.source_type == "custom" and not trusted and enabled:
+            enabled = False
+            self._set_plugin_item_check_state(enabled_item, False)
+            QMessageBox.information(
+                self,
+                self._pt("plugins.trust_required.title", "Trust required"),
+                self._pt(
+                    "plugins.trust_required.body",
+                    "Review and trust this custom plugin before enabling it.",
+                ),
+            )
+
+        self.services.plugin_state_manager.set_trusted(spec.plugin_id, trusted)
+        self.services.plugin_state_manager.set_enabled(spec.plugin_id, enabled)
+        self.services.plugin_state_manager.set_hidden(spec.plugin_id, hidden)
+        self.services.reload_plugins()
+
     def _show_plugins_context_menu(self, position) -> None:
         index = self.plugins_table.indexAt(position)
         if not index.isValid():
@@ -1439,6 +1536,21 @@ class CommandCenterPage(QWidget):
             trusted_action = menu.addAction(self._pt("plugins.menu.toggle_trusted", "Toggle trusted"))
             trusted_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 5))
 
+        dependency_summary = self._plugin_dependency_summary(spec)
+        if dependency_summary.has_manifest:
+            menu.addSeparator()
+            view_deps_action = menu.addAction(self._pt("plugins.menu.view_deps", "View dependency file"))
+            view_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._view_plugin_dependency_file(plugin_id))
+
+            install_deps_action = menu.addAction(self._pt("plugins.menu.install_deps", "Install dependencies"))
+            install_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._install_plugin_dependencies(plugin_id, repair=False))
+
+            repair_deps_action = menu.addAction(self._pt("plugins.menu.repair_deps", "Repair dependencies"))
+            repair_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._install_plugin_dependencies(plugin_id, repair=True))
+
+            clear_deps_action = menu.addAction(self._pt("plugins.menu.clear_deps", "Clear dependencies"))
+            clear_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._clear_plugin_dependencies(plugin_id))
+
         details = self._plugin_review_details(spec)
         if details:
             menu.addSeparator()
@@ -1447,6 +1559,143 @@ class CommandCenterPage(QWidget):
                 lambda _checked=False, text=details, title=self.services.plugin_display_name(spec): QMessageBox.information(self, title, text)
             )
         menu.exec(self.plugins_table.viewport().mapToGlobal(position))
+
+    def _view_plugin_dependency_file(self, plugin_id: str) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if spec is None:
+            return
+        summary = self._plugin_dependency_summary(spec)
+        if not summary.has_manifest or summary.manifest_path is None:
+            QMessageBox.information(
+                self,
+                self._pt("plugins.deps.none.title", "No dependency file"),
+                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+            )
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(summary.manifest_path)))
+
+    def _install_plugin_dependencies(self, plugin_id: str, *, repair: bool) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if spec is None:
+            return
+        if spec.source_type != "custom":
+            return
+        if not spec.trusted:
+            QMessageBox.warning(
+                self,
+                self._pt("plugins.deps.review_required.title", "Trust required"),
+                self._pt(
+                    "plugins.deps.review_required.body",
+                    "Review and trust this custom plugin before installing its dependencies.",
+                ),
+            )
+            return
+        summary = self._plugin_dependency_summary(spec)
+        if not summary.has_manifest:
+            QMessageBox.information(
+                self,
+                self._pt("plugins.deps.none.title", "No dependency file"),
+                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+            )
+            return
+        if repair:
+            confirmed = confirm_action(
+                self,
+                title=self._pt("plugins.deps.repair.title", "Repair dependencies?"),
+                body=self._pt(
+                    "plugins.deps.repair.body",
+                    "This will clear the current dependency runtime for this plugin and reinstall it from the dependency sidecar.",
+                ),
+                confirm_text=self._pt("plugins.menu.repair_deps", "Repair dependencies"),
+                cancel_text=self._pt("confirm.cancel", "Cancel"),
+            )
+            if not confirmed:
+                return
+        window = self.services.main_window
+        if window is not None:
+            window.begin_loading(
+                self._pt(
+                    "loading.plugin_deps_repair" if repair else "loading.plugin_deps_install",
+                    "Repairing plugin dependencies..." if repair else "Installing plugin dependencies...",
+                )
+            )
+
+        def _on_result(payload: object) -> None:
+            result = dict(payload) if isinstance(payload, dict) else {}
+            self.services.reload_plugins()
+            QMessageBox.information(
+                self,
+                self._pt("plugins.deps.installed.title", "Dependencies ready"),
+                self._pt(
+                    "plugins.deps.installed.body",
+                    "Dependencies for {plugin} were installed into {path}.",
+                    plugin=self.services.plugin_display_name(spec),
+                    path=str(result.get("site_packages") or ""),
+                ),
+            )
+
+        def _on_error(payload: object) -> None:
+            message = payload.get("message", self._pt("plugins.deps.failed.body", "Dependency installation failed.")) if isinstance(payload, dict) else str(payload)
+            QMessageBox.critical(
+                self,
+                self._pt("plugins.deps.failed.title", "Dependency installation failed"),
+                message,
+            )
+            self._populate_plugin_table()
+
+        def _on_finished() -> None:
+            if window is not None:
+                window.end_loading()
+            self._populate_plugin_table()
+
+        self.services.run_task(
+            lambda context: self.services.plugin_dependency_manager.install_for_spec(spec, context, repair=repair),
+            on_result=_on_result,
+            on_error=_on_error,
+            on_finished=_on_finished,
+        )
+
+    def _clear_plugin_dependencies(self, plugin_id: str) -> None:
+        spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+        if spec is None:
+            return
+        summary = self._plugin_dependency_summary(spec)
+        if not summary.has_manifest:
+            QMessageBox.information(
+                self,
+                self._pt("plugins.deps.none.title", "No dependency file"),
+                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+            )
+            return
+        confirmed = confirm_action(
+            self,
+            title=self._pt("plugins.deps.clear.title", "Clear plugin dependencies?"),
+            body=self._pt(
+                "plugins.deps.clear.body",
+                "This will remove the installed dependency runtime for this plugin. You can reinstall it later from the same dependency sidecar.",
+            ),
+            confirm_text=self._pt("plugins.menu.clear_deps", "Clear dependencies"),
+            cancel_text=self._pt("confirm.cancel", "Cancel"),
+        )
+        if not confirmed:
+            return
+        removed = self.services.plugin_dependency_manager.clear_for_spec(spec)
+        self.services.reload_plugins()
+        QMessageBox.information(
+            self,
+            self._pt("plugins.deps.cleared.title", "Dependencies cleared"),
+            self._pt(
+                "plugins.deps.cleared.body",
+                "Dependency runtime cleared for {plugin}.",
+                plugin=self.services.plugin_display_name(spec),
+            )
+            if removed
+            else self._pt(
+                "plugins.deps.cleared.empty",
+                "No installed dependency runtime was found for {plugin}.",
+                plugin=self.services.plugin_display_name(spec),
+            ),
+        )
 
     def _change_plugin_name(self, plugin_id: str) -> None:
         spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
@@ -1492,6 +1741,7 @@ class CommandCenterPage(QWidget):
         selected = QFileDialog.getExistingDirectory(self, self._pt("output.browse", "Choose output folder"), current)
         if selected:
             self.output_dir_input.setText(selected)
+            self._commit_output_dir()
 
     def _startup_page_specs(self):
         specs = []
@@ -1515,51 +1765,111 @@ class CommandCenterPage(QWidget):
         self.startup_page_combo.blockSignals(False)
         self._set_combo_value(self.startup_page_combo, selected_plugin_id)
 
-    def _save_general_settings(self) -> None:
-        window = self.services.main_window
-        if window is not None:
-            window.begin_loading(self._pt("loading.saving", "Saving settings..."))
+    def _commit_output_dir(self) -> None:
+        if self._suspend_live_updates:
+            return
+        previous = str(self.services.default_output_path())
+        output_dir = Path(self.output_dir_input.text().strip() or previous)
         try:
-            output_dir = Path(self.output_dir_input.text().strip() or self.services.output_root)
             output_dir.mkdir(parents=True, exist_ok=True)
-            self._theme_preview_timer.stop()
-            self._language_preview_timer.stop()
-            self._density_preview_timer.stop()
-            self._scaling_preview_timer.stop()
-
-            self.services.config.update_many(
-                {
-                    "material_theme": self.services.theme_manager.current_theme(),
-                    "material_color": self.services.theme_manager.current_color_key(),
-                    "material_dark": self.services.theme_manager.is_dark_mode(),
-                    "appearance_mode": self.services.theme_manager.current_mode(),
-                    "density_scale": self.services.theme_manager.current_density_scale(),
-                    "ui_scaling": self.services.theme_manager.current_ui_scaling(),
-                    "language": self.services.i18n.current_language(),
-                    "backup_schedule": self.backup_schedule_combo.currentData() or "monthly",
-                    "default_output_path": str(output_dir),
-                    "default_start_plugin": str(self.startup_page_combo.currentData() or DASHBOARD_PLUGIN_ID),
-                    "minimize_to_tray": self.minimize_to_tray_checkbox.isChecked(),
-                    "close_to_tray": self.close_to_tray_checkbox.isChecked(),
-                    "confirm_on_exit": self.confirm_on_exit_checkbox.isChecked(),
-                    "run_on_startup": self.run_on_startup_checkbox.isChecked(),
-                    "start_minimized": self.start_minimized_checkbox.isChecked(),
-                }
+        except Exception as exc:
+            self.output_dir_input.blockSignals(True)
+            self.output_dir_input.setText(previous)
+            self.output_dir_input.blockSignals(False)
+            QMessageBox.warning(
+                self,
+                self._pt("output.invalid.title", "Output folder unavailable"),
+                self._pt(
+                    "output.invalid.body",
+                    "The selected output folder could not be used:\n\n{error}",
+                    error=str(exc),
+                ),
             )
-            if self.services.developer_mode_enabled() != self.developer_mode_checkbox.isChecked() or bool(self.services.config.get("developer_mode")) != self.developer_mode_checkbox.isChecked():
-                self.services.set_developer_mode(self.developer_mode_checkbox.isChecked())
+            return
+        normalized = str(output_dir)
+        if self.output_dir_input.text().strip() != normalized:
+            self.output_dir_input.blockSignals(True)
+            self.output_dir_input.setText(normalized)
+            self.output_dir_input.blockSignals(False)
+        self.services.config.set("default_output_path", normalized)
 
+    def _handle_startup_page_changed(self, *_args) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.config.set("default_start_plugin", str(self.startup_page_combo.currentData() or DASHBOARD_PLUGIN_ID))
+
+    def _handle_backup_schedule_changed(self, *_args) -> None:
+        if not self._suspend_live_updates:
+            self.services.config.set("backup_schedule", str(self.backup_schedule_combo.currentData() or "monthly"))
+        self._refresh_backup_status()
+
+    def _handle_minimize_to_tray_toggled(self, checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.config.set("minimize_to_tray", bool(checked))
+        self.services.tray_manager.sync_visibility()
+
+    def _handle_close_to_tray_toggled(self, checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.config.set("close_to_tray", bool(checked))
+        self.services.tray_manager.sync_visibility()
+
+    def _handle_clip_monitor_toggled(self, checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.set_clip_monitor_enabled(bool(checked))
+        self._refresh_autostart_status()
+
+    def _handle_confirm_on_exit_toggled(self, checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.config.set("confirm_on_exit", bool(checked))
+
+    def _sync_autostart_preferences(self) -> None:
+        desired_run = self.run_on_startup_checkbox.isChecked()
+        desired_minimized = self.start_minimized_checkbox.isChecked()
+        previous_run = bool(self.services.config.get("run_on_startup"))
+        previous_minimized = bool(self.services.config.get("start_minimized"))
+        try:
             self.services.autostart_manager.set_enabled(
-                self.run_on_startup_checkbox.isChecked(),
-                start_minimized=self.start_minimized_checkbox.isChecked(),
+                desired_run,
+                start_minimized=desired_minimized,
             )
-            self.services.tray_manager.sync_visibility()
+        except Exception as exc:
+            self._suspend_live_updates = True
+            self.run_on_startup_checkbox.setChecked(previous_run)
+            self.start_minimized_checkbox.setChecked(previous_minimized)
+            self._suspend_live_updates = False
+            QMessageBox.warning(
+                self,
+                self._pt("startup.failed.title", "Startup preference unavailable"),
+                self._pt(
+                    "startup.failed.body",
+                    "The startup preference could not be updated:\n\n{error}",
+                    error=str(exc),
+                ),
+            )
             self._refresh_autostart_status()
-            self._refresh_backup_status()
-        finally:
-            if window is not None:
-                window.end_loading()
-        QMessageBox.information(self, self._pt("saved.title", "Settings saved"), self._pt("saved.body", "Your application settings were updated."))
+            return
+        self.services.config.set("run_on_startup", desired_run)
+        self.services.config.set("start_minimized", desired_minimized)
+        self._refresh_autostart_status()
+
+    def _handle_run_on_startup_toggled(self, _checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self._sync_autostart_preferences()
+
+    def _handle_start_minimized_toggled(self, _checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self._sync_autostart_preferences()
+
+    def _handle_developer_mode_toggled(self, checked: bool) -> None:
+        if self._suspend_live_updates:
+            return
+        self.services.set_developer_mode(bool(checked))
 
     def _reset_general_defaults(self) -> None:
         if not self._confirm_risky(
@@ -1581,6 +1891,7 @@ class CommandCenterPage(QWidget):
         self.scaling_slider.setValue(int(round(float(defaults.get("ui_scaling") or 1.0) * 100)))
         self.minimize_to_tray_checkbox.setChecked(bool(defaults.get("minimize_to_tray")))
         self.close_to_tray_checkbox.setChecked(bool(defaults.get("close_to_tray")))
+        self.clip_monitor_checkbox.setChecked(bool(defaults.get("clip_monitor_enabled")))
         self.confirm_on_exit_checkbox.setChecked(bool(defaults.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(defaults.get("run_on_startup")))
         self.start_minimized_checkbox.setChecked(bool(defaults.get("start_minimized")))
@@ -1590,30 +1901,42 @@ class CommandCenterPage(QWidget):
         self._suspend_live_updates = False
         self.density_value_label.setText(str(self.density_slider.value()))
         self.scaling_value_label.setText(f"{self.scaling_slider.value()}%")
+        self._commit_output_dir()
+        self._handle_startup_page_changed()
+        self._handle_backup_schedule_changed()
+        self._handle_minimize_to_tray_toggled(self.minimize_to_tray_checkbox.isChecked())
+        self._handle_close_to_tray_toggled(self.close_to_tray_checkbox.isChecked())
+        self._handle_clip_monitor_toggled(self.clip_monitor_checkbox.isChecked())
+        self._handle_confirm_on_exit_toggled(self.confirm_on_exit_checkbox.isChecked())
+        self._handle_run_on_startup_toggled(self.run_on_startup_checkbox.isChecked())
+        self._handle_start_minimized_toggled(self.start_minimized_checkbox.isChecked())
+        self._handle_developer_mode_toggled(self.developer_mode_checkbox.isChecked())
         self._apply_pending_language_preview()
         self._apply_pending_theme_preview()
         self._apply_pending_density_preview()
         self._apply_pending_scaling_preview()
 
-    def _save_shortcuts(self) -> None:
-        window = self.services.main_window
-        if window is not None:
-            window.begin_loading(self._pt("loading.saving_shortcuts", "Saving shortcuts..."))
-        try:
-            shortcut_updates: dict[str, dict[str, str]] = {}
-            for row_index, action_id in enumerate(self.shortcut_action_ids):
-                sequence_item = self.shortcut_table.item(row_index, 1)
-                combo = self.shortcut_table.cellWidget(row_index, 2)
-                shortcut_updates[action_id] = {
-                    "sequence": sequence_item.text().strip() if sequence_item is not None else "",
-                    "scope": combo.currentData() if combo is not None else "application",
-                }
-            self.services.shortcut_manager.update_bindings(shortcut_updates)
-            self._refresh_shortcut_status()
-        finally:
-            if window is not None:
-                window.end_loading()
-        QMessageBox.information(self, self._pt("shortcuts.saved.title", "Shortcuts saved"), self._pt("shortcuts.saved.body", "Shortcut changes were saved."))
+    def _apply_shortcut_updates(self) -> None:
+        shortcut_updates: dict[str, dict[str, str]] = {}
+        for row_index, action_id in enumerate(self.shortcut_action_ids):
+            sequence_item = self.shortcut_table.item(row_index, 1)
+            combo = self.shortcut_table.cellWidget(row_index, 2)
+            shortcut_updates[action_id] = {
+                "sequence": sequence_item.text().strip() if sequence_item is not None else "",
+                "scope": combo.currentData() if isinstance(combo, QComboBox) else "application",
+            }
+        self.services.shortcut_manager.update_bindings(shortcut_updates)
+        self._refresh_shortcut_status()
+
+    def _handle_shortcut_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._building_shortcut_table or item.column() != 1:
+            return
+        self._apply_shortcut_updates()
+
+    def _handle_shortcut_scope_changed(self, _action_id: str, _combo: QComboBox) -> None:
+        if self._building_shortcut_table:
+            return
+        self._apply_shortcut_updates()
 
     def _reset_shortcut_defaults(self) -> None:
         if not self._confirm_risky(
@@ -1623,6 +1946,7 @@ class CommandCenterPage(QWidget):
             return
         bindings = self.services.shortcut_manager.list_bindings()
         scope_options = self.services.shortcut_manager.available_scopes()
+        self._building_shortcut_table = True
         for row_index, binding in enumerate(bindings):
             self.shortcut_table.setItem(row_index, 1, QTableWidgetItem(binding.default_sequence))
             combo = self.shortcut_table.cellWidget(row_index, 2)
@@ -1631,6 +1955,8 @@ class CommandCenterPage(QWidget):
                 for scope_id, label in scope_options:
                     combo.addItem(label, scope_id)
                 self._set_combo_value(combo, binding.default_scope)
+        self._building_shortcut_table = False
+        self._apply_shortcut_updates()
 
     def _reset_plugin_defaults(self) -> None:
         if not self._confirm_risky(
@@ -1826,15 +2152,27 @@ class CommandCenterPage(QWidget):
         return rows
 
     def _plugin_status_text(self, spec) -> str:
+        dependency_summary = self._plugin_dependency_summary(spec)
         if spec.quarantined:
-            return self._pt("plugins.status.quarantined", "Quarantined")
-        if spec.source_type == "custom" and not spec.trusted:
-            return self._pt("plugins.status.review", "Pending Review")
-        if not spec.enabled:
-            return self._pt("plugins.status.disabled", "Disabled")
-        if spec.last_error:
-            return self._pt("plugins.status.error", "Error Recorded")
-        return self._pt("plugins.status.ready", "Ready")
+            base = self._pt("plugins.status.quarantined", "Quarantined")
+        elif spec.source_type == "custom" and not spec.trusted:
+            base = self._pt("plugins.status.review", "Pending Review")
+        elif not spec.enabled:
+            base = self._pt("plugins.status.disabled", "Disabled")
+        elif spec.last_error:
+            base = self._pt("plugins.status.error", "Error Recorded")
+        else:
+            base = self._pt("plugins.status.ready", "Ready")
+        if not dependency_summary.has_manifest:
+            return base
+        dependency_status = self._plugin_dependency_status_text(dependency_summary)
+        return self._pt("plugins.status.with_deps", "{status} · {deps}", status=base, deps=dependency_status)
+
+    def _plugin_dependency_summary(self, spec):
+        return self.services.plugin_dependency_manager.summary_for_spec(spec)
+
+    def _plugin_dependency_status_text(self, summary) -> str:
+        return self._pt(f"plugins.deps.status.{summary.status}", summary.message.replace("_", " ").title())
 
     def _plugin_review_details(self, spec) -> str:
         details: list[str] = []
@@ -1850,6 +2188,38 @@ class CommandCenterPage(QWidget):
                     count=str(spec.failure_count),
                 )
             )
+        dependency_summary = self._plugin_dependency_summary(spec)
+        if dependency_summary.has_manifest:
+            details.append(
+                self._pt(
+                    "plugins.deps.detail.status",
+                    "Dependency status: {status}",
+                    status=self._plugin_dependency_status_text(dependency_summary),
+                )
+            )
+            details.append(
+                self._pt(
+                    "plugins.deps.detail.file",
+                    "Dependency file: {path}",
+                    path=str(dependency_summary.manifest_path),
+                )
+            )
+            if dependency_summary.warning:
+                details.append(
+                    self._pt(
+                        "plugins.deps.detail.warning",
+                        "Dependency warning: {warning}",
+                        warning=dependency_summary.warning,
+                    )
+                )
+            if dependency_summary.error:
+                details.append(
+                    self._pt(
+                        "plugins.deps.detail.error",
+                        "Dependency error: {error}",
+                        error=dependency_summary.error,
+                    )
+                )
         return "\n".join(details)
 
     def _style_risk_item(self, item: QTableWidgetItem, risk_level: str) -> None:
@@ -1957,12 +2327,8 @@ class CommandCenterPage(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
             return
-        QMessageBox.information(
-            self,
-            self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
-        )
         self.services.reload_plugins()
+        self._show_plugin_import_result(plugin_ids)
 
     def _import_plugin_folder(self) -> None:
         folder_path = QFileDialog.getExistingDirectory(self, self._pt("plugins.import_folder", "Import plugin folder"), str(Path.home()))
@@ -1973,33 +2339,56 @@ class CommandCenterPage(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
             return
-        QMessageBox.information(
-            self,
-            self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
-        )
         self.services.reload_plugins()
+        self._show_plugin_import_result(plugin_ids)
 
-    def _import_backup(self) -> None:
+    def _import_plugin_package(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self._pt("plugins.import_backup", "Import plugin backup"),
+            self._pt("plugins.import_package", "Import plugin package"),
             str(Path.home()),
-            "Plugin Backup (*.zip)",
+            self._pt("plugins.import_package.filter", "Plugin Package (*.zip)"),
         )
         if not file_path:
             return
         try:
-            plugin_ids = self.services.plugin_package_manager.import_backup(Path(file_path))
+            plugin_ids = self.services.plugin_package_manager.import_plugin_package(Path(file_path))
         except Exception as exc:
             QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
             return
+        self.services.reload_plugins()
+        self._show_plugin_import_result(plugin_ids)
+
+    def _show_plugin_import_result(self, plugin_ids: list[str]) -> None:
+        dependency_plugins: list[str] = []
+        for plugin_id in plugin_ids:
+            spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
+            if spec is None:
+                continue
+            summary = self._plugin_dependency_summary(spec)
+            if summary.has_manifest:
+                dependency_plugins.append(self.services.plugin_display_name(spec))
+        body = self._pt(
+            "plugins.imported.body",
+            "Imported plugins: {plugins}. They were added disabled and untrusted pending review.",
+            plugins=", ".join(plugin_ids),
+        )
+        if dependency_plugins:
+            body = "\n\n".join(
+                [
+                    body,
+                    self._pt(
+                        "plugins.imported.deps_body",
+                        "Dependency sidecars were detected for: {plugins}. Review and trust those plugins first, then right-click a row to install or repair dependencies.",
+                        plugins=", ".join(dependency_plugins),
+                    ),
+                ]
+            )
         QMessageBox.information(
             self,
             self._pt("plugins.imported.title", "Plugin imported"),
-            self._pt("plugins.imported.body", "Imported plugins: {plugins}. They were added disabled and untrusted pending review.", plugins=", ".join(plugin_ids)),
+            body,
         )
-        self.services.reload_plugins()
 
     def _export_selected_plugins(self) -> None:
         specs = self._selected_export_specs()
@@ -2013,12 +2402,12 @@ class CommandCenterPage(QWidget):
         self._export_specs(specs)
 
     def _export_specs(self, specs) -> None:
-        suggested = Path.home() / "micro_toolkit_plugins_backup.zip"
+        suggested = Path.home() / "micro_toolkit_plugin_package.zip"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            self._pt("plugins.export_dialog", "Export plugin backup"),
+            self._pt("plugins.export_dialog", "Export plugin package"),
             str(suggested),
-            "Plugin Backup (*.zip)",
+            self._pt("plugins.export_dialog.filter", "Plugin Package (*.zip)"),
         )
         if not file_path:
             return
@@ -2032,8 +2421,8 @@ class CommandCenterPage(QWidget):
             return
         QMessageBox.information(
             self,
-            self._pt("plugins.exported.title", "Plugins exported"),
-            self._pt("plugins.exported.body", "Plugin backup written to {path}", path=str(exported)),
+            self._pt("plugins.exported.title", "Plugin package exported"),
+            self._pt("plugins.exported.body", "Plugin package written to {path}", path=str(exported)),
         )
 
     def _selected_export_specs(self):
@@ -2093,7 +2482,7 @@ class CommandCenterPage(QWidget):
         }
         for color_key, button in self.theme_color_buttons.items():
             button.setToolTip(color_labels.get(color_key, color_key.title()))
-        self.dark_mode_checkbox.setText(self._pt("theme.dark_mode", "Dark mode"))
+        self.dark_mode_checkbox.setText(self._pt("theme.dark_mode", "Dark Mode"))
         self.language_label.setText(self._pt("language.label", "Language"))
         self.density_label.setText(self._pt("density.label", "Density"))
         self.scaling_label.setText(self._pt("scaling.label", "UI scaling"))
@@ -2103,7 +2492,7 @@ class CommandCenterPage(QWidget):
                     button.setText(label)
                     break
         self.appearance_note.setText(
-            self._pt("appearance.note", "Appearance and language preview live in the app, but they are only written to the config when you click Save settings.")
+            self._pt("appearance.note", "Appearance and language changes apply immediately.")
         )
 
         self.behavior_title.setText(self._pt("general.behavior.title", "Behavior"))
@@ -2115,6 +2504,7 @@ class CommandCenterPage(QWidget):
         )
         self.minimize_to_tray_checkbox.setText(self._pt("tray.minimize", "Minimize to system tray"))
         self.close_to_tray_checkbox.setText(self._pt("tray.close", "Close to system tray"))
+        self.clip_monitor_checkbox.setText(self._pt("clip_monitor.toggle", "Enable Clip-Monitor"))
         self.confirm_on_exit_checkbox.setText(self._pt("exit.confirm", "Always ask on exit"))
         self.run_on_startup_checkbox.setText(self._pt("startup.run", "Start on system login"))
         self.start_minimized_checkbox.setText(self._pt("startup.minimized", "Start minimized"))
@@ -2159,36 +2549,32 @@ class CommandCenterPage(QWidget):
         self.shortcut_note.setText(
             self._pt(
                 "shortcuts.note",
-                "Application shortcuts are always available while the app is focused. Global shortcuts are optional and may depend on desktop permissions.",
+                "Application shortcuts are always available while the app is focused. Global shortcuts are optional, may depend on desktop permissions, and shortcut edits apply immediately.",
             )
         )
         self.plugins_note.setText(
             self._pt(
                 "plugins.note",
-                "Manage built-in and custom plugins here. Use the checkboxes for trust, enabled, and hidden state, then right-click a row for name, icon, and review actions.",
+                "Manage built-in and custom plugins here. Import plugin packages for the cleanest sharing flow, then use the table and context menu for direct trust, enabled, hidden, and display updates. Loose file and folder imports remain available for development and manual workflows.",
             )
         )
-        self.import_file_button.setText(self._pt("plugins.import_file_button", "Import File"))
-        self.import_folder_button.setText(self._pt("plugins.import_folder_button", "Import Folder"))
-        self.import_backup_button.setText(self._pt("plugins.import_backup_button", "Import Backup"))
-        self.export_selected_button.setText(self._pt("plugins.export_selected", "Export Selected"))
-        self.export_all_button.setText(self._pt("plugins.export_all", "Export All"))
-        self.apply_plugin_state_button.setText(self._pt("plugins.apply", "Apply Plugin Changes"))
+        self.import_package_button.setText(self._pt("plugins.import_package_button", "Import Package"))
+        self.import_file_button.setText(self._pt("plugins.import_file_button", "Import File (Dev)"))
+        self.import_folder_button.setText(self._pt("plugins.import_folder_button", "Import Folder (Dev)"))
+        self.export_selected_button.setText(self._pt("plugins.export_selected", "Export Selected Package"))
+        self.export_all_button.setText(self._pt("plugins.export_all", "Export All Packages"))
         self.reset_plugins_button.setText(self._pt("plugins.reset", "Reset plugin defaults"))
         self.refresh_plugins_button.setText(self._pt("plugins.refresh", "Refresh"))
+        self.import_package_button.setToolTip(self.import_package_button.text())
         self.import_file_button.setToolTip(self.import_file_button.text())
         self.import_folder_button.setToolTip(self.import_folder_button.text())
-        self.import_backup_button.setToolTip(self.import_backup_button.text())
         self.export_selected_button.setToolTip(self.export_selected_button.text())
         self.export_all_button.setToolTip(self.export_all_button.text())
-        self.apply_plugin_state_button.setToolTip(self.apply_plugin_state_button.text())
         self.reset_plugins_button.setToolTip(self.reset_plugins_button.text())
         self.refresh_plugins_button.setToolTip(self.refresh_plugins_button.text())
 
         self.general_reset_button.setText(self._pt("reset", "Reset defaults"))
-        self.general_save_button.setText(self._pt("save", "Save settings"))
         self.shortcuts_reset_button.setText(self._pt("shortcuts.reset", "Reset shortcuts"))
-        self.shortcuts_save_button.setText(self._pt("shortcuts.save", "Save shortcuts"))
         self._populate_shortcuts()
         self._populate_plugin_table()
         self._refresh_autostart_status()
@@ -2367,7 +2753,18 @@ class CommandCenterPage(QWidget):
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.setStyleSheet(f"background: {palette.window_bg};")
+        self.setStyleSheet(
+            f"""
+            background: {palette.window_bg};
+            QToolTip {{
+                background: {palette.surface_bg};
+                color: {palette.text_primary};
+                border: 1px solid {palette.border};
+                border-radius: 10px;
+                padding: 6px 8px;
+            }}
+            """
+        )
         for widget in (
             self.general_tab,
             self.quick_access_tab,
@@ -2467,17 +2864,23 @@ class CommandCenterPage(QWidget):
                 border-radius: 12px;
                 padding: 6px 10px;
             }}
+            QComboBox:hover {{
+                border-color: {palette.accent};
+                background: {palette.accent_soft};
+            }}
+            QComboBox:on, QComboBox:focus {{
+                border-color: {palette.accent_hover};
+            }}
             """
         )
         for tile in self.quick_access_preview_frame.findChildren(QuickAccessPreviewTile):
             tile.apply_palette(palette)
         plugin_action_buttons = (
+            self.import_package_button,
             self.import_file_button,
             self.import_folder_button,
-            self.import_backup_button,
             self.export_selected_button,
             self.export_all_button,
-            self.apply_plugin_state_button,
             self.reset_plugins_button,
             self.refresh_plugins_button,
         )
@@ -2510,6 +2913,10 @@ class CommandCenterPage(QWidget):
                     color: {palette.text_primary};
                     font-weight: 600;
                 }}
+                QToolButton:hover {{
+                    border-color: {palette.accent};
+                    background: {palette.accent_soft};
+                }}
                 QToolButton:checked {{
                     border: 2px solid {palette.accent};
                     background: {palette.accent_soft};
@@ -2529,6 +2936,7 @@ class CommandCenterPage(QWidget):
                 }}
                 QToolButton:hover {{
                     border-color: {palette.accent};
+                    background: {palette.accent_soft};
                 }}
                 QToolButton:checked {{
                     border: 1px solid {palette.accent};
@@ -2539,21 +2947,22 @@ class CommandCenterPage(QWidget):
             )
         self.dark_mode_checkbox.setStyleSheet(
             f"""
-            QCheckBox {{
+            QToolButton#DarkModeToggle {{
                 color: {palette.text_primary};
-                spacing: 8px;
                 font-weight: 600;
-            }}
-            QCheckBox::indicator {{
-                width: 40px;
-                height: 22px;
-                border-radius: 11px;
                 border: 1px solid {palette.border};
+                border-radius: 14px;
+                padding: 6px 14px;
                 background: {palette.surface_alt_bg};
             }}
-            QCheckBox::indicator:checked {{
+            QToolButton#DarkModeToggle:hover {{
                 border-color: {palette.accent};
+                background: {palette.accent_soft};
+            }}
+            QToolButton#DarkModeToggle:checked {{
+                border: 1px solid {palette.accent};
                 background: {palette.accent};
+                color: {"#ffffff" if palette.mode == "light" else palette.text_primary};
             }}
             """
         )

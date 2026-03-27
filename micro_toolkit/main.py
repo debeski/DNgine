@@ -15,7 +15,7 @@ from micro_toolkit.core.services import AppServices
 _WIN_MUTEX = None
 
 
-def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = False) -> int:
+def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = False, force_visible: bool = False) -> int:
     global _WIN_MUTEX
     if os.name == "nt":
         try:
@@ -47,12 +47,16 @@ def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = 
     window = MicroToolkitWindow(services, initial_plugin_id=initial_plugin_id)
     window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
     window.show()
-    should_start_minimized = start_minimized or bool(services.config.get("start_minimized"))
+    should_start_minimized = False if force_visible else (start_minimized or bool(services.config.get("start_minimized")))
     if should_start_minimized:
         if services.tray_manager.can_hide_to_tray():
             window.hide()
         else:
             window.showMinimized()
+    elif force_visible:
+        window.showNormal()
+        window.raise_()
+        window.activateWindow()
     return app.exec()
 
 

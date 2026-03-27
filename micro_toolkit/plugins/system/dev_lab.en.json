@@ -3,6 +3,7 @@
   "plugin.description": "Developer inspection tools for exploring live Qt widgets, layout structure, and styles.",
   "title": "Dev Lab",
   "description": "Inspect live widgets in the running interface. Start inspect mode, hover the UI, then left-click a widget to capture its structure, palette, and stylesheet details. If you need to move to another page first, use right-click navigation while inspect mode stays active.",
+  "tools.title": "Tools",
   "path.title": "Parent Chain",
   "details.title": "Widget Details",
   "text_unlock": "Unlock static text selection across the app",
