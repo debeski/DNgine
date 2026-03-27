@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.table_model import DataFrameTableModel
 
@@ -124,6 +125,7 @@ class UsageAnalyzerPage(QWidget):
         self._latest_dataframe = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -164,17 +166,13 @@ class UsageAnalyzerPage(QWidget):
 
         self.main_layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        self.main_layout.addWidget(summary_card)
+        self.main_layout.addWidget(self.summary_card)
 
         self.table = QTableView()
         self.table.verticalHeader().setVisible(False)
@@ -193,6 +191,17 @@ class UsageAnalyzerPage(QWidget):
         self.run_button.setText(self._pt("run.button", "Analyze Usage"))
         self.export_button.setText(self._pt("export.button", "Export XLSX"))
         self.summary_label.setText(self._pt("summary.initial", "Choose a directory to inspect."))
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.desc_label.setStyleSheet(muted_text_style(palette))
+        self.summary_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(

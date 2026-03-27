@@ -3,8 +3,20 @@ from __future__ import annotations
 from micro_toolkit.core.theme import ThemePalette
 
 
+def surface_style(palette: ThemePalette, *, radius: int = 18, selector: str = "QFrame") -> str:
+    return f"{selector} {{ background: {palette.surface_bg}; border: none; border-radius: {radius}px; }}"
+
+
 def card_style(palette: ThemePalette, *, radius: int = 18) -> str:
-    return f"QFrame {{ background: {palette.surface_bg}; border: none; border-radius: {radius}px; }}"
+    return surface_style(palette, radius=radius, selector="QFrame")
+
+
+def widget_card_style(palette: ThemePalette, *, radius: int = 18) -> str:
+    return surface_style(palette, radius=radius, selector="QWidget")
+
+
+def label_surface_style(palette: ThemePalette, *, radius: int = 18) -> str:
+    return surface_style(palette, radius=radius, selector="QLabel")
 
 
 def tinted_card_style(

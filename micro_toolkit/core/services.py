@@ -457,13 +457,13 @@ class AppServices(QObject):
         if is_system_component(plugin_id):
             return
         self.plugin_state_manager.set_enabled(plugin_id, enabled)
-        self.reload_plugins()
+        self.refresh_plugin_catalog_views()
 
     def set_plugin_hidden(self, plugin_id: str, hidden: bool) -> None:
         if is_system_component(plugin_id):
             return
         self.plugin_state_manager.set_hidden(plugin_id, hidden)
-        self.reload_plugins()
+        self.refresh_plugin_catalog_views()
 
     def manageable_plugin_specs(self, *, include_disabled: bool = False):
         return [
@@ -556,6 +556,12 @@ class AppServices(QObject):
         self.reset_command_registry()
         if self.main_window is not None:
             self.main_window.reload_plugin_catalog(preferred_plugin_id="command_center")
+
+    def refresh_plugin_catalog_views(self) -> None:
+        self.plugin_manager.invalidate_cache(clear_instances=True)
+        self.reset_command_registry()
+        if self.main_window is not None:
+            self.main_window.refresh_sidebar()
 
     def register_core_commands(self) -> None:
         self.command_registry.register(

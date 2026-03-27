@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
+from micro_toolkit.core.page_style import card_style, muted_text_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.table_model import DataFrameTableModel
 from micro_toolkit.core.widgets import ScrollSafeComboBox
@@ -187,6 +188,7 @@ class DeepScanAuditorPage(QWidget):
         self._folder_sources: list[str] = []
         self._excel_sources: list[dict[str, str]] = []
         self._build_ui()
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -220,7 +222,6 @@ class DeepScanAuditorPage(QWidget):
         layout.addLayout(mode_row)
 
         self.sources_card = QFrame()
-        self.sources_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         sources_layout = QVBoxLayout(self.sources_card)
         sources_layout.setContentsMargins(16, 14, 16, 14)
         sources_layout.setSpacing(10)
@@ -258,9 +259,6 @@ class DeepScanAuditorPage(QWidget):
         layout.addWidget(self.sources_card)
 
         self.folder_criteria_card = QFrame()
-        self.folder_criteria_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
         folder_criteria_layout = QVBoxLayout(self.folder_criteria_card)
         folder_criteria_layout.setContentsMargins(16, 14, 16, 14)
         folder_criteria_layout.setSpacing(8)
@@ -296,17 +294,13 @@ class DeepScanAuditorPage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel(self._pt("summary.empty", "Choose one or more sources, then run the deep-scan audit."))
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.table = QTableView()
         self.table.verticalHeader().setVisible(False)
@@ -316,6 +310,7 @@ class DeepScanAuditorPage(QWidget):
         layout.addWidget(self.table, 1)
 
         self._update_mode_ui()
+        self._apply_theme_styles()
 
     def _current_mode(self) -> str:
         return self.mode_combo.currentData()
@@ -535,6 +530,15 @@ class DeepScanAuditorPage(QWidget):
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        for frame in (self.sources_card, self.folder_criteria_card, self.summary_card):
+            frame.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _open_output(self) -> None:
         if self._latest_output_path:

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
+from micro_toolkit.core.page_style import card_style, muted_text_style
 from micro_toolkit.core.plugin_api import QtPlugin
 
 
@@ -141,6 +142,7 @@ class DataLinkAuditorPage(QWidget):
         self.plugin_id = plugin_id
         self.source_folders: list[str] = []
         self._build_ui()
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -181,11 +183,8 @@ class DataLinkAuditorPage(QWidget):
         col_row.addWidget(self.columns_input, 1)
         layout.addLayout(col_row)
 
-        folders_card = QFrame()
-        folders_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        folders_layout = QVBoxLayout(folders_card)
+        self.folders_card = QFrame()
+        folders_layout = QVBoxLayout(self.folders_card)
         folders_layout.setContentsMargins(16, 14, 16, 14)
         folders_layout.setSpacing(10)
         folders_title = QLabel(self._pt("label.folders", "Source Folders"))
@@ -208,7 +207,7 @@ class DataLinkAuditorPage(QWidget):
         self.folders_output.setPlaceholderText(self._pt("folders.placeholder", "No folders selected."))
         self.folders_output.setMaximumBlockCount(200)
         folders_layout.addWidget(self.folders_output)
-        layout.addWidget(folders_card)
+        layout.addWidget(self.folders_card)
 
         dest_row = QHBoxLayout()
         dest_row.setSpacing(10)
@@ -232,17 +231,13 @@ class DataLinkAuditorPage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel(self._pt("summary.empty", "Choose a workbook and at least one source folder."))
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.results_host = QFrame()
         self.results_layout = QVBoxLayout(self.results_host)
@@ -254,6 +249,7 @@ class DataLinkAuditorPage(QWidget):
         self.output.setReadOnly(True)
         self.output.setPlaceholderText(self._pt("output.placeholder", "Validation summary will appear here."))
         layout.addWidget(self.output, 1)
+        self._apply_theme_styles()
 
     def _browse_excel(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -369,3 +365,12 @@ class DataLinkAuditorPage(QWidget):
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.folders_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()

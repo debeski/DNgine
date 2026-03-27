@@ -314,6 +314,7 @@ class EmbeddedTerminalWidget(QWidget):
         layout.setSpacing(0)
 
         self.output = TerminalOutputView(self)
+        self.output.setObjectName("TerminalOutputView")
         self.output.setReadOnly(True)
         self.output.setMaximumBlockCount(2000)
         layout.addWidget(self.output, 1)
@@ -613,6 +614,7 @@ class MicroToolkitWindow(QMainWindow):
             Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
         self.log_output = QPlainTextEdit()
+        self.log_output.setObjectName("ShellLogOutput")
         self.log_output.setReadOnly(True)
         self.log_output.setMaximumBlockCount(800)
         self.log_output.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)

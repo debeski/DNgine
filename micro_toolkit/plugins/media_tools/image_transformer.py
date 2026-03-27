@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.media_utils import SUPPORTED_IMAGE_FILTER, pil_to_pixmap, safe_output_extension, transform_image
+from micro_toolkit.core.page_style import card_style, label_surface_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
@@ -105,6 +106,7 @@ class ImageTransformerPage(QWidget):
         self._build_ui()
         self._apply_texts()
         self.services.i18n.language_changed.connect(self._handle_language_change)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -123,11 +125,8 @@ class ImageTransformerPage(QWidget):
         self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         outer.addWidget(self.description_label)
 
-        settings_card = QFrame()
-        settings_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        settings_layout = QGridLayout(settings_card)
+        self.settings_card = QFrame()
+        settings_layout = QGridLayout(self.settings_card)
         settings_layout.setContentsMargins(16, 14, 16, 14)
         settings_layout.setHorizontalSpacing(12)
         settings_layout.setVerticalSpacing(10)
@@ -195,7 +194,7 @@ class ImageTransformerPage(QWidget):
         settings_layout.addWidget(self.files_label, 3, 0)
         settings_layout.addLayout(actions_row, 3, 1)
 
-        outer.addWidget(settings_card)
+        outer.addWidget(self.settings_card)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         outer.addWidget(splitter, 1)
@@ -216,9 +215,6 @@ class ImageTransformerPage(QWidget):
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumHeight(320)
-        self.preview_label.setStyleSheet(
-            "QLabel { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; color: #56646b; }"
-        )
         right_layout.addWidget(self.preview_label, 1)
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 1)
@@ -233,6 +229,17 @@ class ImageTransformerPage(QWidget):
         self.summary_output = QPlainTextEdit()
         self.summary_output.setReadOnly(True)
         outer.addWidget(self.summary_output, 1)
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.settings_card.setStyleSheet(card_style(palette, radius=14))
+        self.preview_label.setStyleSheet(label_surface_style(palette, radius=14) + muted_text_style(palette))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _set_combo_items(self, combo: QComboBox, items: list[tuple[str, str]]) -> None:
         current_value = str(combo.currentData() or combo.currentText() or "")

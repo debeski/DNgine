@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 
 
@@ -104,6 +105,7 @@ class DataCleanerPage(QWidget):
         self._build_ui()
         self._apply_texts()
         self.services.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -131,11 +133,8 @@ class DataCleanerPage(QWidget):
         file_row.addWidget(self.browse_button)
         layout.addLayout(file_row)
 
-        options_card = QFrame()
-        options_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        options_layout = QVBoxLayout(options_card)
+        self.options_card = QFrame()
+        options_layout = QVBoxLayout(self.options_card)
         options_layout.setContentsMargins(16, 14, 16, 14)
         options_layout.setSpacing(8)
 
@@ -150,7 +149,7 @@ class DataCleanerPage(QWidget):
         self.fill_checkbox = QCheckBox()
         self.fill_checkbox.setChecked(True)
         options_layout.addWidget(self.fill_checkbox)
-        layout.addWidget(options_card)
+        layout.addWidget(self.options_card)
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
@@ -165,17 +164,13 @@ class DataCleanerPage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
@@ -198,6 +193,18 @@ class DataCleanerPage(QWidget):
         self.open_output_button.setText(self._pt("open_result", "Open Result"))
         self.summary_label.setText(self._pt("summary.ready", "Choose a workbook to begin cleaning."))
         self.output.setPlaceholderText(self._pt("summary.placeholder", "Run details will appear here."))
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.options_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _browse_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(

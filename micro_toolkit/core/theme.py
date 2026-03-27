@@ -359,7 +359,7 @@ class ThemeManager(QObject):
             # Keep the shell light, but let it pick up a faint tint from the selected theme color.
             window_bg = self._mix_hex(base.window_bg, accent, 0.08, darken=103)
             # Cards should sit one clear step above the shell, while top bars stay closer to shell chrome.
-            surface_bg = self._mix_hex(window_bg, "#ffffff", 0.36)
+            surface_bg = self._mix_hex(window_bg, "#ffffff", 0.40)
             surface_alt_bg = self._mix_hex(window_bg, "#ffffff", 0.18)
             status_bg = self._mix_hex(window_bg, "#ffffff", 0.12)
         return ThemePalette(
@@ -652,49 +652,108 @@ class ThemeManager(QObject):
             border-image: none;
             image: none;
         }}
-        QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QTableView, QTableWidget {{
-            background: {palette.input_bg};
+        QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+            background: #ffffff;
+            background-color: #ffffff;
             border: none;
             border-radius: 0px;
             color: {palette.text_primary};
         }}
+        QListWidget, QTableView, QTableWidget {{
+            background: {palette.surface_bg};
+            background-color: {palette.surface_bg};
+            border: 1px solid {palette.border};
+            border-radius: 12px;
+            color: {palette.text_primary};
+        }}
         QLineEdit, QPlainTextEdit, QTextEdit {{
-            background: {palette.input_bg};
+            background: #ffffff;
+            background-color: #ffffff;
             border: none;
             border-bottom: 2px solid {palette.border};
             padding: 5px 2px 4px 2px;
         }}
         QLineEdit:hover, QPlainTextEdit:hover, QTextEdit:hover {{
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 2px solid {palette.accent};
         }}
         QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{
-            background: {palette.input_bg};
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 3px solid {palette.accent_hover};
         }}
         QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
-        QLineEdit[readOnly="true"], QPlainTextEdit[readOnly="true"], QTextEdit[readOnly="true"] {{
-            background: {palette.input_bg};
+        QLineEdit[readOnly="true"] {{
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 2px solid {palette.border};
             outline: 0;
         }}
-        QLineEdit#ShellSearchInput {{
-            padding: 0 9px;
-            border-radius: 0px;
-            background: {palette.input_bg};
+        QPlainTextEdit[readOnly="true"], QTextEdit[readOnly="true"] {{
+            background: {palette.surface_bg};
+            background-color: {palette.surface_bg};
             border: 1px solid {palette.border};
+            border-radius: 12px;
+            padding: 8px 10px;
+            outline: 0;
+        }}
+        QPlainTextEdit[readOnly="true"]:hover, QTextEdit[readOnly="true"]:hover,
+        QPlainTextEdit[readOnly="true"]:focus, QTextEdit[readOnly="true"]:focus {{
+            background: {palette.surface_bg};
+            background-color: {palette.surface_bg};
+            border: 1px solid {palette.border};
+        }}
+        QLineEdit#ShellSearchInput {{
+            padding: 0 2px 2px 2px;
+            background: #ffffff;
+            background-color: #ffffff;
             color: {palette.text_primary};
         }}
-        QLineEdit#ShellSearchInput:focus {{
-            border-color: {palette.accent_hover};
-            background: {palette.surface_bg};
-        }}
-        QLineEdit#ShellSearchInput:hover,
         QLineEdit#ShellSearchInput:disabled,
         QLineEdit#ShellSearchInput[readOnly="true"] {{
             outline: 0;
         }}
-        QLineEdit#ShellSearchInput:hover {{
-            border-color: {palette.accent};
+        QComboBox, QSpinBox, QDoubleSpinBox, QAbstractSpinBox {{
+            background: #ffffff;
+            background-color: #ffffff;
+            border: none;
+            border-bottom: 2px solid {palette.border};
+            border-radius: 0px;
+            padding: 4px 2px 4px 2px;
+        }}
+        QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QAbstractSpinBox:hover {{
+            background: #ffffff;
+            background-color: #ffffff;
+            border-bottom: 2px solid {palette.accent};
+        }}
+        QComboBox:focus, QComboBox:on, QSpinBox:focus, QDoubleSpinBox:focus, QAbstractSpinBox:focus {{
+            background: #ffffff;
+            background-color: #ffffff;
+            border-bottom: 3px solid {palette.accent_hover};
+        }}
+        QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QAbstractSpinBox:disabled {{
+            background: #ffffff;
+            background-color: #ffffff;
+            border-bottom: 2px solid {palette.border};
+        }}
+        QPlainTextEdit#TerminalOutputView, QPlainTextEdit#ShellLogOutput {{
+            background: {palette.surface_alt_bg};
+            border: none;
+            border-radius: 0px;
+            padding: 10px 12px;
+        }}
+        QComboBox::drop-down {{
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 22px;
+            border: none;
+            background: transparent;
+        }}
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+            width: 16px;
+            border: none;
+            background: transparent;
         }}
         QLineEdit#TerminalInput {{
             min-height: {max(28, round(34 * scale))}px;
@@ -750,27 +809,27 @@ class ThemeManager(QObject):
             border-right: 1px solid {palette.border};
             border-bottom: 1px solid {palette.border};
         }}
-        QPushButton, QComboBox, QAbstractSpinBox, QTabWidget::pane {{
-            background: {palette.surface_bg};
+        QPushButton, QTabWidget::pane {{
+            background: #ffffff;
             color: {palette.text_primary};
             border: 1px solid {palette.border};
             border-radius: {input_radius}px;
         }}
-        QPushButton:hover, QComboBox:hover, QAbstractSpinBox:hover {{
+        QPushButton:hover {{
             border-color: {palette.accent};
             background: {palette.accent_soft};
         }}
-        QPushButton:pressed, QComboBox:on, QAbstractSpinBox:focus {{
+        QPushButton:pressed {{
             border-color: {palette.accent_hover};
-            background: {palette.surface_bg};
+            background: #ffffff;
         }}
-        QPushButton:disabled, QComboBox:disabled, QAbstractSpinBox:disabled {{
+        QPushButton:disabled {{
             background: {palette.surface_alt_bg};
             color: {palette.text_muted};
             border-color: {palette.border};
         }}
         QToolButton[autoRaise="false"] {{
-            background: {palette.surface_bg};
+            background: #ffffff;
             color: {palette.text_primary};
             border: 1px solid {palette.border};
             border-radius: {input_radius}px;
@@ -781,7 +840,7 @@ class ThemeManager(QObject):
         }}
         QToolButton[autoRaise="false"]:pressed {{
             border-color: {palette.accent_hover};
-            background: {palette.surface_bg};
+            background: #ffffff;
         }}
         QToolButton[autoRaise="false"]:disabled {{
             background: {palette.surface_alt_bg};
@@ -1011,29 +1070,49 @@ class ThemeManager(QObject):
             background: {palette.window_bg};
             color: {palette.text_primary};
         }}
-        QLineEdit, QPlainTextEdit, QTextEdit, QTreeWidget, QListWidget, QTableView, QTableWidget, QComboBox, QSpinBox, QDoubleSpinBox {{
-            background: {palette.input_bg};
+        QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+            background: #ffffff;
+            background-color: #ffffff;
             border: none;
-            border-radius: {input_radius}px;
+            border-radius: 0px;
+        }}
+        QTreeWidget, QListWidget, QTableView, QTableWidget {{
+            background: {palette.surface_bg};
+            background-color: {palette.surface_bg};
+            border: 1px solid {palette.border};
+            border-radius: 12px;
         }}
         QLineEdit, QPlainTextEdit, QTextEdit {{
-            background: {palette.input_bg};
+            background: #ffffff;
+            background-color: #ffffff;
             border: none;
             border-bottom: 2px solid {palette.border};
             border-radius: 0px;
             padding: 5px 2px 4px 2px;
         }}
         QLineEdit:hover, QPlainTextEdit:hover, QTextEdit:hover {{
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 2px solid {palette.accent};
         }}
         QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{
-            background: {palette.input_bg};
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 3px solid {palette.accent_hover};
         }}
         QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
-        QLineEdit[readOnly="true"], QPlainTextEdit[readOnly="true"], QTextEdit[readOnly="true"] {{
-            background: {palette.input_bg};
+        QLineEdit[readOnly="true"] {{
+            background: #ffffff;
+            background-color: #ffffff;
             border-bottom: 2px solid {palette.border};
+            outline: 0;
+        }}
+        QPlainTextEdit[readOnly="true"], QTextEdit[readOnly="true"] {{
+            background: {palette.surface_bg};
+            background-color: {palette.surface_bg};
+            border: 1px solid {palette.border};
+            border-radius: 12px;
+            padding: 8px 10px;
             outline: 0;
         }}
         {self._build_overlay_stylesheet(palette, scale)}
@@ -1044,7 +1123,7 @@ class ThemeManager(QObject):
         window = QColor(palette.window_bg)
         surface = QColor(palette.surface_bg)
         surface_alt = QColor(palette.surface_alt_bg)
-        input_bg = QColor(palette.input_bg)
+        input_bg = QColor("#ffffff")
         border = QColor(palette.border)
         text = QColor(palette.text_primary)
         muted = QColor(palette.text_muted)

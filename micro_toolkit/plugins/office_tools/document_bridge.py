@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from micro_toolkit.core.app_utils import generate_output_filename, open_file_or_folder
 from micro_toolkit.core.command_runtime import HeadlessTaskContext
 from micro_toolkit.core.document_converter import convert_docx_to_markdown, convert_markdown_to_docx
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
@@ -159,6 +160,7 @@ class DocumentBridgePage(QWidget):
         self._latest_output_path: str | None = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
         self._apply_texts()
         self._sync_mode_state()
 
@@ -179,9 +181,8 @@ class DocumentBridgePage(QWidget):
         self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         layout.addWidget(self.description_label)
 
-        mode_card = QFrame()
-        mode_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
-        mode_layout = QFormLayout(mode_card)
+        self.mode_card = QFrame()
+        mode_layout = QFormLayout(self.mode_card)
         mode_layout.setContentsMargins(16, 14, 16, 14)
         mode_layout.setSpacing(10)
 
@@ -189,7 +190,7 @@ class DocumentBridgePage(QWidget):
         self.mode_combo = QComboBox()
         self.mode_combo.currentIndexChanged.connect(self._sync_mode_state)
         mode_layout.addRow(self.mode_label, self.mode_combo)
-        layout.addWidget(mode_card)
+        layout.addWidget(self.mode_card)
 
         self.source_label = QLabel()
         source_row = QHBoxLayout()
@@ -217,7 +218,6 @@ class DocumentBridgePage(QWidget):
         layout.addWidget(self.options_stack)
 
         self.md_options = QFrame()
-        self.md_options.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         md_form = QFormLayout(self.md_options)
         md_form.setContentsMargins(16, 14, 16, 14)
         md_form.setSpacing(10)
@@ -232,7 +232,6 @@ class DocumentBridgePage(QWidget):
         self.options_stack.addWidget(self.md_options)
 
         self.docx_options = QFrame()
-        self.docx_options.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         docx_layout = QVBoxLayout(self.docx_options)
         docx_layout.setContentsMargins(16, 14, 16, 14)
         docx_layout.setSpacing(10)
@@ -255,15 +254,13 @@ class DocumentBridgePage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.output_log = QPlainTextEdit()
         self.output_log.setReadOnly(True)
@@ -320,6 +317,18 @@ class DocumentBridgePage(QWidget):
             current_layout,
         )
         self._sync_mode_state()
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        for frame in (self.mode_card, self.md_options, self.docx_options, self.summary_card):
+            frame.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _sync_mode_state(self, *_args) -> None:
         mode = self._current_mode()

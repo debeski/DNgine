@@ -250,7 +250,6 @@ class ChartBuilderPage(QWidget):
 
         source_card = QFrame()
         self.source_card = source_card
-        source_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         source_layout = QGridLayout(source_card)
         source_layout.setContentsMargins(16, 14, 16, 14)
         source_layout.setHorizontalSpacing(10)
@@ -293,7 +292,6 @@ class ChartBuilderPage(QWidget):
 
         chart_card = QFrame()
         self.chart_card = chart_card
-        chart_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         chart_layout = QGridLayout(chart_card)
         chart_layout.setContentsMargins(16, 14, 16, 14)
         chart_layout.setHorizontalSpacing(10)
@@ -323,7 +321,6 @@ class ChartBuilderPage(QWidget):
         layout.addWidget(chart_card)
 
         self.advanced_card = QFrame()
-        self.advanced_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         advanced_layout = QGridLayout(self.advanced_card)
         advanced_layout.setContentsMargins(16, 14, 16, 14)
         advanced_layout.setHorizontalSpacing(10)
@@ -379,7 +376,6 @@ class ChartBuilderPage(QWidget):
 
         summary_card = QFrame()
         self.summary_card = summary_card
-        summary_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel(self._pt("summary.empty", "Configure the pipeline, then run the builder to preview a chart and result table."))

@@ -353,6 +353,7 @@ class CommandCenterPage(QWidget):
 
     def __init__(self, services):
         super().__init__()
+        self.setObjectName("CommandCenterPage")
         self.services = services
         self.i18n = services.i18n
         self.shortcut_action_ids: list[str] = []
@@ -1505,7 +1506,8 @@ class CommandCenterPage(QWidget):
         self.services.plugin_state_manager.set_trusted(spec.plugin_id, trusted)
         self.services.plugin_state_manager.set_enabled(spec.plugin_id, enabled)
         self.services.plugin_state_manager.set_hidden(spec.plugin_id, hidden)
-        self.services.reload_plugins()
+        self.services.refresh_plugin_catalog_views()
+        self._populate_plugin_table()
 
     def _show_plugins_context_menu(self, position) -> None:
         index = self.plugins_table.indexAt(position)
@@ -2755,7 +2757,9 @@ class CommandCenterPage(QWidget):
         palette = self.services.theme_manager.current_palette()
         self.setStyleSheet(
             f"""
-            background: {palette.window_bg};
+            QWidget#CommandCenterPage {{
+                background: {palette.window_bg};
+            }}
             QToolTip {{
                 background: {palette.surface_bg};
                 color: {palette.text_primary};
@@ -2837,42 +2841,6 @@ class CommandCenterPage(QWidget):
             }}
             """
         )
-        self.quick_access_list.setStyleSheet(
-            f"""
-            QListWidget {{
-                background: {palette.input_bg};
-                border: 1px solid {palette.border};
-                border-radius: 12px;
-                color: {palette.text_primary};
-            }}
-            QListWidget::item {{
-                padding: 8px 10px;
-                margin: 0;
-            }}
-            QListWidget::item:selected {{
-                background: {palette.accent_soft};
-                color: {palette.text_primary};
-            }}
-            """
-        )
-        self.quick_access_combo.setStyleSheet(
-            f"""
-            QComboBox {{
-                background: {palette.input_bg};
-                color: {palette.text_primary};
-                border: 1px solid {palette.border};
-                border-radius: 12px;
-                padding: 6px 10px;
-            }}
-            QComboBox:hover {{
-                border-color: {palette.accent};
-                background: {palette.accent_soft};
-            }}
-            QComboBox:on, QComboBox:focus {{
-                border-color: {palette.accent_hover};
-            }}
-            """
-        )
         for tile in self.quick_access_preview_frame.findChildren(QuickAccessPreviewTile):
             tile.apply_palette(palette)
         plugin_action_buttons = (
@@ -2888,7 +2856,7 @@ class CommandCenterPage(QWidget):
             button.setStyleSheet(
                 f"""
                 QToolButton {{
-                    background: {palette.surface_bg};
+                    background: #ffffff;
                     color: {palette.text_primary};
                     border: 1px solid {palette.border};
                     border-radius: 12px;

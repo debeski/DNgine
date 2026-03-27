@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.media_utils import SUPPORTED_IMAGE_FILTER, apply_tag, pil_to_pixmap, safe_output_extension
+from micro_toolkit.core.page_style import card_style, label_surface_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
@@ -99,6 +100,7 @@ class ImageTaggerPage(QWidget):
         self._build_ui()
         self._apply_texts()
         self.services.i18n.language_changed.connect(self._handle_language_change)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -117,11 +119,8 @@ class ImageTaggerPage(QWidget):
         self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         outer.addWidget(self.description_label)
 
-        form_card = QFrame()
-        form_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        form = QFormLayout(form_card)
+        self.form_card = QFrame()
+        form = QFormLayout(self.form_card)
         form.setContentsMargins(16, 14, 16, 14)
         form.setSpacing(10)
 
@@ -138,7 +137,7 @@ class ImageTaggerPage(QWidget):
         self.custom_date_input = QLineEdit()
         self.custom_date_label = QLabel()
         form.addRow(self.custom_date_label, self.custom_date_input)
-        outer.addWidget(form_card)
+        outer.addWidget(self.form_card)
 
         files_row = QHBoxLayout()
         self.add_button = QPushButton()
@@ -169,9 +168,6 @@ class ImageTaggerPage(QWidget):
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setMinimumHeight(320)
-        self.preview_label.setStyleSheet(
-            "QLabel { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; color: #56646b; }"
-        )
         right_layout.addWidget(self.preview_label, 1)
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 1)
@@ -243,6 +239,17 @@ class ImageTaggerPage(QWidget):
             self.preview_label.setText(self._pt("preview.empty", "Select an image to preview."))
         self.summary_output.setPlaceholderText(self._pt("summary.placeholder", "Tagger summary will appear here."))
         self._update_custom_date_visibility()
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.form_card.setStyleSheet(card_style(palette, radius=14))
+        self.preview_label.setStyleSheet(label_surface_style(palette, radius=14) + muted_text_style(palette))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _add_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(

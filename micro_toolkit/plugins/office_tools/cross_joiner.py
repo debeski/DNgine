@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 
 
@@ -109,6 +110,7 @@ class CrossJoinerPage(QWidget):
         self._build_ui()
         self._apply_texts()
         self.services.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -138,17 +140,13 @@ class CrossJoinerPage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.results_host = QFrame()
         self.results_layout = QVBoxLayout(self.results_host)
@@ -179,6 +177,17 @@ class CrossJoinerPage(QWidget):
         self.run_button.setText(self._pt("run", "Run Cross Join"))
         self.summary_label.setText(self._pt("summary.ready", "Choose two workbooks and their match columns."))
         self.output.setPlaceholderText(self._pt("summary.placeholder", "Cross join summary will appear here."))
+        self._apply_theme_styles()
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.summary_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _add_dataset_row(self, parent_layout):
         row = QHBoxLayout()

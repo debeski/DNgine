@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
+from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
 from micro_toolkit.core.table_model import DataFrameTableModel
 
@@ -126,6 +127,7 @@ class FolderMapperPage(QWidget):
         self._latest_output_path = None
         self._table_model = None
         self._build_ui()
+        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
@@ -135,16 +137,14 @@ class FolderMapperPage(QWidget):
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel(self._pt("title", "Folder Mapper"))
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
-        layout.addWidget(title)
+        self.title_label = QLabel(self._pt("title", "Folder Mapper"))
+        layout.addWidget(self.title_label)
 
-        description = QLabel(
+        self.description_label = QLabel(
             self._pt("description", "Map file metadata for an entire folder tree into Excel, with a preview of the first rows inside the app.")
         )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #43535c;")
-        layout.addWidget(description)
+        self.description_label.setWordWrap(True)
+        layout.addWidget(self.description_label)
 
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
@@ -169,17 +169,13 @@ class FolderMapperPage(QWidget):
 
         layout.addLayout(controls)
 
-        summary_card = QFrame()
-        summary_card.setStyleSheet(
-            "QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }"
-        )
-        summary_layout = QVBoxLayout(summary_card)
+        self.summary_card = QFrame()
+        summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
         self.summary_label = QLabel(self._pt("summary.empty", "Choose a folder to export."))
         self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
-        layout.addWidget(summary_card)
+        layout.addWidget(self.summary_card)
 
         self.table = QTableView()
         self.table.verticalHeader().setVisible(False)
@@ -187,6 +183,7 @@ class FolderMapperPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, 1)
+        self._apply_theme_styles()
 
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -243,6 +240,16 @@ class FolderMapperPage(QWidget):
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
         self.services.log(self._pt("log.error", "Folder Mapper failed."), "ERROR")
+
+    def _apply_theme_styles(self) -> None:
+        palette = self.services.theme_manager.current_palette()
+        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
+        self.description_label.setStyleSheet(muted_text_style(palette))
+        self.summary_card.setStyleSheet(card_style(palette, radius=14))
+        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+
+    def _handle_theme_change(self, _mode: str) -> None:
+        self._apply_theme_styles()
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
