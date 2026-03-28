@@ -4,7 +4,7 @@
 [Setup]
 AppId={{9F7B1C2A-8D4E-43B1-965F-BD9C102A860F}
 AppName=Micro Toolkit
-AppVersion=1.2.0
+AppVersion=0.8.0
 AppPublisher=debeski
 AppPublisherURL=https://github.com/debeski/micro-toolkit
 DefaultDirName={autopf}\Micro Toolkit
@@ -14,7 +14,7 @@ AllowNoIcons=yes
 LicenseFile=LICENSE
 InfoBeforeFile=README.md
 OutputDir=.
-OutputBaseFilename=MicroToolkit-Setup-1.2.0
+OutputBaseFilename=MicroToolkit-Setup-0.8.0
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
