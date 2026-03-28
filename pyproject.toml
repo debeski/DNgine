@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "micro-toolkit"
+dynamic = ["version"]
+description = "A fast, cross-platform, plugin-driven desktop toolkit built with PySide6."
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+  { name = "debeski" }
+]
+dependencies = [
+  "pandas",
+  "openpyxl",
+  "PySide6",
+  "Pillow",
+  "pillow-heif",
+  "python-dateutil",
+  "keyboard",
+  "PyPDF2",
+  "psutil",
+  "python-docx",
+  "qt-material",
+  "cryptography",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Environment :: X11 Applications :: Qt",
+]
+
+[project.urls]
+Homepage = "https://github.com/debeski/micro-toolkit"
+
+[project.scripts]
+micro-toolkit = "micro_toolkit.__main__:main"
+
+[project.gui-scripts]
+micro-toolkit-gui = "micro_toolkit.main:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {file = ["micro_toolkit/VERSION"]}
+
+[tool.setuptools.packages.find]
+include = ["micro_toolkit*"]
+
+[tool.setuptools.package-data]
+micro_toolkit = [
+  "*.json",
+  "VERSION",
+  "assets/*",
+  "assets/**/*",
+  "i18n/*.json",
+  "plugins/**/*.json",
+]

@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include micro_toolkit/VERSION
+recursive-include micro_toolkit/assets *
+recursive-include micro_toolkit/i18n *.json
+recursive-include micro_toolkit/plugins *.json
+include micro_toolkit/builtin_plugin_manifest.json

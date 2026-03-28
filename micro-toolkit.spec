@@ -20,6 +20,7 @@ def collect_tree(relative_root: str):
 
 datas = []
 datas.append((str(project_root / "micro_toolkit" / "builtin_plugin_manifest.json"), "micro_toolkit"))
+datas.append((str(project_root / "micro_toolkit" / "VERSION"), "micro_toolkit"))
 datas += collect_tree("micro_toolkit/assets")
 datas += collect_tree("micro_toolkit/i18n")
 datas += collect_tree("micro_toolkit/plugins")

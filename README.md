@@ -1,8 +1,8 @@
 # Micro Toolkit
 
-Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
+[![PyPI version](https://img.shields.io/pypi/v/micro-toolkit.svg)](https://pypi.org/project/micro-toolkit/)
 
-Current app version: `0.8.0`
+Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
 ## Overview
 
@@ -862,10 +862,11 @@ Why `onedir`:
 ./build_linux.sh
 ```
 
-Launcher:
+Outputs:
 
 ```text
 dist/micro-toolkit/micro-toolkit
+dist/micro-toolkit_<version>_<arch>.deb
 ```
 
 ### macOS
