@@ -617,9 +617,39 @@ class ClipMonitorManager(QObject):
         return bool(result and result.get("ok"))
 
     def stop(self, *, persist_disabled: bool = True) -> bool:
-        result = self._request("stop", {"persist_disabled": persist_disabled})
+        runtime = self._runtime_info()
+        monitor_pid = int(runtime["pid"]) if runtime else None
+        result = self._request("stop", {"persist_disabled": persist_disabled}, runtime=runtime)
         if persist_disabled:
             self.config.set("clip_monitor_enabled", False)
+        # Wait for the monitor process to actually exit so macOS does not
+        # leave a stale dock icon behind.
+        if monitor_pid and _pid_alive(monitor_pid):
+            deadline = time.time() + 3.0
+            while time.time() < deadline and _pid_alive(monitor_pid):
+                time.sleep(0.05)
+            # If it's still alive, force-terminate.
+            if _pid_alive(monitor_pid):
+                try:
+                    os.kill(monitor_pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+                except OSError:
+                    pass
+        # Clean up any leftover runtime files.
+        for path in (self.runtime_path, self.runtime_root / "clip_monitor.pid"):
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
+        if self._process is not None:
+            try:
+                self._process.wait(timeout=1.0)
+            except Exception:
+                try:
+                    self._process.kill()
+                except Exception:
+                    pass
+            self._process = None
         self.status_changed.emit()
         return bool(result and result.get("ok"))
 
@@ -681,49 +711,10 @@ def build_clip_monitor_parser(subparsers) -> None:
     subparsers.add_parser("clip-monitor", help=argparse.SUPPRESS)
 
 
-def _hide_dock_icon_macos() -> None:
-    """Suppress the macOS dock icon for this process.
-
-    Must be called *before* QApplication is created.  Uses the native
-    NSApplication API to set the activation policy to 'Accessory' which
-    hides the dock icon while still allowing system tray icons, menus,
-    and popup windows (like the quick panel) to work.
-    """
-    if sys.platform != "darwin":
-        return
-    try:
-        import objc  # type: ignore[import-untyped]
-        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory  # type: ignore[import-untyped]
-        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-        return
-    except Exception:
-        pass
-    # Fallback: ctypes approach for environments without PyObjC installed.
-    try:
-        import ctypes
-        import ctypes.util
-        appkit = ctypes.cdll.LoadLibrary(ctypes.util.find_library("AppKit") or "/System/Library/Frameworks/AppKit.framework/AppKit")
-        objc_lib = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc") or "/usr/lib/libobjc.dylib")
-        objc_lib.objc_getClass.restype = ctypes.c_void_p
-        objc_lib.objc_getClass.argtypes = [ctypes.c_char_p]
-        objc_lib.sel_registerName.restype = ctypes.c_void_p
-        objc_lib.sel_registerName.argtypes = [ctypes.c_char_p]
-        objc_lib.objc_msgSend.restype = ctypes.c_void_p
-        objc_lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        NSApp_cls = objc_lib.objc_getClass(b"NSApplication")
-        shared_sel = objc_lib.sel_registerName(b"sharedApplication")
-        ns_app = objc_lib.objc_msgSend(NSApp_cls, shared_sel)
-        policy_sel = objc_lib.sel_registerName(b"setActivationPolicy:")
-        # Redefine argtypes for the policy call (takes an NSInteger arg).
-        objc_lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
-        NSApplicationActivationPolicyAccessory = 1
-        objc_lib.objc_msgSend(ns_app, policy_sel, NSApplicationActivationPolicyAccessory)
-    except Exception:
-        pass  # Best-effort; fall back to default (dock icon visible).
-
-
 def run_clip_monitor_service(_args) -> int:
-    _hide_dock_icon_macos()
+    # NOTE: macOS dock-icon suppression is handled in __main__.py *before*
+    # PySide6 is imported.  It cannot be done here because the import of
+    # this module already triggers AppKit/NSApplication initialisation.
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName(f"{APP_NAME} Clip Monitor")
     app.setApplicationVersion(__version__)
@@ -736,3 +727,4 @@ def run_clip_monitor_service(_args) -> int:
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT, _cleanup)
     return app.exec()
+
