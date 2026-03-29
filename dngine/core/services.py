@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtGui import QGuiApplication
 
 from dngine.core.app_config import AppConfig
 from dngine.core.autostart import AutostartManager
@@ -90,6 +91,7 @@ class AppServices(QObject):
     quick_access_changed = Signal()
     plugin_visuals_changed = Signal(str)
     clip_monitor_state_changed = Signal(bool)
+    paste_queue_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -170,6 +172,7 @@ class AppServices(QObject):
         self.workflow_manager = WorkflowManager(self.workflows_root)
         self.shortcut_manager = ShortcutManager(self.config, self.logger, helper_manager=self.hotkey_helper_manager)
         self.clip_monitor_manager = ClipMonitorManager(self.config, self.data_root, self.database_path, self.logger)
+        self.clip_monitor_manager.manual_copy.connect(self.clear_paste_queue)
         self.clipboard_quick_panel = ClipboardQuickPanelController(
             self,
             before_restore_callback=self.clip_monitor_manager.ignore_next_change,
@@ -178,6 +181,8 @@ class AppServices(QObject):
         self.ui_inspector = UIInspector()
         self.ui_inspector.set_enabled(self.developer_mode_enabled())
         self.reset_command_registry()
+        self._paste_queue: list[int] = []
+        self._paste_queue_index: int = 0
 
     def resource_path(self, relative_path: str) -> Path:
         return self.assets_root / relative_path
@@ -471,6 +476,62 @@ class AppServices(QObject):
             return False
         self.clipboard_quick_panel.toggle()
         return True
+
+    def set_paste_queue(self, entry_ids: list[int]) -> None:
+        self._paste_queue = list(entry_ids)
+        self._paste_queue_index = 0
+        if self._paste_queue:
+            self._load_paste_queue_entry(0)
+        self.paste_queue_changed.emit()
+
+    def advance_paste_queue(self) -> None:
+        if not self._paste_queue:
+            self.log("Paste queue is empty.")
+            return
+        self._paste_queue_index += 1
+        if self._paste_queue_index >= len(self._paste_queue):
+            self.log("Paste queue exhausted.")
+            self._paste_queue = []
+            self._paste_queue_index = 0
+            self.paste_queue_changed.emit()
+            return
+        self._load_paste_queue_entry(self._paste_queue_index)
+        self.paste_queue_changed.emit()
+
+    def clear_paste_queue(self) -> None:
+        if not self._paste_queue:
+            return
+        self._paste_queue = []
+        self._paste_queue_index = 0
+        self.paste_queue_changed.emit()
+
+    def paste_queue_status(self) -> tuple[int, int] | None:
+        if not self._paste_queue:
+            return None
+        return (self._paste_queue_index + 1, len(self._paste_queue))
+
+    def _load_paste_queue_entry(self, index: int) -> None:
+        from dngine.core.clipboard_store import ClipboardStore
+
+        store = ClipboardStore(self.database_path)
+        entry_id = self._paste_queue[index]
+        entry = store.get_entry(entry_id)
+        if entry is None:
+            return
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            self.clip_monitor_manager.ignore_next_change()
+            store.restore_entry_to_clipboard(entry, clipboard)
+
+    def paste_as_plain_text(self) -> None:
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is None:
+            return
+        text = (clipboard.text() or "").strip()
+        if not text:
+            return
+        self.clip_monitor_manager.ignore_next_change()
+        clipboard.setText(text)
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
         if is_system_component(plugin_id):

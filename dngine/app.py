@@ -1702,6 +1702,20 @@ class DNgineWindow(QMainWindow):
         )
         self.services.shortcut_manager.register_action("toggle_activity", "Toggle activity panel", "F12", self.toggle_activity_dock)
         self.services.shortcut_manager.register_action("toggle_terminal", "Toggle terminal panel", "Ctrl+`", self.toggle_terminal_dock)
+        self.services.shortcut_manager.register_action(
+            "paste_plain_text",
+            "Paste as plain text",
+            "Ctrl+Shift+T",
+            self.services.paste_as_plain_text,
+            default_scope="global",
+        )
+        self.services.shortcut_manager.register_action(
+            "paste_next_queued",
+            "Paste next from queue",
+            "Ctrl+Shift+G",
+            self.services.advance_paste_queue,
+            default_scope="global",
+        )
 
     def focus_search(self):
         self.restore_from_tray()

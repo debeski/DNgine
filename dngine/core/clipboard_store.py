@@ -422,6 +422,79 @@ class ClipboardStore:
             return True
         return False
 
+    def update_content(
+        self,
+        entry_id: int,
+        content: str,
+        content_type: str | None = None,
+        *,
+        user_edited: bool = True,
+    ) -> None:
+        entry = self.get_entry(entry_id)
+        if entry is None:
+            return
+        normalized = (content or "").strip()
+        resolved_type = content_type or entry.content_type
+        new_hash = self._entry_hash(
+            content=normalized,
+            content_type=resolved_type,
+            html_content=entry.html_content,
+            image_path=entry.image_path,
+            file_paths=entry.file_paths,
+            metadata=entry.metadata,
+        )
+        metadata = dict(entry.metadata)
+        if user_edited:
+            metadata["user_edited"] = True
+        metadata_json = json.dumps(metadata, ensure_ascii=False)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE clipboard_entries
+                SET content = ?, content_type = ?, content_hash = ?, metadata_json = ?
+                WHERE id = ?
+                """,
+                (normalized, resolved_type, new_hash, metadata_json, entry_id),
+            )
+
+    def get_entries(self, entry_ids: list[int]) -> list[ClipboardEntry]:
+        if not entry_ids:
+            return []
+        placeholders = ", ".join("?" for _ in entry_ids)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, content, content_type, label, category, pinned, created_at,
+                       html_content, image_path, file_paths_json, metadata_json
+                FROM clipboard_entries
+                WHERE id IN ({placeholders})
+                """,
+                entry_ids,
+            ).fetchall()
+        entries_by_id = {}
+        for row in rows:
+            entries_by_id[row["id"]] = ClipboardEntry(
+                entry_id=row["id"],
+                content=row["content"],
+                content_type=row["content_type"],
+                label=row["label"],
+                category=row["category"],
+                pinned=bool(row["pinned"]),
+                created_at=row["created_at"],
+                html_content=row["html_content"],
+                image_path=row["image_path"],
+                file_paths_json=row["file_paths_json"],
+                metadata_json=row["metadata_json"],
+            )
+        return [entries_by_id[eid] for eid in entry_ids if eid in entries_by_id]
+
+    def restore_plain_text_to_clipboard(self, entry: ClipboardEntry, clipboard: QClipboard) -> bool:
+        text = (entry.content or "").strip()
+        if not text:
+            return False
+        clipboard.setText(text)
+        return True
+
     def update_label(self, entry_id: int, label: str) -> None:
         with self._connect() as connection:
             connection.execute(

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from dngine.core.clipboard_store import ClipboardEntry, ClipboardStore
+from dngine.core.clip_edit_dialog import ClipEditDialog
 from dngine.core.plugin_api import QtPlugin, bind_tr
 from dngine.core.page_style import apply_page_chrome, apply_semantic_class
 from dngine.core.widgets import ScrollSafeComboBox, adaptive_grid_columns, width_breakpoint
@@ -128,7 +129,10 @@ class ClipboardTableModel(QAbstractTableModel):
             if index.column() == 3:
                 return row.category
             if index.column() == 4:
-                return row.preview
+                preview = row.preview
+                if row.metadata.get("user_edited"):
+                    preview = f"\u270f\ufe0f {preview}"
+                return preview
             if index.column() == 5:
                 return row.created_at
         if role == Qt.ItemDataRole.UserRole:
@@ -261,6 +265,8 @@ class ClipSnipPage(QWidget):
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
         self.services.clip_monitor_state_changed.connect(self._sync_clip_monitor_checkbox)
         self._apply_texts()
+        self.services.paste_queue_changed.connect(self._update_queue_status)
+        self.services.clip_monitor_manager.status_changed.connect(self._refresh_entries)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -334,6 +340,10 @@ class ClipSnipPage(QWidget):
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
         outer.addWidget(self.content_splitter, 1)
 
+        self.queue_status_label = QLabel()
+        self.queue_status_label.setVisible(False)
+        outer.addWidget(self.queue_status_label)
+
         left_panel = QWidget()
         apply_semantic_class(left_panel, "transparent_class")
         left_layout = QVBoxLayout(left_panel)
@@ -343,7 +353,7 @@ class ClipSnipPage(QWidget):
         self.table_view = QTableView()
         self.table_view.setModel(self.proxy_model)
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_view.setAlternatingRowColors(True)
         self.table_view.verticalHeader().setVisible(False)
@@ -552,12 +562,20 @@ class ClipSnipPage(QWidget):
         )
 
     def _selected_row(self) -> ClipboardRow | None:
+        rows = self._selected_rows()
+        return rows[0] if len(rows) == 1 else (rows[0] if rows else None)
+
+    def _selected_rows(self) -> list[ClipboardRow]:
         selection_model = self.table_view.selectionModel()
         if selection_model is None or not selection_model.hasSelection():
-            return None
-        proxy_index = selection_model.selectedRows()[0]
-        source_index = self.proxy_model.mapToSource(proxy_index)
-        return self.model.row_at(source_index.row())
+            return []
+        result = []
+        for proxy_index in selection_model.selectedRows():
+            source_index = self.proxy_model.mapToSource(proxy_index)
+            row = self.model.row_at(source_index.row())
+            if row is not None:
+                result.append(row)
+        return result
 
     def _current_filters(self) -> tuple[str, str, str, str, bool]:
         return (
@@ -646,6 +664,9 @@ class ClipSnipPage(QWidget):
         type_text = TYPE_LABELS.get(row.content_type, row.content_type.title())
         if type_text.startswith("type."):
             type_text = self.tr(type_text, type_text.split('.')[-1].title())
+
+        if row.metadata.get("user_edited"):
+            type_text = f"{type_text} [{self.tr('badge.edited', 'Edited')}]"
 
         self.summary_label.setText(
             self.tr(
@@ -838,28 +859,163 @@ class ClipSnipPage(QWidget):
         self._refresh_entries()
 
     def _show_context_menu(self, position) -> None:
-        row = self._selected_row()
-        if row is None:
+        rows = self._selected_rows()
+        if not rows:
             return
         menu = QMenu(self)
-        copy_action = QAction(self.tr("menu.copy", "Copy Selected"), self)
-        copy_action.triggered.connect(self._copy_selected)
-        menu.addAction(copy_action)
 
-        pin_action = QAction(self.tr("menu.unpin", "Unpin Selected") if row.pinned else self.tr("menu.pin", "Pin Selected"), self)
-        pin_action.triggered.connect(self._toggle_pin_selected)
-        menu.addAction(pin_action)
+        if len(rows) == 1:
+            row = rows[0]
+            copy_action = QAction(self.tr("menu.copy", "Copy Selected"), self)
+            copy_action.triggered.connect(self._copy_selected)
+            menu.addAction(copy_action)
 
-        label_action = QAction(self.tr("menu.set_label", "Set Label"), self)
-        label_action.triggered.connect(self._set_label_for_selected)
-        menu.addAction(label_action)
+            pin_action = QAction(
+                self.tr("menu.unpin", "Unpin Selected") if row.pinned else self.tr("menu.pin", "Pin Selected"), self
+            )
+            pin_action.triggered.connect(self._toggle_pin_selected)
+            menu.addAction(pin_action)
 
-        category_action = QAction(self.tr("menu.set_category", "Set Category"), self)
-        category_action.triggered.connect(self._set_category_for_selected)
-        menu.addAction(category_action)
+            label_action = QAction(self.tr("menu.set_label", "Set Label"), self)
+            label_action.triggered.connect(self._set_label_for_selected)
+            menu.addAction(label_action)
 
-        delete_action = QAction(self.tr("menu.delete", "Delete Selected"), self)
-        delete_action.triggered.connect(self._delete_selected)
-        menu.addAction(delete_action)
+            category_action = QAction(self.tr("menu.set_category", "Set Category"), self)
+            category_action.triggered.connect(self._set_category_for_selected)
+            menu.addAction(category_action)
+
+            menu.addSeparator()
+
+            edit_action = QAction(self.tr("menu.edit_copy", "Edit && Copy"), self)
+            edit_action.triggered.connect(lambda: self._edit_entry(row.entry_id))
+            menu.addAction(edit_action)
+
+            transform_action = QAction(self.tr("menu.transform", "Transform Text"), self)
+            transform_action.triggered.connect(lambda: self._transform_entry(row.entry_id))
+            menu.addAction(transform_action)
+
+            if row.content_type == "image" and row.image_path:
+                img_trans_action = QAction(self.tr("menu.send_to_img_trans", "Send to Image Transformer"), self)
+                img_trans_action.triggered.connect(lambda: self._send_to_image_transformer([row]))
+                menu.addAction(img_trans_action)
+
+            menu.addSeparator()
+
+            delete_action = QAction(self.tr("menu.delete", "Delete Selected"), self)
+            delete_action.triggered.connect(self._delete_selected)
+            menu.addAction(delete_action)
+        else:
+            merge_action = QAction(self.tr("menu.merge_copy", "Merge && Copy"), self)
+            merge_action.triggered.connect(lambda: self._merge_and_copy(rows))
+            menu.addAction(merge_action)
+
+            queue_action = QAction(self.tr("menu.queue_paste", "Queue for Paste"), self)
+            queue_action.triggered.connect(lambda: self._queue_for_paste(rows))
+            menu.addAction(queue_action)
+
+            image_rows = [r for r in rows if r.content_type == "image" and r.image_path]
+            if image_rows:
+                img_trans_action = QAction(self.tr("menu.send_to_img_trans", "Send to Image Transformer"), self)
+                img_trans_action.triggered.connect(lambda: self._send_to_image_transformer(image_rows))
+                menu.addAction(img_trans_action)
+
+            menu.addSeparator()
+
+            all_pinned = all(r.pinned for r in rows)
+            pin_bulk_action = QAction(
+                self.tr("menu.unpin_selected", "Unpin Selected") if all_pinned
+                else self.tr("menu.pin_selected", "Pin Selected"),
+                self,
+            )
+            pin_bulk_action.triggered.connect(lambda: self._bulk_toggle_pin(rows, not all_pinned))
+            menu.addAction(pin_bulk_action)
+
+            delete_bulk_action = QAction(self.tr("menu.delete_selected", "Delete Selected"), self)
+            delete_bulk_action.triggered.connect(lambda: self._bulk_delete(rows))
+            menu.addAction(delete_bulk_action)
 
         menu.exec(self.table_view.viewport().mapToGlobal(position))
+
+    # ------------------------------------------------------------------
+    # New actions
+    # ------------------------------------------------------------------
+
+    def _edit_entry(self, entry_id: int) -> None:
+        dialog = ClipEditDialog(
+            self.store, entry_id, self.services, self.plugin_id,
+            transform_mode=False, parent=self, pt=self.tr,
+        )
+        dialog.exec()
+        if dialog.did_act:
+            self._refresh_entries()
+
+    def _transform_entry(self, entry_id: int) -> None:
+        dialog = ClipEditDialog(
+            self.store, entry_id, self.services, self.plugin_id,
+            transform_mode=True, parent=self, pt=self.tr,
+        )
+        dialog.exec()
+        if dialog.did_act:
+            self._refresh_entries()
+
+    def _merge_and_copy(self, rows: list[ClipboardRow]) -> None:
+        entry_ids = [r.entry_id for r in rows]
+        entries = self.store.get_entries(entry_ids)
+        merged = "\n\n".join(e.content for e in entries if e.content)
+        if not merged:
+            return
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(merged)
+        self.services.log(
+            self.tr("log.merged", "Merged {count} entries and copied to clipboard.", count=len(entries))
+        )
+
+    def _queue_for_paste(self, rows: list[ClipboardRow]) -> None:
+        entry_ids = [r.entry_id for r in rows]
+        self.services.set_paste_queue(entry_ids)
+        self.services.log(
+            self.tr("log.queued", "Queued {count} entries for sequential paste.", count=len(entry_ids))
+        )
+
+    def _send_to_image_transformer(self, rows: list[ClipboardRow]) -> None:
+        paths = [r.image_path for r in rows if r.image_path and Path(r.image_path).exists()]
+        if not paths:
+            return
+        window = self.services.main_window
+        if window is None:
+            return
+        window.open_plugin("img_trans")
+        widget = getattr(window, "_plugin_content_widget", None)
+        if callable(widget):
+            page = widget("img_trans")
+            if page is not None and hasattr(page, "add_file_paths"):
+                page.add_file_paths(paths)
+        self.services.log(
+            self.tr("log.sent_to_transformer", "Sent {count} image(s) to Image Transformer.", count=len(paths))
+        )
+
+    def _bulk_toggle_pin(self, rows: list[ClipboardRow], pinned: bool) -> None:
+        for row in rows:
+            self.store.update_pinned(row.entry_id, pinned)
+        self.services.log(self.tr("log.pin_updated", "Clipboard pin state updated."))
+        self._refresh_entries()
+
+    def _bulk_delete(self, rows: list[ClipboardRow]) -> None:
+        for row in rows:
+            self.store.delete_entry(row.entry_id)
+        self.services.log(
+            self.tr("log.bulk_deleted", "Deleted {count} clipboard entries.", count=len(rows))
+        )
+        self._refresh_entries()
+
+    def _update_queue_status(self) -> None:
+        status = self.services.paste_queue_status()
+        if status is None:
+            self.queue_status_label.setVisible(False)
+            return
+        current, total = status
+        self.queue_status_label.setText(
+            self.tr("queue.status", "\U0001f4cb Queue: {current}/{total}", current=current, total=total)
+        )
+        self.queue_status_label.setVisible(True)

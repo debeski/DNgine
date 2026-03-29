@@ -313,6 +313,22 @@ class ImageTransformerPage(QWidget):
         if self.files and self.file_list.currentRow() < 0:
             self.file_list.setCurrentRow(0)
 
+    def add_file_paths(self, paths: list[str]) -> None:
+        """Programmatic API for other plugins to add images (e.g. Clip Snip)."""
+        if not paths:
+            return
+        first_new_index: int | None = None
+        for file_path in paths:
+            if file_path not in self.files:
+                if first_new_index is None:
+                    first_new_index = len(self.files)
+                self.files.append(file_path)
+        self._refresh_file_list()
+        if first_new_index is not None:
+            self.file_list.setCurrentRow(first_new_index)
+        elif self.files and self.file_list.currentRow() < 0:
+            self.file_list.setCurrentRow(0)
+
     def _clear_files(self) -> None:
         self.files = []
         self.current_preview_path = None

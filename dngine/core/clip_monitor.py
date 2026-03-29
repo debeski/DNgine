@@ -14,6 +14,7 @@ from dngine.core.clipboard_store import ClipboardStore
 
 class ClipboardMonitor(QObject):
     captured = Signal()
+    manual_copy = Signal()
 
     def __init__(self, store: ClipboardStore, clipboard, logger=None):
         super().__init__()
@@ -44,11 +45,14 @@ class ClipboardMonitor(QObject):
             return
         if not self._enabled:
             return
+        self.manual_copy.emit()
         self.capture_current()
+
 
 
 class ClipMonitorManager(QObject):
     status_changed = Signal()
+    manual_copy = Signal()
 
     def __init__(self, config, data_root: Path, database_path: Path, logger):
         super().__init__()
@@ -68,6 +72,7 @@ class ClipMonitorManager(QObject):
         self._store = ClipboardStore(self.database_path)
         self._monitor = ClipboardMonitor(self._store, clipboard, logger=self.logger)
         self._monitor.captured.connect(self.status_changed)
+        self._monitor.manual_copy.connect(self.manual_copy)
         self.refresh_preferences()
 
     def is_enabled(self) -> bool:
