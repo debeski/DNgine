@@ -87,8 +87,8 @@ def register_builtin_tool_commands(registry, services) -> None:
     )
     register_task_command(
         "tool.cred_scanner.scan",
-        "Scan Credentials",
-        "Scan a folder for credential-like strings.",
+        "Run Code Exploit Scanner",
+        "Scan a folder for exposed secrets, risky files, and exploit indicators.",
         "cred_scanner",
         "dngine.plugins.it_tools.credential_scanner",
         "run_credential_scan",

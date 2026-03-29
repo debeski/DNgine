@@ -69,6 +69,15 @@
         }
       ]
     },
+    "file_tools/hash_checker.py": {
+      "sha256": "c6b3d5e983cac3ebdd6d416c4297f64c6a822bdcd64375f4945346619ff995aa",
+      "plugins": [
+        {
+          "plugin_id": "hash_checker",
+          "class_name": "HashCheckerPlugin"
+        }
+      ]
+    },
     "file_tools/smart_organizer.py": {
       "sha256": "16599ad121f91f04517c85a74e3a85587819e8215305e3ccf548251fcc54d392",
       "plugins": [
@@ -88,7 +97,7 @@
       ]
     },
     "it_tools/credential_scanner.py": {
-      "sha256": "b539fdcbcb71d9c9f2df343ab9f305a50c0442d077c2b0061c61391c8cf39b28",
+      "sha256": "713f046398741ab94550ab136e9e144126e48c53ef10b644fc34979dc90d650f",
       "plugins": [
         {
           "plugin_id": "cred_scanner",
@@ -151,7 +160,7 @@
       ]
     },
     "media_tools/image_transformer.py": {
-      "sha256": "ac0074abba0253cd823182728fdd88d888bfa6909513d7a466be3c2c6ac13931",
+      "sha256": "4f1a6d9e39876f96a72f536d1402a8c2199e84b9c3f3a598acb37b26d0652ee4",
       "plugins": [
         {
           "plugin_id": "img_trans",
@@ -205,7 +214,7 @@
       ]
     },
     "system/clip_snip.py": {
-      "sha256": "e41859f38736143013a223114638b0f382dd7396ce3c17f34f650c7966428412",
+      "sha256": "87854b5e6962832d9a1b1059b9751ced5a591d8d7e9a1cf81abfa27aa4f2e5a7",
       "plugins": [
         {
           "plugin_id": "clip_snip",
@@ -214,7 +223,7 @@
       ]
     },
     "system/command_center.py": {
-      "sha256": "4392dfb8d421c2a4e27f98f1923e911606a219dcbeb8d003e0aec3e2acfc31f0",
+      "sha256": "a151ec44ca21b78f7ec666ca39370ab696a43b2d4ae4b3dbcbc5978538d58e90",
       "plugins": [
         {
           "plugin_id": "command_center",
