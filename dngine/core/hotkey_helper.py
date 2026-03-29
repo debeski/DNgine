@@ -16,6 +16,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from dngine.core.runtime_launch import build_background_subcommand_args
+
 
 def _keyboard_backend():
     try:
@@ -235,26 +237,7 @@ class HotkeyHelperManager(QObject):
         return False, message
 
     def _helper_command(self) -> list[str]:
-        base = [sys.executable]
-        if getattr(sys, "frozen", False):
-            return [
-                *base,
-                "hotkey-helper",
-                "--ipc-port",
-                str(self.port or 0),
-                "--ipc-token",
-                self.token,
-                "--mappings",
-                str(self.mapping_path),
-                "--pid-file",
-                str(self.pid_path),
-                "--parent-pid",
-                str(os.getpid()),
-            ]
-        return [
-            *base,
-            "-m",
-            "dngine",
+        return build_background_subcommand_args(
             "hotkey-helper",
             "--ipc-port",
             str(self.port or 0),
@@ -266,7 +249,7 @@ class HotkeyHelperManager(QObject):
             str(self.pid_path),
             "--parent-pid",
             str(os.getpid()),
-        ]
+        )
 
     def _elevated_env_prefix(self) -> list[str]:
         if getattr(sys, "frozen", False):

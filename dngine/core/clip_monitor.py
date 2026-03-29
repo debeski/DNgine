@@ -22,6 +22,7 @@ from dngine.core.clipboard_quick_panel import ClipboardQuickPanel
 from dngine.core.clipboard_store import ClipboardStore
 from dngine.core.hotkey_helper import HotkeyHelperManager
 from dngine.core.i18n import TranslationManager
+from dngine.core.runtime_launch import build_background_subcommand_args, gui_executable, project_root, pythonpath_env
 from dngine.core.storage_paths import CONFIG_FILENAME, DATABASE_FILENAME, LEGACY_CONFIG_FILENAME, LEGACY_DATABASE_FILENAME, resolve_runtime_path, standard_storage_root
 from dngine.core.theme import ThemeManager
 
@@ -32,7 +33,7 @@ except Exception:
 
 def build_gui_launch_args(*, plugin_id: str | None = None, start_minimized: bool = False, force_visible: bool = False) -> list[str]:
     if getattr(sys, "frozen", False):
-        args = [sys.executable, "gui"]
+        args = [gui_executable(), "gui"]
     else:
         args = [sys.executable, "-m", "dngine", "gui"]
     if plugin_id:
@@ -45,29 +46,7 @@ def build_gui_launch_args(*, plugin_id: str | None = None, start_minimized: bool
 
 
 def build_clip_monitor_launch_args() -> list[str]:
-    if getattr(sys, "frozen", False):
-        return [sys.executable, "clip-monitor"]
-    return [sys.executable, "-m", "dngine", "clip-monitor"]
-
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
-def _pythonpath_env() -> dict[str, str] | None:
-    if getattr(sys, "frozen", False):
-        return None
-    env = os.environ.copy()
-    project_root = str(_project_root())
-    existing = str(env.get("PYTHONPATH") or "").strip()
-    if not existing:
-        env["PYTHONPATH"] = project_root
-        return env
-    parts = [part for part in existing.split(os.pathsep) if part]
-    if project_root not in parts:
-        parts.insert(0, project_root)
-        env["PYTHONPATH"] = os.pathsep.join(parts)
-    return env
+    return build_background_subcommand_args("clip-monitor")
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -357,10 +336,10 @@ class ClipMonitorRuntime(QObject):
             self.quick_panel.toggle()
 
     def open_full_clipboard(self) -> None:
-        env = _pythonpath_env()
+        env = pythonpath_env()
         subprocess.Popen(
             build_gui_launch_args(plugin_id="clip_snip", force_visible=True),
-            cwd=str(_project_root()) if not getattr(sys, "frozen", False) else None,
+            cwd=str(project_root()) if not getattr(sys, "frozen", False) else None,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -368,10 +347,10 @@ class ClipMonitorRuntime(QObject):
         )
 
     def open_main_app(self) -> None:
-        env = _pythonpath_env()
+        env = pythonpath_env()
         subprocess.Popen(
             build_gui_launch_args(force_visible=True),
-            cwd=str(_project_root()) if not getattr(sys, "frozen", False) else None,
+            cwd=str(project_root()) if not getattr(sys, "frozen", False) else None,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -573,10 +552,10 @@ class ClipMonitorManager(QObject):
         runtime = self._runtime_info()
         if runtime is not None and self._ping(runtime) is not None:
             return True
-        env = _pythonpath_env()
+        env = pythonpath_env()
         self._process = subprocess.Popen(
             build_clip_monitor_launch_args(),
-            cwd=str(_project_root()) if not getattr(sys, "frozen", False) else None,
+            cwd=str(project_root()) if not getattr(sys, "frozen", False) else None,
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -727,4 +706,3 @@ def run_clip_monitor_service(_args) -> int:
     signal.signal(signal.SIGTERM, _cleanup)
     signal.signal(signal.SIGINT, _cleanup)
     return app.exec()
-

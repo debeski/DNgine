@@ -22,6 +22,7 @@ from PySide6.QtCore import QObject, Signal
 from dngine.core.backup_manager import restore_encrypted_snapshot
 from dngine.core.plugin_manager import PluginManager
 from dngine.core.plugin_state import PluginStateManager
+from dngine.core.runtime_launch import build_background_subcommand_args
 
 
 @dataclass(frozen=True)
@@ -470,33 +471,7 @@ class ElevatedBrokerManager(QObject):
         return payload
 
     def _build_launch_command(self) -> list[str]:
-        if getattr(sys, "frozen", False):
-            return [
-                sys.executable,
-                "elevated-broker",
-                "--status-file",
-                str(self.status_path),
-                "--token",
-                self.token,
-                "--data-root",
-                str(self.data_root),
-                "--output-root",
-                str(self.output_root),
-                "--assets-root",
-                str(self.assets_root),
-                "--plugins-root",
-                str(self.plugins_root),
-                "--builtin-manifest-path",
-                str(self.builtin_manifest_path),
-                "--custom-plugins-root",
-                str(self.custom_plugins_root),
-                "--plugin-state-path",
-                str(self.plugin_state_path),
-            ]
-        return [
-            sys.executable,
-            "-m",
-            "dngine",
+        return build_background_subcommand_args(
             "elevated-broker",
             "--status-file",
             str(self.status_path),
@@ -516,7 +491,7 @@ class ElevatedBrokerManager(QObject):
             str(self.custom_plugins_root),
             "--plugin-state-path",
             str(self.plugin_state_path),
-        ]
+        )
 
     def _elevated_env_prefix(self) -> list[str]:
         if getattr(sys, "frozen", False):

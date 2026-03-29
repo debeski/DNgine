@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 from dngine import APP_NAME, DIST_NAME
-from dngine.core.clip_monitor import build_clip_monitor_launch_args, build_gui_launch_args
+from dngine.core.clip_monitor import build_gui_launch_args
+from dngine.core.runtime_launch import build_background_subcommand_args
 
 LEGACY_APP_NAME = "Micro Toolkit"
 LEGACY_DIST_NAME = "micro-toolkit"
@@ -200,11 +201,7 @@ class AutostartManager:
         return " ".join(shlex.quote(part) for part in self._launch_args(start_minimized=start_minimized))
 
     def _clip_monitor_launch_args(self) -> list[str]:
-        if sys.platform == "darwin":
-            mac_bundle_path = self._mac_bundle_path()
-            if mac_bundle_path is not None:
-                return ["/usr/bin/open", str(mac_bundle_path), "--args", "clip-monitor"]
-        return build_clip_monitor_launch_args()
+        return build_background_subcommand_args("clip-monitor")
 
     def _clip_monitor_launch_command(self) -> str:
         return " ".join(shlex.quote(part) for part in self._clip_monitor_launch_args())

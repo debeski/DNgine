@@ -45,6 +45,94 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Developer inspector system page gated behind developer mode
 - Multi-format clipboard history with pinned snippets, labels, and categories
 
+## Installation
+
+You can download the pre-built binaries from the GitHub Releases page or build from source.
+
+### Pre-built Packages
+
+- **Windows**: Download the `.exe` installer from the Releases page and run it to install DNgine.
+- **macOS**: Download the `.app` bundle from the Releases page. You can run it directly as a portable application from any directory (e.g. your Downloads or Applications folder).
+- **Linux**: Download and install the `.deb` package from the Releases page.
+
+### Building from Source
+
+#### Requirements
+
+- Python 3.10+
+- the packages listed in [requirements.txt](/home/debeski/depy/tools/dngine/requirements.txt)
+
+#### Linux Note
+
+On some X11 systems, Qt 6.5+ may require:
+
+```bash
+sudo apt-get install -y libxcb-cursor0
+```
+
+#### Setup
+
+```bash
+git clone https://github.com/debeski/dngine.git
+cd dngine
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Running the App
+
+### From Pre-built Packages
+
+- **Windows / Linux**: Launch DNgine from your system's application menu.
+- **macOS**: Double-click the `DNgine.app` to launch it. If macOS blocks the app because it's from an unidentified developer, `Right-click` (or `Control-click`) the app and select **Open**.
+
+### From Source
+
+Launch the desktop app:
+
+```bash
+python -m dngine
+```
+
+Launch directly into GUI mode:
+
+```bash
+python -m dngine gui
+```
+
+Open a specific plugin on startup:
+
+```bash
+python -m dngine gui --plugin-id clip_snip
+```
+
+## CLI Examples
+
+List plugins:
+
+```bash
+python -m dngine plugins list
+```
+
+List registered workflow and tool commands:
+
+```bash
+python -m dngine commands list
+```
+
+Run a headless tool command:
+
+```bash
+python -m dngine commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
+```
+
+Run a saved workflow:
+
+```bash
+python -m dngine workflows run my_workflow
+```
+
 ## Included Tools
 
 ### Validation and Analysis
@@ -359,77 +447,6 @@ Stop the broker:
 
 ```bash
 python -m dngine broker elevated stop
-```
-
-## Installation
-
-### Requirements
-
-- Python 3.10+
-- the packages listed in [requirements.txt](/home/debeski/depy/tools/dngine/requirements.txt)
-
-### Linux Note
-
-On some X11 systems, Qt 6.5+ may require:
-
-```bash
-sudo apt-get install -y libxcb-cursor0
-```
-
-### Setup
-
-```bash
-git clone https://github.com/debeski/dngine.git
-cd dngine
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Running the App
-
-Launch the desktop app:
-
-```bash
-python -m dngine
-```
-
-Launch directly into GUI mode:
-
-```bash
-python -m dngine gui
-```
-
-Open a specific plugin on startup:
-
-```bash
-python -m dngine gui --plugin-id clip_snip
-```
-
-## CLI Examples
-
-List plugins:
-
-```bash
-python -m dngine plugins list
-```
-
-List registered workflow and tool commands:
-
-```bash
-python -m dngine commands list
-```
-
-Run a headless tool command:
-
-```bash
-python -m dngine commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
-```
-
-Run a saved workflow:
-
-```bash
-python -m dngine workflows run my_workflow
 ```
 
 ## Custom Plugin Development
