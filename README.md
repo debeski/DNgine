@@ -1,12 +1,12 @@
-# Micro Toolkit
+# DNgine
 
-[![PyPI version](https://img.shields.io/pypi/v/micro-toolkit.svg)](https://pypi.org/project/micro-toolkit/)
+[![PyPI version](https://img.shields.io/pypi/v/dngine.svg)](https://pypi.org/project/dngine/)
 
-Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
+DNgine is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
 ## Overview
 
-Micro Toolkit brings practical desktop utilities into one cohesive shell:
+DNgine brings practical desktop utilities into one cohesive shell:
 
 - file utilities
 - spreadsheet and office helpers
@@ -166,7 +166,7 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 ### Package Layout
 
 ```text
-micro_toolkit/
+dngine/
   __main__.py
   app.py
   main.py
@@ -178,19 +178,21 @@ build_linux.sh
 build_macos.sh
 build_windows.sh
 build_windows.bat
-micro-toolkit.spec
+dngine.spec
 ```
 
 ### Runtime Layout
 
-- [micro_toolkit](/home/debeski/depy/tools/micro-toolkit/micro_toolkit) contains code, assets, built-in plugins, and locale files.
+- [dngine](/home/debeski/depy/tools/dngine/dngine) contains code, assets, built-in plugins, and locale files.
 - Runtime state lives in a per-user storage root, not in the project directory.
-- Windows uses `%LOCALAPPDATA%\\Micro Toolkit`
-- macOS uses `~/Library/Application Support/Micro Toolkit`
-- Linux uses `$XDG_DATA_HOME/micro-toolkit` or `~/.local/share/micro-toolkit`
+- Windows uses `%LOCALAPPDATA%\\DNgine`
+- macOS uses `~/Library/Application Support/DNgine`
+- Linux uses `$XDG_DATA_HOME/dngine` or `~/.local/share/dngine`
 - Inside that root, `data/` contains config, database, plugin state, workflows, and custom plugins.
 - Inside that root, `output/` is the default export/output folder for generated files.
-- `MICRO_TOOLKIT_HOME` can override the storage root for development or portable testing.
+- `DNGINE_HOME` can override the storage root for development or portable testing.
+- `MICRO_TOOLKIT_HOME` is still accepted as a backward-compatible override.
+- Existing `DNgine` / `dngine` storage folders are migrated forward on first run when possible.
 
 ### Plugin Engine
 
@@ -222,7 +224,7 @@ In packaged `onedir` builds, bundled first-party plugins are verified against `b
 
 Custom plugins are supported, but they are not treated like built-in code.
 
-Micro Toolkit now applies several safety measures:
+DNgine now applies several safety measures:
 
 - packaged first-party plugins are identified through a build-generated manifest
 - imported plugins start disabled and untrusted
@@ -241,7 +243,7 @@ Trusted plugins still run Python code in the app process. The review and quarant
 
 ### Plugin Origins
 
-Micro Toolkit is designed around three plugin origins:
+DNgine is designed around three plugin origins:
 
 - `builtin`: shipped with the app and verified by the build manifest
 - `signed`: reserved for future signer-verified third-party distribution
@@ -273,7 +275,7 @@ The shell handles:
 Recommended widget usage:
 
 ```python
-from micro_toolkit.core.plugin_api import bind_tr
+from dngine.core.plugin_api import bind_tr
 
 tr = bind_tr(services, "my_plugin")
 title = QLabel(tr("ui.title", "My Plugin"))
@@ -282,7 +284,7 @@ title = QLabel(tr("ui.title", "My Plugin"))
 Recommended helper/task usage:
 
 ```python
-from micro_toolkit.core.plugin_api import safe_tr, tr
+from dngine.core.plugin_api import safe_tr, tr
 
 context.log(tr(services, "my_plugin", "log.start", "Starting task..."))
 message = safe_tr(translate, "error.failed", "Task failed.")
@@ -290,7 +292,7 @@ message = safe_tr(translate, "error.failed", "Task failed.")
 
 ## Performance Model
 
-Micro Toolkit is designed to stay responsive:
+DNgine is designed to stay responsive:
 
 - plugin metadata is discovered before modules are imported
 - pages are only created when opened
@@ -300,7 +302,7 @@ Micro Toolkit is designed to stay responsive:
 
 ## Elevated Access Model
 
-Micro Toolkit now has two separate elevated helpers, each with a narrow purpose:
+DNgine now has two separate elevated helpers, each with a narrow purpose:
 
 ### 1. Hotkey Helper
 
@@ -336,25 +338,25 @@ Examples of bad designs to avoid:
 List capabilities:
 
 ```bash
-python -m micro_toolkit broker elevated capabilities
+python -m dngine broker elevated capabilities
 ```
 
 Start the broker explicitly:
 
 ```bash
-python -m micro_toolkit broker elevated start
+python -m dngine broker elevated start
 ```
 
 Run one capability:
 
 ```bash
-python -m micro_toolkit broker elevated run system.identity --payload '{}'
+python -m dngine broker elevated run system.identity --payload '{}'
 ```
 
 Stop the broker:
 
 ```bash
-python -m micro_toolkit broker elevated stop
+python -m dngine broker elevated stop
 ```
 
 ## Installation
@@ -362,7 +364,7 @@ python -m micro_toolkit broker elevated stop
 ### Requirements
 
 - Python 3.10+
-- the packages listed in [requirements.txt](/home/debeski/depy/tools/micro-toolkit/requirements.txt)
+- the packages listed in [requirements.txt](/home/debeski/depy/tools/dngine/requirements.txt)
 
 ### Linux Note
 
@@ -375,8 +377,8 @@ sudo apt-get install -y libxcb-cursor0
 ### Setup
 
 ```bash
-git clone https://github.com/debeski/micro-toolkit.git
-cd micro-toolkit
+git clone https://github.com/debeski/dngine.git
+cd dngine
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -387,19 +389,19 @@ pip install -r requirements.txt
 Launch the desktop app:
 
 ```bash
-python -m micro_toolkit
+python -m dngine
 ```
 
 Launch directly into GUI mode:
 
 ```bash
-python -m micro_toolkit gui
+python -m dngine gui
 ```
 
 Open a specific plugin on startup:
 
 ```bash
-python -m micro_toolkit gui --plugin-id clip_snip
+python -m dngine gui --plugin-id clip_snip
 ```
 
 ## CLI Examples
@@ -407,30 +409,30 @@ python -m micro_toolkit gui --plugin-id clip_snip
 List plugins:
 
 ```bash
-python -m micro_toolkit plugins list
+python -m dngine plugins list
 ```
 
 List registered workflow and tool commands:
 
 ```bash
-python -m micro_toolkit commands list
+python -m dngine commands list
 ```
 
 Run a headless tool command:
 
 ```bash
-python -m micro_toolkit commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
+python -m dngine commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
 ```
 
 Run a saved workflow:
 
 ```bash
-python -m micro_toolkit workflows run my_workflow
+python -m dngine workflows run my_workflow
 ```
 
 ## Custom Plugin Development
 
-This section is the main guide for writing Micro Toolkit plugins.
+This section is the main guide for writing DNgine plugins.
 
 ### Where Custom Plugins Live
 
@@ -465,7 +467,7 @@ Recommended sharing path:
 ```python
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from micro_toolkit.core.plugin_api import QtPlugin
+from dngine.core.plugin_api import QtPlugin
 
 
 class MyPlugin(QtPlugin):
@@ -478,7 +480,7 @@ class MyPlugin(QtPlugin):
     def create_widget(self, services) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(QLabel("Hello from Micro Toolkit"))
+        layout.addWidget(QLabel("Hello from DNgine"))
         return page
 ```
 
@@ -486,13 +488,13 @@ class MyPlugin(QtPlugin):
 
 Use:
 
-- `from micro_toolkit.core.plugin_api import QtPlugin, bind_tr`
-- `from micro_toolkit.core.plugin_api import tr` for helper/task code that already has `services` and `plugin_id`
-- `from micro_toolkit.core.plugin_api import safe_tr` when a background/helper path accepts an optional translation callable
-- `from micro_toolkit.core.page_style import apply_page_chrome` for standard page title/description/card styling
-- `from micro_toolkit.core.page_style import apply_semantic_class` only for approved special surfaces such as console, preview, chart, or hero variants
-- `from micro_toolkit.core.command_runtime import HeadlessTaskContext` for headless command work
-- `from micro_toolkit.core.app_utils import ...` for shared helpers where appropriate
+- `from dngine.core.plugin_api import QtPlugin, bind_tr`
+- `from dngine.core.plugin_api import tr` for helper/task code that already has `services` and `plugin_id`
+- `from dngine.core.plugin_api import safe_tr` when a background/helper path accepts an optional translation callable
+- `from dngine.core.page_style import apply_page_chrome` for standard page title/description/card styling
+- `from dngine.core.page_style import apply_semantic_class` only for approved special surfaces such as console, preview, chart, or hero variants
+- `from dngine.core.command_runtime import HeadlessTaskContext` for headless command work
+- `from dngine.core.app_utils import ...` for shared helpers where appropriate
 - `services.run_task(...)` for background work with automatic shell progress
 - `services.request_elevated(...)` only when a capability-based elevated operation is truly required
 - `register_elevated_capabilities(...)` only for narrow, explicit elevated operations
@@ -515,8 +517,8 @@ For a standard content page, the preferred pattern is:
 ```python
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
-from micro_toolkit.core.page_style import apply_page_chrome
-from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
+from dngine.core.page_style import apply_page_chrome
+from dngine.core.plugin_api import QtPlugin, bind_tr
 
 
 class MyPlugin(QtPlugin):
@@ -619,7 +621,7 @@ Example `my_plugin.en.json`:
 Example usage inside the widget:
 
 ```python
-from micro_toolkit.core.plugin_api import bind_tr
+from dngine.core.plugin_api import bind_tr
 
 tr = bind_tr(services, "my_plugin")
 title = QLabel(tr("ui.title", "My Plugin"))
@@ -706,7 +708,7 @@ Current icon sources are used in this order:
 If your tool should work in workflows and CLI, register commands:
 
 ```python
-from micro_toolkit.core.command_runtime import HeadlessTaskContext
+from dngine.core.command_runtime import HeadlessTaskContext
 
 
 def run_my_task(context, source_path: str):
@@ -845,7 +847,7 @@ Recommended split:
 
 ## Build and Packaging
 
-Micro Toolkit uses `PyInstaller` in `onedir` mode.
+DNgine uses `PyInstaller` in `onedir` mode.
 
 The build scripts regenerate the builtin plugin manifest before packaging so shipped first-party plugins can be verified at runtime in packaged builds.
 
@@ -865,8 +867,8 @@ Why `onedir`:
 Outputs:
 
 ```text
-dist/micro-toolkit/micro-toolkit
-dist/micro-toolkit_<version>_<arch>.deb
+dist/dngine/dngine
+dist/dngine_<version>_<arch>.deb
 ```
 
 ### macOS
@@ -878,7 +880,7 @@ dist/micro-toolkit_<version>_<arch>.deb
 Launcher:
 
 ```text
-dist/micro-toolkit/micro-toolkit
+dist/DNgine.app
 ```
 
 ### Windows Native
@@ -892,7 +894,7 @@ build_windows.bat
 Launcher:
 
 ```text
-dist\micro-toolkit\micro-toolkit.exe
+dist\dngine\dngine.exe
 ```
 
 ### Windows Cross-Build from Linux
@@ -907,7 +909,7 @@ This is convenient, but native Windows builds are still the more reliable option
 
 ## Product Goals
 
-Micro Toolkit is meant to feel:
+DNgine is meant to feel:
 
 - fast enough to keep open all day
 - light enough to revisit often
@@ -920,6 +922,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.8.1 | 2026-02-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI, and github. |
 | 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar. |
 | 0.7.8 | 2026-03-27 | Finished the compact icon-button stabilization pass across the shell and plugins, separating lightweight auto-raise action icons from regular buttons so hover states no longer inflate rows, distort compact containers, or overflow shell utility bars and table action cells. |
 | 0.7.7 | 2026-03-27 | Reworked the compact shell chrome so the utility bar, system-icon rail, and header rhythm align more cleanly, while also tightening `Dev Lab` card layout and the overall top-shell proportions. |
@@ -938,7 +941,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 | 0.6.0 | 2026-03-26 | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
 | 0.5.2 | 2026-03-25 | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
 | 0.5.1 | 2026-03-25 | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
-| 0.5.0 | 2026-03-25 | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
+| 0.5.0 | 2026-03-25 | First full DNgine desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
 | 0.4.5 | 2026-03-24 | Added custom plugin import/export, enable/disable/hide controls, Introduced some pdf related plugins, and improved the plugin engine performance. |
 | 0.4.4 | 2026-03-24 | Introduced headless tool commands for workflows and CLI plus the quick clipboard panel with shortcut and tray access. |
 | 0.4.3 | 2026-03-24 | Rebuilding the rest of the discontinued toolkit's plugins for the new Plugin Engine built with Qt. |
@@ -950,7 +953,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 | 0.2.3 | 2026-03-21 | Added some Networks and IT plugins for port scanning, wifi info, etc. |
 | 0.2.2 | 2026-03-21 | Revamped Sidebr, added a dedicated system-bar inside it for system tools, Improved Animations, Added loading spinner, Added multiple new utility plugins |
 | 0.2.1 | 2026-03-21 | rebuilt and added Image-Tagger as a plugin, Embedded smart luminance rendering tags |
-| 0.2.0 | 2026-03-21 | Rebranded to Micro Toolkit - a plugin script engine, introduced new plugins "e.g. Folder Exporter, Duplicate Finder, Missing Sequence Finder", added workflow studio, and command registry foundations. |
+| 0.2.0 | 2026-03-21 | Rebranded to DNgine - a plugin script engine, introduced new plugins "e.g. Folder Exporter, Duplicate Finder, Missing Sequence Finder", added workflow studio, and command registry foundations. |
 | 0.1.3 | 2026-03-20 | Added dynamic UI alignment mirroring, Ensured single-app instance, Re-assigned Tray-clicks directly to Application |
 | 0.1.2 | 2026-03-20 | Added dynamic Real-Time Arabic/English Localization, Bound application translations directly to Options preferences, Upgraded the interface to a tabbed modern sidebar layout using `customtkinter` |
 | 0.1.1 | 2026-03-20 | Added "Open" buttons for seamless UX, Implemented robust Options menu, Default Paths, and System Tray toggleability |

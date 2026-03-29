@@ -35,14 +35,14 @@ if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
 echo Building Windows onedir package...
-python -m PyInstaller --noconfirm --clean micro-toolkit.spec
+python -m PyInstaller --noconfirm --clean dngine.spec
 if errorlevel 1 (
     echo Build failed.
     popd
     exit /b 1
 )
 
-echo Build complete: dist\micro-toolkit\
-echo Launcher: dist\micro-toolkit\micro-toolkit.exe
+echo Build complete: dist\dngine\
+echo Launcher: dist\dngine\dngine.exe
 popd
 endlocal

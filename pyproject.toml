@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "micro-toolkit"
+name = "dngine"
 dynamic = ["version"]
 description = "A fast, cross-platform, plugin-driven desktop toolkit built with PySide6."
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -36,25 +36,25 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/debeski/micro-toolkit"
+Homepage = "https://github.com/debeski/dngine"
 
 [project.scripts]
-micro-toolkit = "micro_toolkit.__main__:main"
+dngine = "dngine.__main__:main"
 
 [project.gui-scripts]
-micro-toolkit-gui = "micro_toolkit.main:main"
+dngine-gui = "dngine.main:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.dynamic]
-version = {file = ["micro_toolkit/VERSION"]}
+version = {file = ["dngine/VERSION"]}
 
 [tool.setuptools.packages.find]
-include = ["micro_toolkit*"]
+include = ["dngine*"]
 
 [tool.setuptools.package-data]
-micro_toolkit = [
+dngine = [
   "*.json",
   "VERSION",
   "assets/*",

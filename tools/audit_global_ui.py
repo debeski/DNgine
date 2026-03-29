@@ -64,7 +64,7 @@ def audit_file(path: Path) -> list[str]:
                 f"{relative}:{line_number_for_offset(content, match.start())}: legacy InlineIconButton object-name pattern still present"
             )
 
-    if relative != Path("micro_toolkit/app.py"):
+    if relative != Path("dngine/app.py"):
         for color in LEGACY_CARD_COLORS:
             for match in re.finditer(re.escape(color), content, flags=re.IGNORECASE):
                 findings.append(f"{relative}:{line_number_for_offset(content, match.start())}: legacy card color {color} still present")
@@ -85,11 +85,11 @@ def audit_file(path: Path) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Audit Micro Toolkit UI files for zero-boilerplate style regressions.")
+    parser = argparse.ArgumentParser(description="Audit DNgine UI files for zero-boilerplate style regressions.")
     parser.add_argument(
         "paths",
         nargs="*",
-        default=["micro_toolkit/plugins/system", "micro_toolkit/core", "micro_toolkit/app.py"],
+        default=["dngine/plugins/system", "dngine/core", "dngine/app.py"],
         help="Files or directories to audit, relative to the repo root.",
     )
     args = parser.parse_args()

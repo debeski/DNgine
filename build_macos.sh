@@ -10,7 +10,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required to build Micro Toolkit."
+    echo "python3 is required to build DNgine."
     exit 1
 fi
 
@@ -32,8 +32,8 @@ echo "Cleaning previous build artifacts..."
 rm -rf build dist
 
 echo "Building macOS app bundle..."
-python -m PyInstaller --noconfirm --clean micro-toolkit.spec
+python -m PyInstaller --noconfirm --clean dngine.spec
 
 deactivate
-echo "Build complete: dist/Micro Toolkit.app"
-echo "Launcher: dist/Micro Toolkit.app"
+echo "Build complete: dist/DNgine.app"
+echo "Launcher: dist/DNgine.app"

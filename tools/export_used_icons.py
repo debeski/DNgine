@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from micro_toolkit.core.icon_registry import ASSETS_ROOT, used_icon_asset_paths
+from dngine.core.icon_registry import ASSETS_ROOT, used_icon_asset_paths
 
 
 def main() -> int:

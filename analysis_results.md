@@ -1,7 +1,7 @@
-# Micro Toolkit - Thourough Project Analysis
+# DNgine - Thourough Project Analysis
 
 ## High-Level Overview
-Micro Toolkit is a cross-platform (Windows, macOS, Linux), multilingual (English and Arabic), plugin-driven desktop companion application built with `PySide6`. It is designed to provide users with a fast, responsive suite of utilities, including file manipulation, media tools, office/spreadsheet analysis, IT/system tools, and clipboard management.
+DNgine is a cross-platform (Windows, macOS, Linux), multilingual (English and Arabic), plugin-driven desktop companion application built with `PySide6`. It is designed to provide users with a fast, responsive suite of utilities, including file manipulation, media tools, office/spreadsheet analysis, IT/system tools, and clipboard management.
 
 The architecture emphasizes lazy loading of plugins to ensure rapid startup and responsiveness, backed by a capability-based elevated broker for privileged operations.
 
@@ -10,13 +10,13 @@ The architecture emphasizes lazy loading of plugins to ensure rapid startup and 
 ## Directory & Package Structure
 
 ### Root Structure
-- `/micro_toolkit`: Main package containing application source.
+- `/dngine`: Main package containing application source.
 - `/build_*`: Build system scripts for different platforms (Linux, macOS, Windows).
-- `/micro-toolkit.iss`, `/micro-toolkit.spec`: Installer and PyInstaller specification files.
+- `/dngine.iss`, `/dngine.spec`: Installer and PyInstaller specification files.
 - `requirements.txt`: Python package dependencies.
 - `README.md`: Central documentation for architecture, goals, and setup.
 
-### `/micro_toolkit` Structure
+### `/dngine` Structure
 The core application code is divided mainly into two directories:
 1. `core/`: The low-level architecture, base classes, utilities, and background engines.
 2. `plugins/`: The high-level tool implementations, grouped into functional categories.
@@ -25,7 +25,7 @@ The core application code is divided mainly into two directories:
 
 ---
 
-## Core Architecture & Low-Level Components (`micro_toolkit/core/`)
+## Core Architecture & Low-Level Components (`dngine/core/`)
 
 The `core` directory implements the runtime behavior, plugin management, and foundational services.
 
@@ -49,7 +49,7 @@ The `core` directory implements the runtime behavior, plugin management, and fou
 
 ---
 
-## High-Level Tools & Plugins (`micro_toolkit/plugins/`)
+## High-Level Tools & Plugins (`dngine/plugins/`)
 
 The application's functionality is exposed via "plugins" organized categorically.
 
@@ -92,6 +92,6 @@ The application's functionality is exposed via "plugins" organized categorically
 ---
 
 ## Conclusion
-Micro Toolkit is structurally sound, leveraging PySide6 for an integrated local-first desktop experience. Its strict separation between UI, long-running background tasks (`workers.py`), and elevated execution (`elevated_broker.py`) ensures security and stability.
+DNgine is structurally sound, leveraging PySide6 for an integrated local-first desktop experience. Its strict separation between UI, long-running background tasks (`workers.py`), and elevated execution (`elevated_broker.py`) ensures security and stability.
 
 The plugin system's capability to safely quarantine untested code makes the environment robust against bad third-party extensions, while retaining immense customization through workflows and custom plugins.

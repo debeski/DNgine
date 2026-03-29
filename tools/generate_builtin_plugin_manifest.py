@@ -8,13 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from micro_toolkit.core.builtin_manifest import BuiltinManifestEntry, sha256_file, write_builtin_manifest
-from micro_toolkit.core.plugin_manager import _parse_plugin_specs
+from dngine.core.builtin_manifest import BuiltinManifestEntry, sha256_file, write_builtin_manifest
+from dngine.core.plugin_manager import _parse_plugin_specs
 
 
 def main() -> int:
-    plugins_root = ROOT / "micro_toolkit" / "plugins"
-    manifest_path = ROOT / "micro_toolkit" / "builtin_plugin_manifest.json"
+    plugins_root = ROOT / "dngine" / "plugins"
+    manifest_path = ROOT / "dngine" / "builtin_plugin_manifest.json"
     entries: dict[str, BuiltinManifestEntry] = {}
 
     for file_path in sorted(plugins_root.rglob("*.py")):

@@ -1,7 +1,7 @@
 include LICENSE
 include README.md
-include micro_toolkit/VERSION
-recursive-include micro_toolkit/assets *
-recursive-include micro_toolkit/i18n *.json
-recursive-include micro_toolkit/plugins *.json
-include micro_toolkit/builtin_plugin_manifest.json
+include dngine/VERSION
+recursive-include dngine/assets *
+recursive-include dngine/i18n *.json
+recursive-include dngine/plugins *.json
+include dngine/builtin_plugin_manifest.json

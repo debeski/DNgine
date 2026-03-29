@@ -39,8 +39,8 @@ docker run --rm \
     -v "$ROOT_DIR:/src" \
     -w /src \
     batonogov/pyinstaller-windows \
-    bash -lc "pip install --upgrade pip && pip install -r requirements.txt pyinstaller && pyinstaller --noconfirm --clean micro-toolkit.spec"
+    bash -lc "pip install --upgrade pip && pip install -r requirements.txt pyinstaller && pyinstaller --noconfirm --clean dngine.spec"
 
 deactivate
-echo "Build complete: dist/micro-toolkit/"
-echo "Launcher: dist/micro-toolkit/micro-toolkit.exe"
+echo "Build complete: dist/dngine/"
+echo "Launcher: dist/dngine/dngine.exe"

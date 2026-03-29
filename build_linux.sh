@@ -53,7 +53,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 detect_version() {
-    tr -d '\r\n' < micro_toolkit/VERSION
+    tr -d '\r\n' < dngine/VERSION
 }
 
 detect_deb_arch() {
@@ -78,19 +78,19 @@ detect_deb_arch() {
 }
 
 build_deb_package() {
-    local source_dir="$ROOT_DIR/dist/micro-toolkit"
+    local source_dir="$ROOT_DIR/dist/dngine"
     local staging_root="$ROOT_DIR/build/deb-package"
-    local package_root="$staging_root/opt/micro-toolkit"
+    local package_root="$staging_root/opt/dngine"
     local bin_root="$staging_root/usr/bin"
     local apps_root="$staging_root/usr/share/applications"
     local pixmaps_root="$staging_root/usr/share/pixmaps"
-    local docs_root="$staging_root/usr/share/doc/micro-toolkit"
+    local docs_root="$staging_root/usr/share/doc/dngine"
     local icon_source="$ROOT_DIR/app.ico"
-    local deb_path="$ROOT_DIR/dist/micro-toolkit_${APP_VERSION}_${PACKAGE_ARCH}.deb"
+    local deb_path="$ROOT_DIR/dist/dngine_${APP_VERSION}_${PACKAGE_ARCH}.deb"
     local installed_size=""
 
     if [ ! -d "$source_dir" ]; then
-        echo "Linux onedir package was not found in dist/micro-toolkit."
+        echo "Linux onedir package was not found in dist/dngine."
         echo "Build the binary bundle first or remove --skip-binary."
         exit 1
     fi
@@ -101,7 +101,7 @@ build_deb_package() {
     fi
 
     if [ ! -f "$icon_source" ]; then
-        icon_source="$ROOT_DIR/micro_toolkit/assets/app.ico"
+        icon_source="$ROOT_DIR/dngine/assets/app.ico"
     fi
 
     echo "Building Debian package..."
@@ -110,28 +110,28 @@ build_deb_package() {
     cp -a "$source_dir"/. "$package_root/"
     cp LICENSE README.md "$docs_root/"
     if [ -f "$icon_source" ]; then
-        cp "$icon_source" "$pixmaps_root/micro-toolkit.ico"
+        cp "$icon_source" "$pixmaps_root/dngine.ico"
     fi
 
-    cat > "$bin_root/micro-toolkit" <<'EOF'
+    cat > "$bin_root/dngine" <<'EOF'
 #!/usr/bin/env sh
-exec /opt/micro-toolkit/micro-toolkit "$@"
+exec /opt/dngine/dngine "$@"
 EOF
-    chmod 755 "$bin_root/micro-toolkit"
+    chmod 755 "$bin_root/dngine"
 
-    cat > "$apps_root/micro-toolkit.desktop" <<'EOF'
+    cat > "$apps_root/dngine.desktop" <<'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Micro Toolkit
+Name=DNgine
 Comment=Fast, cross-platform desktop toolkit
-Exec=/usr/bin/micro-toolkit
-Icon=/usr/share/pixmaps/micro-toolkit.ico
+Exec=/usr/bin/dngine
+Icon=/usr/share/pixmaps/dngine.ico
 Terminal=false
 Categories=Utility;Office;
 StartupNotify=true
 EOF
-    chmod 644 "$apps_root/micro-toolkit.desktop"
+    chmod 644 "$apps_root/dngine.desktop"
 
     cat > "$staging_root/DEBIAN/postinst" <<'EOF'
 #!/usr/bin/env sh
@@ -155,16 +155,16 @@ EOF
 
     installed_size="$(du -sk "$staging_root" | cut -f1)"
     cat > "$staging_root/DEBIAN/control" <<EOF
-Package: micro-toolkit
+Package: dngine
 Version: $APP_VERSION
 Section: utils
 Priority: optional
 Architecture: $PACKAGE_ARCH
 Maintainer: debeski
 Installed-Size: $installed_size
-Homepage: https://github.com/debeski/micro-toolkit
+Homepage: https://github.com/debeski/dngine
 Description: Fast, cross-platform desktop toolkit built with PySide6.
- Micro Toolkit is a plugin-driven desktop application with office,
+ DNgine is a plugin-driven desktop application with office,
  media, file, IT, and workflow tools in one local-first shell.
 EOF
 
@@ -177,7 +177,7 @@ EOF
 }
 
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required to build Micro Toolkit."
+    echo "python3 is required to build DNgine."
     exit 1
 fi
 
@@ -199,11 +199,11 @@ echo "Generating builtin plugin manifest..."
 python tools/generate_builtin_plugin_manifest.py
 
 echo "Cleaning previous build artifacts..."
-rm -rf build dist micro_toolkit.egg-info
+rm -rf build dist dngine.egg-info
 
 if [ "$SKIP_BINARY" -eq 0 ]; then
     echo "Building Linux onedir package..."
-    python -m PyInstaller --noconfirm --clean micro-toolkit.spec
+    python -m PyInstaller --noconfirm --clean dngine.spec
 fi
 
 if [ "$SKIP_DEB" -eq 0 ]; then
@@ -252,10 +252,10 @@ fi
 deactivate
 echo "Build complete."
 if [ "$SKIP_BINARY" -eq 0 ]; then
-    echo "Linux launcher: dist/micro-toolkit/micro-toolkit"
+    echo "Linux launcher: dist/dngine/dngine"
 fi
 if [ "$SKIP_DEB" -eq 0 ]; then
-    echo "Debian package: dist/micro-toolkit_${APP_VERSION}_${PACKAGE_ARCH}.deb"
+    echo "Debian package: dist/dngine_${APP_VERSION}_${PACKAGE_ARCH}.deb"
 fi
 if [ "$SKIP_PYTHON_DIST" -eq 0 ]; then
     echo "Python distributions:"
