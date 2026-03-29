@@ -947,8 +947,8 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 | 0.4.3 | 2026-03-24 | Rebuilding the rest of the discontinued toolkit's plugins for the new Plugin Engine built with Qt. |
 | 0.4.2 | 2026-03-24 | Rebuilding the system tools suite into the new plugin engine and made the desktop shell self-contained. |
 | 0.4.1 | 2026-03-24 | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |
-| 0.4.0 | 2026-03-24 | *Tkinter app was discontinued in favor of PySide6.*, Started development of the new plugin engine, and underlying architecture. |
-| 0.3.0 | 2026-03-22 | Added new Clipboard plugin with Auto-Capture, Improved workflow studio, Improved overall app layout and style. ***discontinued*** |
+| 0.4.0 | 2026-03-24 | **Tkinter app was DISCONTINUED in favor of PySide6.**, Started development of the new plugin engine, and underlying architecture. |
+| 0.3.0 | 2026-03-22 | Added new Clipboard plugin with Auto-Capture, Improved workflow studio, Improved overall app layout and style. |
 | 0.2.4 | 2026-03-21 | Introduced new Plugin Manager for managing plugins, New Hotkeys for global and application scoped shortcuts. |
 | 0.2.3 | 2026-03-21 | Added some Networks and IT plugins for port scanning, wifi info, etc. |
 | 0.2.2 | 2026-03-21 | Revamped Sidebr, added a dedicated system-bar inside it for system tools, Improved Animations, Added loading spinner, Added multiple new utility plugins |
