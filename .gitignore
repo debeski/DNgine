@@ -7,6 +7,7 @@ desktop.ini
 desktop.inf
 autorun.ini
 autorun.inf
+.codex
 
 # Ignore app directories
 logs/

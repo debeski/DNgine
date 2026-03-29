@@ -202,6 +202,7 @@ The plugin engine is built around:
 - lazy module import
 - lazy widget creation
 - plugin-local `en/ar` sidecar locales
+- plugin-local sidecar dependencies
 - optional headless command registration
 - optional elevated capability registration
 - import/export of custom plugin bundles
@@ -215,6 +216,7 @@ That means a plugin can contribute:
 - locale bundles
 - CLI/workflow commands
 - narrow elevated capabilities when truly needed
+- independent dependencies
 
 without changing the core shell.
 
@@ -270,7 +272,7 @@ The shell handles:
 - RTL-aware app chrome
 - plugin metadata localization
 - shared translator helpers through `bind_tr(...)`, `tr(...)`, and `safe_tr(...)`
-- global Amiri-based font stack with fallbacks
+- global Cairo-based font stack with fallbacks
 
 Recommended widget usage:
 
@@ -923,7 +925,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 | Ver. | Date | Highlights |
 | --- | --- | --- |
 | 0.8.1 | 2026-02-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI, and github. |
-| 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar. |
+| 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar, Global Cairo font usage. |
 | 0.7.8 | 2026-03-27 | Finished the compact icon-button stabilization pass across the shell and plugins, separating lightweight auto-raise action icons from regular buttons so hover states no longer inflate rows, distort compact containers, or overflow shell utility bars and table action cells. |
 | 0.7.7 | 2026-03-27 | Reworked the compact shell chrome so the utility bar, system-icon rail, and header rhythm align more cleanly, while also tightening `Dev Lab` card layout and the overall top-shell proportions. |
 | 0.7.6 | 2026-03-27 | Added a broader global interaction layer for buttons, checkboxes, dropdowns, and related controls, including shared hover feedback, pointer behavior, and busy-cursor polish during loading and visual refresh work. |

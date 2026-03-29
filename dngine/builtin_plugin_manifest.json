@@ -7,7 +7,7 @@
   ],
   "files": {
     "data_tools/chart_builder.py": {
-      "sha256": "11aada4600e8d2b534b40de030164eb105576556cf7ffdf25e3572f7d2cb728e",
+      "sha256": "8a4314affa0108877503c75a2334f1e28e2abf8c9d47d802460a3b5556468f71",
       "plugins": [
         {
           "plugin_id": "chart_builder",
@@ -16,7 +16,7 @@
       ]
     },
     "data_tools/data_link_auditor.py": {
-      "sha256": "309cd4309ca01ae05dd9a14608ec5c2f9a2fb44889cc3fd40774b59046452a6f",
+      "sha256": "4f0c75482fa73fdb9763289910feacffc241d6947d01d6acdb11bb72438196e8",
       "plugins": [
         {
           "plugin_id": "data_link_auditor",
@@ -25,7 +25,7 @@
       ]
     },
     "data_tools/deep_scan_auditor.py": {
-      "sha256": "dd3fe3a26ad9ca762c4cbc93f79f7bf304cc1124a0e8e60d009a3764cdd8efa4",
+      "sha256": "1a1f1d6f6f989238fce6fb66fc4f7649644cf9d4ce908dd3432f5c3bf7b68df5",
       "plugins": [
         {
           "plugin_id": "deep_scan_auditor",
@@ -34,7 +34,7 @@
       ]
     },
     "data_tools/folder_mapper.py": {
-      "sha256": "3333fb3de430fd8f536c575aaa0c3238fd56ec3758858c84226178bc9c431f36",
+      "sha256": "72ed58f021402728eb212d26761edea05e44888f3c2851b613db3903e22ff50a",
       "plugins": [
         {
           "plugin_id": "folder_mapper",
@@ -43,7 +43,7 @@
       ]
     },
     "data_tools/sequence_auditor.py": {
-      "sha256": "378f36691723f13c9430209c59e799509241442112d88f05797476ce5a95ca50",
+      "sha256": "c249445588162055e7b1bb4b8cdebe720fd13ea657f8e7cf8bfd1adba7d6bda4",
       "plugins": [
         {
           "plugin_id": "sequence_auditor",
@@ -52,7 +52,7 @@
       ]
     },
     "file_tools/batch_renamer.py": {
-      "sha256": "142d96cbc750776d3c7757eb739567c7c14a53d8e34f0b19032c517faa41ea94",
+      "sha256": "a868104553e4ac8f56aeaf114080b0b1cff43abe6628d0c4073990548728fb6b",
       "plugins": [
         {
           "plugin_id": "batch_renamer",
@@ -61,7 +61,7 @@
       ]
     },
     "file_tools/deep_searcher.py": {
-      "sha256": "588e349feed64b43912963907cc2a6cdb7df6af7a57b061937d267541bee5cfb",
+      "sha256": "b86452180f56f47145a2e52374fdeb7a8a30ee0ee16318c50ba9ae6bdae1a288",
       "plugins": [
         {
           "plugin_id": "deep_searcher",
@@ -70,7 +70,7 @@
       ]
     },
     "file_tools/smart_organizer.py": {
-      "sha256": "040ce84b28836d046173bb77c5f996658f626037489e46d2a5690f2623c8cbad",
+      "sha256": "16599ad121f91f04517c85a74e3a85587819e8215305e3ccf548251fcc54d392",
       "plugins": [
         {
           "plugin_id": "smart_org",
@@ -79,7 +79,7 @@
       ]
     },
     "file_tools/usage_analyzer.py": {
-      "sha256": "ab649f4a40f615983d600ca01d76df661e72da472d7ecee0d15c0882c21a5cb3",
+      "sha256": "9b0dc63442e0b71648cf43346ef9f279e3306debef04b6211d8f4f3dfe408cc9",
       "plugins": [
         {
           "plugin_id": "usage_analyzer",
@@ -88,7 +88,7 @@
       ]
     },
     "it_tools/credential_scanner.py": {
-      "sha256": "6007b0036d7df894e49121e89b87ceae88671266ecf68160c65f096ba58d3c07",
+      "sha256": "b539fdcbcb71d9c9f2df343ab9f305a50c0442d077c2b0061c61391c8cf39b28",
       "plugins": [
         {
           "plugin_id": "cred_scanner",
@@ -97,7 +97,7 @@
       ]
     },
     "it_tools/network_scanner.py": {
-      "sha256": "21f64f8a419edea8f4261cf0e592a35712f55acc971e388b11405e7a892e9ba2",
+      "sha256": "2f674eeab5512725a7905b792c470fc30baa5f4bf87273095b8ced8a85afeeac",
       "plugins": [
         {
           "plugin_id": "net_scan",
@@ -106,7 +106,7 @@
       ]
     },
     "it_tools/privacy_shredder.py": {
-      "sha256": "a55e1c107afcc8dd731f446d87b1a543d7b7194e28fb6c3f2f27762fbbb01225",
+      "sha256": "df2281bdbda085f489a82769a99743184312049ef08ed936c310007e03c0087c",
       "plugins": [
         {
           "plugin_id": "privacy_shred",
@@ -115,7 +115,7 @@
       ]
     },
     "it_tools/system_audit.py": {
-      "sha256": "4a177513afb5592d2444526e76d97f449851bb220e5d1f53972ea3f6cede7316",
+      "sha256": "2b257bc42b719c2a71dca171b00c2f9042faedb9ef6fde4c09d2db8a589ce78e",
       "plugins": [
         {
           "plugin_id": "sys_audit",
@@ -124,7 +124,7 @@
       ]
     },
     "it_tools/wifi_profiles.py": {
-      "sha256": "b1d9031a803a69dcd13f69f3b87f4dcca8ea0944e740e55a13882097497cf747",
+      "sha256": "7f35b48527465b048963774adfd6373be458b4f1c96b627e92ae8ce9799b5689",
       "plugins": [
         {
           "plugin_id": "wifi_profiles",
@@ -133,7 +133,7 @@
       ]
     },
     "media_tools/color_picker.py": {
-      "sha256": "80f29cec0197cf8d2110897a88186cfb7b5c029d2c0a3c52cae5f7400a364936",
+      "sha256": "ed4ad490bb4b657b379ddf264f1d259776fdb3856da904f21a2f13ca1942e0c6",
       "plugins": [
         {
           "plugin_id": "color_picker",
@@ -142,7 +142,7 @@
       ]
     },
     "media_tools/image_tagger.py": {
-      "sha256": "49bdec8c52999202f1d4d95397d34fb08772afe4b0bd4279cc96e96c7829b408",
+      "sha256": "15508f0510ba60b950334457ddde3e6403fb156f5728c88e48f0c2f3adae740c",
       "plugins": [
         {
           "plugin_id": "tagger",
@@ -151,7 +151,7 @@
       ]
     },
     "media_tools/image_transformer.py": {
-      "sha256": "8b04a25945e105593ffca9ca589848029a7b12971446ae1ae567992d15824f2f",
+      "sha256": "ac0074abba0253cd823182728fdd88d888bfa6909513d7a466be3c2c6ac13931",
       "plugins": [
         {
           "plugin_id": "img_trans",
@@ -160,7 +160,7 @@
       ]
     },
     "office_tools/cross_joiner.py": {
-      "sha256": "bee4006b6bf7a9889a849415a4101be8a0bad9fa02446ea25c8fec5aa2577aa1",
+      "sha256": "098f9491b16072c1f088ae950b7225cfe9e09631df67f481c03f347c3bd3ae0e",
       "plugins": [
         {
           "plugin_id": "cross_joiner",
@@ -169,7 +169,7 @@
       ]
     },
     "office_tools/data_cleaner.py": {
-      "sha256": "80f5d0072e68d05e394a23a084692ce436393272e648a4f00e355000f484d3bc",
+      "sha256": "f9ea67b2125d8609b2054743311b6a27b1c2de336638822bb673b606dea7b50b",
       "plugins": [
         {
           "plugin_id": "cleaner",
@@ -178,7 +178,7 @@
       ]
     },
     "office_tools/document_bridge.py": {
-      "sha256": "abc2040a61d216f00d45274bde0e26657cebf4b434bdfcdc559d1e5f65c5f5ca",
+      "sha256": "be21a36311223eab76cac1ed069c9e2efb592295b98471a19153753d6fc90549",
       "plugins": [
         {
           "plugin_id": "doc_bridge",
@@ -187,7 +187,7 @@
       ]
     },
     "office_tools/pdf_suite.py": {
-      "sha256": "7f7845d0f4b2254c98e91f3b997277e01cd21e770f964f54570c56407ec35f18",
+      "sha256": "3b6ec2b2576e2e3d9b5aa2a0b81139e48911c01edfa213debc5a10c2607f2453",
       "plugins": [
         {
           "plugin_id": "pdf_suite",
@@ -196,7 +196,7 @@
       ]
     },
     "system/about_info.py": {
-      "sha256": "11667140bdd07a1b6028d99a70c8c651ed0c52e9e20a618aea063ef8ce4837f4",
+      "sha256": "cb1f2c3d0dcce0cfe25c277e2a0823e3d9b1d60e87aee9daf35a70c9651db734",
       "plugins": [
         {
           "plugin_id": "about_info",
@@ -205,7 +205,7 @@
       ]
     },
     "system/clip_snip.py": {
-      "sha256": "b0d4f589a1f672d8eed4cd666d0b32f002f8e312cf75cee40ee33dbcf1f6f84c",
+      "sha256": "e41859f38736143013a223114638b0f382dd7396ce3c17f34f650c7966428412",
       "plugins": [
         {
           "plugin_id": "clip_snip",
@@ -214,7 +214,7 @@
       ]
     },
     "system/command_center.py": {
-      "sha256": "81b4efa4ff1cd93134810197d084c3b4516d06a084092a471588107a7bd4fa70",
+      "sha256": "4392dfb8d421c2a4e27f98f1923e911606a219dcbeb8d003e0aec3e2acfc31f0",
       "plugins": [
         {
           "plugin_id": "command_center",
@@ -223,7 +223,7 @@
       ]
     },
     "system/dash_hub.py": {
-      "sha256": "e3d7e64f820bb807f51ca3d16cb5bde7c2a647ad4d9d43409925eb4b4fa3d297",
+      "sha256": "0d6e68db15cf7dc4cc1c16f07d0f90643443c5d27481e27186bb507dc1964b19",
       "plugins": [
         {
           "plugin_id": "dash_hub",
@@ -232,7 +232,7 @@
       ]
     },
     "system/dev_lab.py": {
-      "sha256": "e0835ba9807b93efe2ba4b7533c0f9d0a3a117ba5d5c15c20d86954c16e9253f",
+      "sha256": "aea0a46a369b85244b1a39e3d05261613fb7b43eaefcacd2afa3377a32ace667",
       "plugins": [
         {
           "plugin_id": "dev_lab",
@@ -241,7 +241,7 @@
       ]
     },
     "system/workflow_studio.py": {
-      "sha256": "26d5fadd9d3545c7efccdd42fe33767f964929d4fe5fda9b2cb36f9146498b67",
+      "sha256": "9b0918ddca63c94a35f63cf3bf4c200f4d9263591a352be37fda929db406c475",
       "plugins": [
         {
           "plugin_id": "workflow_studio",
