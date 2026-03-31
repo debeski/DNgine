@@ -45,7 +45,7 @@ from dngine.core.page_style import apply_page_chrome, apply_semantic_class, mute
 from dngine.core.plugin_api import QtPlugin, bind_tr
 from dngine.core.app_config import DEFAULT_CONFIG
 from dngine.core.shell_registry import DASHBOARD_PLUGIN_ID, INSPECTOR_PLUGIN_ID
-from dngine.core.widgets import ScrollSafeComboBox, ScrollSafeSlider, adaptive_columns, adaptive_grid_columns, visible_parent_width, width_breakpoint
+from dngine.core.widgets import PathLineEdit, ScrollSafeComboBox, ScrollSafeSlider, adaptive_columns, adaptive_grid_columns, visible_parent_width, width_breakpoint
 
 
 QComboBox = ScrollSafeComboBox
@@ -487,7 +487,7 @@ class CommandCenterPage(QWidget):
         output_form.setSpacing(12)
 
         row = QHBoxLayout()
-        self.output_dir_input = QLineEdit()
+        self.output_dir_input = PathLineEdit(mode="directory")
         row.addWidget(self.output_dir_input, 1)
         self.output_browse_button = QPushButton()
         self.output_browse_button.clicked.connect(self._browse_output_dir)

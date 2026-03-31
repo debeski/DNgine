@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome, section_title_style
 from dngine.core.plugin_api import QtPlugin, bind_tr, tr
+from dngine.core.widgets import DroppableListWidget
 
 
 def run_shred_task(context, services, plugin_id: str, paths: list[Path], passes: int):
@@ -116,7 +117,8 @@ class PrivacyShredderPage(QWidget):
         list_header.addWidget(self.clear_btn)
         self.main_layout.addLayout(list_header)
 
-        self.path_list = QListWidget()
+        self.path_list = DroppableListWidget(mode="any")
+        self.path_list.files_dropped.connect(self._handle_files_dropped)
         self.main_layout.addWidget(self.path_list, 1)
 
         pass_row = QHBoxLayout()
@@ -176,6 +178,13 @@ class PrivacyShredderPage(QWidget):
         dir_path = QFileDialog.getExistingDirectory(self, self.tr("dialog.select_folder", "Select Folder to Shred"))
         if dir_path:
             p = Path(dir_path)
+            if p not in self._paths:
+                self._paths.append(p)
+                self.path_list.addItem(str(p))
+
+    def _handle_files_dropped(self, paths: list[str]) -> None:
+        for path_str in paths:
+            p = Path(path_str)
             if p not in self._paths:
                 self._paths.append(p)
                 self.path_list.addItem(str(p))

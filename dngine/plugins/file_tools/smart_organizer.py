@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, tr
-from dngine.core.widgets import ScrollSafeComboBox
+from dngine.core.widgets import PathLineEdit, ScrollSafeComboBox
 
 
 QComboBox = ScrollSafeComboBox
@@ -151,7 +151,7 @@ class SmartOrganizerPage(QWidget):
 
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
-        self.folder_input = QLineEdit()
+        self.folder_input = PathLineEdit(mode="directory")
         folder_row.addWidget(self.folder_input, 1)
         self.browse_button = QPushButton()
         self.browse_button.clicked.connect(self._browse_folder)

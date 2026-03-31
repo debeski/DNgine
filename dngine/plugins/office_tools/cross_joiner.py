@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
+from dngine.core.widgets import PathLineEdit
 
 def cross_join_task(context, file_a: str, col_a: str, file_b: str, col_b: str, output_dir: str, *, translate=None):
     import pandas as pd
@@ -180,7 +181,7 @@ class CrossJoinerPage(QWidget):
         label.setFixedWidth(90)
         row.addWidget(label)
 
-        file_input = QLineEdit()
+        file_input = PathLineEdit(mode="file", allowed_extensions=[".xlsx", ".xlsm", ".xls"])
         row.addWidget(file_input, 1)
 
         browse_button = QPushButton()

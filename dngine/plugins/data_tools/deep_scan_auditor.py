@@ -29,8 +29,7 @@ from dngine.core.app_utils import generate_output_filename
 from dngine.core.page_style import apply_page_chrome, section_title_style
 from dngine.core.plugin_api import QtPlugin, bind_tr
 from dngine.core.table_model import DataFrameTableModel
-from dngine.core.widgets import ScrollSafeComboBox
-
+from dngine.core.widgets import ScrollSafeComboBox, DroppableTableWidget
 
 QComboBox = ScrollSafeComboBox
 
@@ -242,7 +241,8 @@ class DeepScanAuditorPage(QWidget):
         sources_actions.addStretch(1)
         sources_layout.addLayout(sources_actions)
 
-        self.sources_table = QTableWidget(0, 2)
+        self.sources_table = DroppableTableWidget(0, 2, mode="folder")
+        self.sources_table.files_dropped.connect(self._handle_files_dropped)
         self.sources_table.verticalHeader().setVisible(False)
         self.sources_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.sources_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -359,6 +359,8 @@ class DeepScanAuditorPage(QWidget):
 
     def _update_mode_ui(self) -> None:
         is_excel = self._current_mode() == "excel"
+        self.sources_table.set_mode("file" if is_excel else "directory")
+        self.sources_table.set_allowed_extensions([".xlsx", ".xlsm", ".xls"] if is_excel else None)
         self.folder_criteria_card.setVisible(not is_excel)
         self.browse_button.setText(self.tr("button.add.excel", "Add Workbook(s)") if is_excel else self.tr("button.add.folder", "Add Folder"))
         self.sources_table.clearContents()
@@ -414,6 +416,18 @@ class DeepScanAuditorPage(QWidget):
             )
             if folder and folder not in self._folder_sources:
                 self._folder_sources.append(folder)
+        self._update_mode_ui()
+
+    def _handle_files_dropped(self, paths: list[str]) -> None:
+        if self._current_mode() == "excel":
+            for path in paths:
+                if any(spec["path"] == path for spec in self._excel_sources):
+                    continue
+                self._excel_sources.append({"path": path, "columns": ""})
+        else:
+            for folder in paths:
+                if folder not in self._folder_sources:
+                    self._folder_sources.append(folder)
         self._update_mode_ui()
 
     def _sync_current_sources_from_table(self) -> None:

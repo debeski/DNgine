@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 from dngine.core.page_style import apply_page_chrome, apply_semantic_class
 from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
 from dngine.core.table_utils import configure_resizable_table
-from dngine.core.widgets import ScrollSafeComboBox
+from dngine.core.widgets import PathLineEdit, ScrollSafeComboBox
 
 
 QComboBox = ScrollSafeComboBox
@@ -1420,42 +1420,6 @@ def run_code_factory_undo(context, services, plugin_id: str):
     }
 
 
-class DroppablePathLineEdit(QLineEdit):
-    path_dropped = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAcceptDrops(True)
-
-    def dragEnterEvent(self, event) -> None:
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-            return
-        super().dragEnterEvent(event)
-
-    def dragMoveEvent(self, event) -> None:
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-            return
-        super().dragMoveEvent(event)
-
-    def dropEvent(self, event) -> None:
-        if not event.mimeData().hasUrls():
-            super().dropEvent(event)
-            return
-        for url in event.mimeData().urls():
-            local_path = url.toLocalFile()
-            if not local_path:
-                continue
-            path = Path(local_path)
-            chosen = path if path.is_dir() else path.parent
-            self.setText(str(chosen))
-            self.path_dropped.emit(str(chosen))
-            event.acceptProposedAction()
-            return
-        super().dropEvent(event)
-
-
 class CodeFactoryPlugin(QtPlugin):
     plugin_id = "code_factory"
     name = "Code Factory"
@@ -1500,7 +1464,7 @@ class CodeFactoryPage(QWidget):
 
         path_row = QHBoxLayout()
         path_row.setSpacing(10)
-        self.path_input = DroppablePathLineEdit()
+        self.path_input = PathLineEdit(mode="directory")
         self.path_input.textChanged.connect(self._invalidate_preview)
         self.path_input.path_dropped.connect(self._invalidate_preview)
         path_row.addWidget(self.path_input, 1)

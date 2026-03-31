@@ -23,6 +23,7 @@ from dngine.core.app_utils import generate_output_filename
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr
 from dngine.core.table_model import DataFrameTableModel
+from dngine.core.widgets import PathLineEdit
 
 
 try:
@@ -150,7 +151,7 @@ class FolderMapperPage(QWidget):
 
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
-        self.folder_input = QLineEdit()
+        self.folder_input = PathLineEdit(mode="directory")
         self.folder_input.setPlaceholderText(self.tr("folder.placeholder", "Select a folder to export..."))
         folder_row.addWidget(self.folder_input, 1)
         self.browse_button = QPushButton(self.tr("button.browse", "Browse"))

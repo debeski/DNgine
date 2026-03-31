@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
+from dngine.core.widgets import PathLineEdit, DroppableListWidget
 
 def merge_pdfs_task(context, file_paths: list[str], output_dir: str, *, translate=None):
     try:
@@ -91,19 +91,19 @@ class PDFSuitePage(QWidget):
         buttons_row.addStretch(1)
         layout.addLayout(buttons_row)
 
-        self.file_list = QListWidget()
+        self.file_list = DroppableListWidget(allowed_extensions=[".pdf"])
+        self.file_list.files_dropped.connect(self._handle_files_dropped)
         layout.addWidget(self.file_list, 1)
 
         out_row = QHBoxLayout()
         out_row.setSpacing(10)
-        self.output_dir_label = QLabel(str(self.services.default_output_path()))
-        self.output_dir_label.setWordWrap(True)
-        out_row.addWidget(self.output_dir_label, 1)
+        self.output_dir_input = PathLineEdit(mode="directory")
+        self.output_dir_input.setText(str(self.services.default_output_path()))
+        out_row.addWidget(self.output_dir_input, 1)
         self.browse_output_button = QPushButton()
         self.browse_output_button.clicked.connect(self._choose_output_dir)
         out_row.addWidget(self.browse_output_button)
         layout.addLayout(out_row)
-        self.output_dir = str(self.services.default_output_path())
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
@@ -168,8 +168,16 @@ class PDFSuitePage(QWidget):
             self.tr("dialog.pdf_filter", "PDF Documents (*.pdf)"),
         )
         if files:
-            self.pdf_files.extend(files)
+            for file_path in files:
+                if file_path not in self.pdf_files:
+                    self.pdf_files.append(file_path)
             self._render_file_list()
+
+    def _handle_files_dropped(self, paths: list[str]) -> None:
+        for path in paths:
+            if path not in self.pdf_files:
+                self.pdf_files.append(path)
+        self._render_file_list()
 
     def _clear_files(self) -> None:
         self.pdf_files = []
@@ -184,11 +192,10 @@ class PDFSuitePage(QWidget):
         folder = QFileDialog.getExistingDirectory(
             self,
             self.tr("dialog.select_output", "Select Output Folder"),
-            self.output_dir,
+            self.output_dir_input.text(),
         )
         if folder:
-            self.output_dir = folder
-            self.output_dir_label.setText(folder)
+            self.output_dir_input.setText(folder)
 
     def _run(self) -> None:
         if not self.pdf_files:
@@ -205,7 +212,7 @@ class PDFSuitePage(QWidget):
         self.summary_label.setText(self.tr("summary.running", "Merging PDFs..."))
 
         self.services.run_task(
-            lambda context: merge_pdfs_task(context, list(self.pdf_files), self.output_dir, translate=self.tr),
+            lambda context: merge_pdfs_task(context, list(self.pdf_files), self.output_dir_input.text().strip(), translate=self.tr),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,

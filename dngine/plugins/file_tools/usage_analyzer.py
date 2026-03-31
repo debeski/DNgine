@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, tr
 from dngine.core.table_model import DataFrameTableModel
+from dngine.core.widgets import PathLineEdit
 
 
 def analyze_usage_task(context, services, plugin_id: str, target_dir: str):
@@ -139,7 +140,7 @@ class UsageAnalyzerPage(QWidget):
 
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
-        self.folder_input = QLineEdit()
+        self.folder_input = PathLineEdit(mode="directory")
         folder_row.addWidget(self.folder_input, 1)
         self.browse_button = QPushButton()
         self.browse_button.clicked.connect(self._browse_folder)

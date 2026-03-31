@@ -25,7 +25,7 @@ from dngine.core.app_utils import generate_output_filename
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr
 from dngine.core.table_model import DataFrameTableModel
-from dngine.core.widgets import ScrollSafeComboBox
+from dngine.core.widgets import PathLineEdit, ScrollSafeComboBox
 
 
 QComboBox = ScrollSafeComboBox
@@ -229,7 +229,7 @@ class SequenceAuditorPage(QWidget):
 
         path_row = QHBoxLayout()
         path_row.setSpacing(10)
-        self.path_input = QLineEdit()
+        self.path_input = PathLineEdit(mode="any")
         self.path_input.setPlaceholderText(self.tr("path.placeholder.folder", "Select a folder..."))
         path_row.addWidget(self.path_input, 1)
         self.browse_button = QPushButton(self.tr("button.browse", "Browse"))
@@ -320,6 +320,8 @@ class SequenceAuditorPage(QWidget):
     def _update_mode_ui(self) -> None:
         is_excel = self._current_mode() == "excel"
         self.path_input.setPlaceholderText(self.tr("path.placeholder.excel", "Select an Excel workbook...") if is_excel else self.tr("path.placeholder.folder", "Select a folder..."))
+        self.path_input.set_mode("file" if is_excel else "directory")
+        self.path_input.set_allowed_extensions([".xlsx", ".xlsm", ".xls"] if is_excel else None)
         self.column_label.setVisible(is_excel)
         self.column_input.setVisible(is_excel)
 

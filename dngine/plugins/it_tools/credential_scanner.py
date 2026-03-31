@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome, muted_text_style, section_title_style
 from dngine.core.plugin_api import QtPlugin, bind_tr, tr
+from dngine.core.widgets import PathLineEdit
 
 
 SKIP_SUFFIXES = {
@@ -367,7 +368,7 @@ class CredentialScannerPage(QWidget):
 
         path_row = QHBoxLayout()
         path_row.setSpacing(10)
-        self.path_input = QLineEdit()
+        self.path_input = PathLineEdit(mode="directory")
         path_row.addWidget(self.path_input, 1)
 
         self.browse_button = QPushButton()

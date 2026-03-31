@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
@@ -27,7 +26,7 @@ from PySide6.QtWidgets import (
 from dngine.core.media_utils import SUPPORTED_IMAGE_FILTER, pil_to_pixmap, safe_output_extension, transform_image
 from dngine.core.page_style import apply_page_chrome, label_surface_style, muted_text_style
 from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
-from dngine.core.widgets import ScrollSafeComboBox
+from dngine.core.widgets import ScrollSafeComboBox, DroppableListWidget
 
 
 QComboBox = ScrollSafeComboBox
@@ -183,8 +182,9 @@ class ImageTransformerPage(QWidget):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
-        self.file_list = QListWidget()
+        self.file_list = DroppableListWidget(mode="file", allowed_extensions=[".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff"])
         self.file_list.currentRowChanged.connect(self._show_preview_for_row)
+        self.file_list.files_dropped.connect(self._handle_files_dropped)
         left_layout.addWidget(self.file_list, 1)
         splitter.addWidget(left_panel)
 
@@ -334,15 +334,20 @@ class ImageTransformerPage(QWidget):
         self.current_preview_path = None
         self.current_aspect = None
         self.file_list.clear()
-        self.preview_label.setPixmap(None)
+        self.preview_label.clear()
         self.preview_label.setText(self.tr("preview.empty", "Select an image to preview."))
 
     def _refresh_file_list(self) -> None:
         self.file_list.clear()
-        for file_path in self.files:
-            item = QListWidgetItem(os.path.basename(file_path))
-            item.setToolTip(file_path)
-            self.file_list.addItem(item)
+        self.file_list.addItems([os.path.basename(p) for p in self.files])
+
+    def _handle_files_dropped(self, paths: list[str]) -> None:
+        for path in paths:
+            if path not in self.files:
+                self.files.append(path)
+        self._refresh_file_list()
+        if self.files and self.file_list.currentRow() < 0:
+            self.file_list.setCurrentRow(0)
 
     def _show_preview_for_row(self, row: int) -> None:
         if row < 0 or row >= len(self.files):
@@ -362,7 +367,7 @@ class ImageTransformerPage(QWidget):
                     self.resize_height.setText(str(image.height))
                     self._resizing_guard = False
         except Exception as exc:
-            self.preview_label.setPixmap(None)
+            self.preview_label.clear()
             self.preview_label.setText(self.tr("preview.error", "Preview error: {message}", message=exc))
 
     def _sync_resize_from_width(self, value: str) -> None:

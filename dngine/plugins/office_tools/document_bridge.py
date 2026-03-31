@@ -26,7 +26,7 @@ from dngine.core.command_runtime import HeadlessTaskContext
 from dngine.core.document_converter import convert_docx_to_markdown, convert_markdown_to_docx
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr
-from dngine.core.widgets import ScrollSafeComboBox
+from dngine.core.widgets import PathLineEdit, ScrollSafeComboBox
 
 
 QComboBox = ScrollSafeComboBox
@@ -191,7 +191,7 @@ class DocumentBridgePage(QWidget):
         self.source_label = QLabel()
         source_row = QHBoxLayout()
         source_row.setSpacing(10)
-        self.source_input = QLineEdit()
+        self.source_input = PathLineEdit(mode="file")
         source_row.addWidget(self.source_input, 1)
         self.source_button = QPushButton()
         self.source_button.clicked.connect(self._browse_source)
@@ -202,7 +202,7 @@ class DocumentBridgePage(QWidget):
         self.output_label = QLabel()
         output_row = QHBoxLayout()
         output_row.setSpacing(10)
-        self.output_input = QLineEdit()
+        self.output_input = PathLineEdit(mode="file")
         output_row.addWidget(self.output_input, 1)
         self.output_button = QPushButton()
         self.output_button.clicked.connect(self._browse_output)
@@ -334,6 +334,7 @@ class DocumentBridgePage(QWidget):
     def _sync_mode_state(self, *_args) -> None:
         mode = self._current_mode()
         is_md_mode = mode == "md_to_docx"
+        self.source_input.set_allowed_extensions([".md", ".markdown", ".txt"] if is_md_mode else [".docx"])
         self.options_stack.setCurrentIndex(0 if is_md_mode else 1)
         self.summary_label.setText(
             self.tr(

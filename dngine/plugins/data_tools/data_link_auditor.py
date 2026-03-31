@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from dngine.core.app_utils import generate_output_filename
 from dngine.core.page_style import apply_page_chrome, section_title_style
 from dngine.core.plugin_api import QtPlugin, bind_tr
+from dngine.core.widgets import PathLineEdit, DroppableListWidget
 
 
 def normalize_string(value):
@@ -165,7 +166,7 @@ class DataLinkAuditorPage(QWidget):
 
         excel_row = QHBoxLayout()
         excel_row.setSpacing(10)
-        self.excel_input = QLineEdit()
+        self.excel_input = PathLineEdit(mode="file", allowed_extensions=[".xlsx", ".xlsm", ".xls"])
         self.excel_input.setPlaceholderText(self.tr("excel.placeholder", "Select an Excel workbook..."))
         excel_row.addWidget(self.excel_input, 1)
         self.excel_browse_button = QPushButton(self.tr("button.browse_excel", "Browse"))
@@ -201,16 +202,14 @@ class DataLinkAuditorPage(QWidget):
         folder_buttons.addStretch(1)
         folders_layout.addLayout(folder_buttons)
 
-        self.folders_output = QPlainTextEdit()
-        self.folders_output.setReadOnly(True)
-        self.folders_output.setPlaceholderText(self.tr("folders.placeholder", "No folders selected."))
-        self.folders_output.setMaximumBlockCount(200)
-        folders_layout.addWidget(self.folders_output)
+        self.folders_list = DroppableListWidget(mode="directory")
+        self.folders_list.files_dropped.connect(self._handle_folders_dropped)
+        folders_layout.addWidget(self.folders_list)
         layout.addWidget(self.folders_card)
 
         dest_row = QHBoxLayout()
         dest_row.setSpacing(10)
-        self.dest_input = QLineEdit()
+        self.dest_input = PathLineEdit(mode="directory")
         self.dest_input.setPlaceholderText(self.tr("dest.placeholder", "Optional destination folder for moved matches..."))
         dest_row.addWidget(self.dest_input, 1)
         self.dest_browse_button = QPushButton(self.tr("button.browse_dest", "Browse Dest"))
@@ -306,11 +305,16 @@ class DataLinkAuditorPage(QWidget):
         self.source_folders = []
         self._render_folders()
 
+    def _handle_folders_dropped(self, paths: list[str]) -> None:
+        for p in paths:
+            if p not in self.source_folders:
+                self.source_folders.append(p)
+        self._render_folders()
+
     def _render_folders(self) -> None:
-        if not self.source_folders:
-            self.folders_output.setPlainText("")
-            return
-        self.folders_output.setPlainText("\n".join(self.source_folders))
+        self.folders_list.clear()
+        if self.source_folders:
+            self.folders_list.addItems(self.source_folders)
 
     def _clear_result_buttons(self) -> None:
         while self.results_layout.count():

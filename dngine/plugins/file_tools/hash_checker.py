@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, tr
+from dngine.core.widgets import PathLineEdit
 
 
 def _format_file_size(size_bytes: int) -> str:
@@ -119,7 +120,7 @@ class HashCheckerPage(QWidget):
 
         file_row = QHBoxLayout()
         file_row.setSpacing(10)
-        self.file_input = QLineEdit()
+        self.file_input = PathLineEdit(mode="file")
         self.file_input.textChanged.connect(self._handle_file_changed)
         file_row.addWidget(self.file_input, 1)
         self.browse_button = QPushButton()

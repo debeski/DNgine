@@ -1,7 +1,18 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QAbstractScrollArea, QComboBox, QSlider, QWidget
+from pathlib import Path
+
+from PySide6.QtCore import QCoreApplication, Signal
+from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QComboBox,
+    QLineEdit,
+    QListWidget,
+    QSizePolicy,
+    QSlider,
+    QTableWidget,
+    QWidget,
+)
 
 
 def width_breakpoint(width: int, *, compact_max: int = 900, medium_max: int = 1280) -> str:
@@ -106,3 +117,218 @@ class ScrollSafeSlider(QSlider):
         event.ignore()
         if target is not None:
             QCoreApplication.sendEvent(target, event.clone())
+
+
+class PathLineEdit(QLineEdit):
+    path_dropped = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None, *, mode: str = "any", allowed_extensions: list[str] | None = None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._mode = mode
+        self.set_allowed_extensions(allowed_extensions)
+
+    def set_allowed_extensions(self, extensions: list[str] | None) -> None:
+        self._allowed_extensions = {ext.lower().lstrip('.') for ext in extensions} if extensions else None
+
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
+
+    def _is_valid_url(self, url) -> bool:
+        if not self._allowed_extensions:
+            return True
+        local_path = url.toLocalFile()
+        if not local_path:
+            return False
+        path = Path(local_path)
+        if path.is_file():
+            ext = path.suffix.lower().lstrip('.')
+            return ext in self._allowed_extensions
+        return True
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+            
+        valid_urls = [u for u in event.mimeData().urls() if self._is_valid_url(u)]
+        if not valid_urls:
+            super().dropEvent(event)
+            return
+            
+        for url in valid_urls:
+            local_path = url.toLocalFile()
+            if not local_path:
+                continue
+            path = Path(local_path)
+            if self._mode == "directory":
+                chosen = path if path.is_dir() else path.parent
+            elif self._mode == "file":
+                chosen = path if path.is_file() else path
+            else:
+                chosen = path
+            self.setText(str(chosen))
+            self.path_dropped.emit(str(chosen))
+            event.acceptProposedAction()
+            return
+
+class DroppableListWidget(QListWidget):
+    files_dropped = Signal(list)
+
+    def __init__(self, parent: QWidget | None = None, *, mode: str = "any", allowed_extensions: list[str] | None = None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._mode = mode
+        self.set_allowed_extensions(allowed_extensions)
+        
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
+
+    def set_allowed_extensions(self, extensions: list[str] | None) -> None:
+        self._allowed_extensions = {ext.lower().lstrip('.') for ext in extensions} if extensions else None
+
+    def _is_valid_url(self, url) -> bool:
+        if not self._allowed_extensions:
+            return True
+        local_path = url.toLocalFile()
+        if not local_path:
+            return False
+        path = Path(local_path)
+        if path.is_file():
+            ext = path.suffix.lower().lstrip('.')
+            return ext in self._allowed_extensions
+        return True
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+
+        valid_urls = [u for u in event.mimeData().urls() if self._is_valid_url(u)]
+        if not valid_urls:
+            super().dropEvent(event)
+            return
+
+        paths = []
+        for url in valid_urls:
+            local_path = url.toLocalFile()
+            if not local_path:
+                continue
+            path = Path(local_path)
+            if self._mode == "directory":
+                chosen = path if path.is_dir() else path.parent
+            elif self._mode == "file":
+                chosen = path if path.is_file() else path
+            else:
+                chosen = path
+            
+            str_path = str(chosen)
+            if str_path not in paths:
+                paths.append(str_path)
+
+        if paths:
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+        super().dropEvent(event)
+
+class DroppableTableWidget(QTableWidget):
+    files_dropped = Signal(list)
+
+    def __init__(self, rows: int = 0, columns: int = 0, parent: QWidget | None = None, *, mode: str = "any", allowed_extensions: list[str] | None = None):
+        super().__init__(rows, columns, parent)
+        self.setAcceptDrops(True)
+        self._mode = mode
+        self.set_allowed_extensions(allowed_extensions)
+        
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
+
+    def set_allowed_extensions(self, extensions: list[str] | None) -> None:
+        self._allowed_extensions = {ext.lower().lstrip('.') for ext in extensions} if extensions else None
+
+    def _is_valid_url(self, url) -> bool:
+        if not self._allowed_extensions:
+            return True
+        local_path = url.toLocalFile()
+        if not local_path:
+            return False
+        path = Path(local_path)
+        if path.is_file():
+            ext = path.suffix.lower().lstrip('.')
+            return ext in self._allowed_extensions
+        return True
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            if any(self._is_valid_url(u) for u in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+
+        valid_urls = [u for u in event.mimeData().urls() if self._is_valid_url(u)]
+        if not valid_urls:
+            super().dropEvent(event)
+            return
+
+        paths = []
+        for url in valid_urls:
+            local_path = url.toLocalFile()
+            if not local_path:
+                continue
+            path = Path(local_path)
+            if self._mode == "directory":
+                chosen = path if path.is_dir() else path.parent
+            elif self._mode == "file":
+                chosen = path if path.is_file() else path
+            else:
+                chosen = path
+            
+            str_path = str(chosen)
+            if str_path not in paths:
+                paths.append(str_path)
+
+        if paths:
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+
+        super().dropEvent(event)

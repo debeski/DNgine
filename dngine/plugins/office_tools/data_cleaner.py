@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from dngine.core.app_utils import generate_output_filename
 from dngine.core.page_style import apply_page_chrome
 from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
+from dngine.core.widgets import PathLineEdit
 
 def sanitize_data_task(
     context,
@@ -106,7 +107,7 @@ class DataCleanerPage(QWidget):
 
         file_row = QHBoxLayout()
         file_row.setSpacing(10)
-        self.file_input = QLineEdit()
+        self.file_input = PathLineEdit(mode="file", allowed_extensions=[".xlsx", ".xlsm", ".xls"])
         file_row.addWidget(self.file_input, 1)
         self.browse_button = QPushButton()
         self.browse_button.clicked.connect(self._browse_file)
