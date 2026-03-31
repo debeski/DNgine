@@ -60,7 +60,7 @@ You can download the pre-built binaries from the GitHub Releases page or build f
 #### Requirements
 
 - Python 3.10+
-- the packages listed in [requirements.txt](/home/debeski/depy/tools/dngine/requirements.txt)
+- the packages listed in [requirements.txt](./requirements.txt)
 
 #### Linux Note
 
@@ -161,6 +161,7 @@ python -m dngine workflows run my_workflow
 ### IT Utilities
 
 - System Overview
+- Code Factory
 - Code Exploit Scanner
 - Network Port Scanner
 - Wi-Fi Profiles
@@ -953,6 +954,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.8.6 | 2026-03-31 | Added the new `Code Factory` IT utility for folder-based code cleanup and safe-to-share preparation, with grouped toggles for cleanup, comment stripping, sanitization, and pack operations, a preview-before-apply workflow, detailed in-app result rows, drag-and-drop folder targeting, and single-run undo for the latest apply session. |
 | 0.8.5 | 2026-03-31 | Fixed the `Clip Snip` follow-up stability regressions: frozen builds now bundle plugin-only core helpers such as `clip_edit_dialog`, failed dynamic plugin imports no longer leave behind invalid half-loaded classes, and the macOS tray `Show Quick Panel` flow now reopens the quick clipboard panel reliably after it was dismissed. |
 | 0.8.4 | 2026-03-29 | Stability pass for clipboard workflows: removed the second clipboard app instance by folding `Clip-Monitor` fully into the main app, kept the quick panel under main-app ownership, added the new `Hash Checker` utility for `MD5` / `SHA-256` calculation and checksum verification, improved `Code Exploit Scanner` with broader secret and risky-file detection plus masked previews and review-report output, and expanded `Clip Snip` with edit, transform, merge, and queued-paste actions. |
 | 0.8.3 | 2026-03-29 | Simplified clipboard monitoring back into the main app: `X` now always hides DNgine to the tray, `Exit` from the tray is the only real app shutdown path with confirmation, the quick clipboard panel returned to main-app ownership, and `Clip-Monitor` no longer runs as a separate tray-owning app instance. |

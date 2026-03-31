@@ -698,6 +698,18 @@ class DNgineWindow(QMainWindow):
         self.pin_current_button.setFixedSize(28, 28)
         top_row.addWidget(self.pin_current_button)
 
+        self.reload_current_button = self._make_tool_button(
+            icon=self._named_icon("reload", fallback=QStyle.StandardPixmap.SP_BrowserReload),
+            tooltip="Reload current plugin",
+            handler=self._reload_current_plugin,
+            checkable=False,
+        )
+        self.reload_current_button.setObjectName("HeaderActionButton")
+        self.reload_current_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.reload_current_button.setAutoRaise(False)
+        self.reload_current_button.setFixedSize(28, 28)
+        top_row.addWidget(self.reload_current_button)
+
         header_layout.addLayout(top_row)
 
         self.page_description = QLabel()
@@ -1466,6 +1478,15 @@ class DNgineWindow(QMainWindow):
         self.page_indices[spec.plugin_id] = page_index
         self._stale_theme_pages.discard(spec.plugin_id)
 
+    def _reload_current_plugin(self) -> None:
+        if not self.current_plugin_id:
+            return
+        spec = self.plugin_by_id.get(self.current_plugin_id)
+        if spec is None:
+            return
+        self._stale_theme_pages.add(spec.plugin_id)
+        self.open_plugin(spec.plugin_id)
+
     def _cancel_pending_plugin_open(self) -> None:
         self._plugin_open_request_id += 1
         self._pending_plugin_open_id = None
@@ -1566,6 +1587,7 @@ class DNgineWindow(QMainWindow):
             if is_pinned
             else self.services.i18n.tr("shell.pin", "Pin to quick access")
         )
+        self.reload_current_button.setToolTip(self.services.i18n.tr("shell.reload_plugin", "Reload current plugin"))
 
     def _suppress_duplicate_page_header(self, plugin_widget: QWidget, spec: PluginSpec) -> None:
         if spec.plugin_id == DASHBOARD_PLUGIN_ID:

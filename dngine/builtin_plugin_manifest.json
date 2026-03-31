@@ -96,6 +96,15 @@
         }
       ]
     },
+    "it_tools/code_factory.py": {
+      "sha256": "303942184946af00d2a61bc5f7f4f6b57d01c87e597b630c6cc4a0fbb4a1952b",
+      "plugins": [
+        {
+          "plugin_id": "code_factory",
+          "class_name": "CodeFactoryPlugin"
+        }
+      ]
+    },
     "it_tools/credential_scanner.py": {
       "sha256": "713f046398741ab94550ab136e9e144126e48c53ef10b644fc34979dc90d650f",
       "plugins": [
