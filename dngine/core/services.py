@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -87,6 +88,54 @@ class _ShellTaskBridge(QObject):
         self._services._finish_shell_task_progress(self._task_id)
 
 
+class _TaskCallbackBridge(QObject):
+    def __init__(
+        self,
+        services: "AppServices",
+        *,
+        on_result=None,
+        on_error=None,
+        on_finished=None,
+        on_progress=None,
+    ):
+        super().__init__(services)
+        self._services = services
+        self._on_result = on_result
+        self._on_error = on_error
+        self._on_finished = on_finished
+        self._on_progress = on_progress
+
+    def _invoke(self, callback, *args) -> None:
+        if callback is None:
+            return
+        try:
+            callback(*args)
+        except Exception as exc:
+            self._services._default_worker_error(
+                {
+                    "message": f"Worker callback failed: {exc}",
+                    "traceback": traceback.format_exc(),
+                }
+            )
+
+    @Slot(object)
+    def handle_result(self, payload: object) -> None:
+        self._invoke(self._on_result, payload)
+
+    @Slot(object)
+    def handle_error(self, payload: object) -> None:
+        callback = self._on_error or self._services._default_worker_error
+        self._invoke(callback, payload)
+
+    @Slot()
+    def handle_finished(self) -> None:
+        self._invoke(self._on_finished)
+
+    @Slot(float)
+    def handle_progress(self, value: float) -> None:
+        self._invoke(self._on_progress, value)
+
+
 class AppServices(QObject):
     quick_access_changed = Signal()
     plugin_visuals_changed = Signal(str)
@@ -106,6 +155,11 @@ class AppServices(QObject):
         self.plugins_root = self.app_root / "plugins"
         self.builtin_manifest_path = self.app_root / "builtin_plugin_manifest.json"
         self.custom_plugins_root = self.data_root / "plugins"
+        self.signed_plugins_root = self.data_root / "signed_plugins"
+        self.package_catalog_root = self.data_root / "package_catalog"
+        self.package_cache_root = self.data_root / "package_cache"
+        self.first_party_catalog_path = self.app_root / "first_party_catalog.json"
+        self.first_party_signers_path = self.app_root / "first_party_signers.json"
         self.workflows_root = self.data_root / "workflows"
         self.config_path = resolve_runtime_path(self.data_root, CONFIG_FILENAME, LEGACY_CONFIG_FILENAME)
         self.database_path = resolve_runtime_path(self.data_root, DATABASE_FILENAME, LEGACY_DATABASE_FILENAME)
@@ -115,6 +169,9 @@ class AppServices(QObject):
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.custom_plugins_root.mkdir(parents=True, exist_ok=True)
+        self.signed_plugins_root.mkdir(parents=True, exist_ok=True)
+        self.package_catalog_root.mkdir(parents=True, exist_ok=True)
+        self.package_cache_root.mkdir(parents=True, exist_ok=True)
         self.plugin_dependency_root.mkdir(parents=True, exist_ok=True)
         self.config = AppConfig(self.config_path, self.output_root, self.database_path)
         self.config.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
@@ -137,6 +194,8 @@ class AppServices(QObject):
             self.plugins_root,
             self.builtin_manifest_path,
             self.custom_plugins_root,
+            self.signed_plugins_root,
+            self.first_party_signers_path,
             self.plugin_state_path,
             self.logger,
         )
@@ -144,10 +203,12 @@ class AppServices(QObject):
         self.plugin_state_manager.migrate_plugin_ids(PLUGIN_ID_MIGRATIONS)
         self.plugin_manager = PluginManager(
             self.plugins_root,
+            self.signed_plugins_root,
             self.custom_plugins_root,
             self.plugin_state_manager,
             builtin_manifest_path=self.builtin_manifest_path,
             enforce_builtin_manifest=getattr(sys, "frozen", False),
+            signed_signers_path=self.first_party_signers_path,
         )
         self.plugin_dependency_manager = PluginDependencyManager(
             self.plugin_manager,
@@ -160,7 +221,13 @@ class AppServices(QObject):
         self.plugin_package_manager = PluginPackageManager(
             self.plugin_manager,
             self.custom_plugins_root,
+            self.signed_plugins_root,
+            self.package_catalog_root,
+            self.package_cache_root,
             self.plugin_state_manager,
+            self.plugin_dependency_manager,
+            self.first_party_catalog_path,
+            self.first_party_signers_path,
         )
         self.command_registry = CommandRegistry()
         self._plugin_commands_registered = False
@@ -628,7 +695,7 @@ class AppServices(QObject):
                 plugin = self.plugin_manager.load_plugin(spec.plugin_id)
                 plugin.register_commands(self.command_registry, self)
             except Exception as exc:
-                if spec.source_type == "custom":
+                if spec.source_type != "builtin":
                     self.plugin_state_manager.record_failure(spec.plugin_id, str(exc))
                 self.log(f"Skipping command registration for plugin '{spec.plugin_id}': {exc}", "WARNING")
 
@@ -672,6 +739,36 @@ class AppServices(QObject):
             "Plugin Details",
             "Return metadata for one plugin.",
             lambda plugin_id: self._plugin_info(plugin_id),
+        )
+        self.command_registry.register(
+            "packages.list",
+            "List Packages",
+            "Return installed and catalog first-party packages.",
+            lambda: self.plugin_package_manager.list_catalog_packages(),
+        )
+        self.command_registry.register(
+            "packages.catalog.refresh",
+            "Refresh Package Catalog",
+            "Refresh the first-party package catalog.",
+            lambda source="": self.plugin_package_manager.refresh_catalog(source or None),
+        )
+        self.command_registry.register(
+            "packages.install",
+            "Install Package",
+            "Install one signed first-party package from the catalog.",
+            lambda package_id: self._install_catalog_package(package_id),
+        )
+        self.command_registry.register(
+            "packages.remove",
+            "Remove Package",
+            "Remove one installed signed first-party package.",
+            lambda package_id: self._remove_signed_package(package_id),
+        )
+        self.command_registry.register(
+            "packages.updates",
+            "Package Updates",
+            "Return first-party packages with newer catalog versions available.",
+            lambda: self.plugin_package_manager.available_updates(),
         )
         self.command_registry.register(
             "broker.elevated.capabilities",
@@ -814,16 +911,18 @@ class AppServices(QObject):
             worker.signals.result.connect(shell_task_bridge.handle_finished_payload)
             worker.signals.error.connect(shell_task_bridge.handle_finished_payload)
             worker.signals.finished.connect(shell_task_bridge.handle_finished)
-        if on_result is not None:
-            worker.signals.result.connect(on_result)
-        if on_error is not None:
-            worker.signals.error.connect(on_error)
-        else:
-            worker.signals.error.connect(self._default_worker_error)
-        if on_finished is not None:
-            worker.signals.finished.connect(on_finished)
-        if on_progress is not None:
-            worker.signals.progress.connect(on_progress)
+        callback_bridge = _TaskCallbackBridge(
+            self,
+            on_result=on_result,
+            on_error=on_error,
+            on_finished=on_finished,
+            on_progress=on_progress,
+        )
+        worker._task_callback_bridge = callback_bridge
+        worker.signals.result.connect(callback_bridge.handle_result)
+        worker.signals.error.connect(callback_bridge.handle_error)
+        worker.signals.finished.connect(callback_bridge.handle_finished)
+        worker.signals.progress.connect(callback_bridge.handle_progress)
         self.thread_pool.start(worker)
         return worker
 
@@ -862,6 +961,12 @@ class AppServices(QObject):
             "source_type": spec.source_type,
             "file_path": str(spec.file_path),
         }
+
+    def _install_catalog_package(self, package_id: str) -> dict:
+        return self.plugin_package_manager.install_catalog_package(package_id)
+
+    def _remove_signed_package(self, package_id: str) -> dict:
+        return self.plugin_package_manager.remove_package(package_id)
 
     def _command_open_plugin(self, plugin_id: str):
         window = self._require_window()

@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dngine.core.builtin_manifest import load_builtin_manifest, sha256_file, verify_manifest_integrity
+from dngine.core.first_party_packages import category_bundles_for_plugin, category_label_for_plugin
 from dngine.core.plugin_api import QtPlugin
+from dngine.core.plugin_signing import verify_installed_signed_package
 from dngine.core.plugin_security import scan_plugin_path
 
 
@@ -141,6 +143,8 @@ def _parse_plugin_specs(
     source_type: str,
     state_manager=None,
     scan_report: dict[str, object] | None = None,
+    signature_status: str | None = None,
+    signer: str = "",
 ) -> list[PluginSpec]:
     try:
         tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
@@ -214,6 +218,13 @@ def _parse_plugin_specs(
             for key, value in bundle.items():
                 locale_bundles[language.lower()].setdefault(key, value)
 
+        category_label = category_label_for_plugin(values["plugin_id"])
+        if category_label:
+            values["category"] = category_label
+            for language, bundle in category_bundles_for_plugin(values["plugin_id"]).items():
+                locale_bundles.setdefault(language.lower(), {})
+                locale_bundles[language.lower()].update(bundle)
+
         rel_path = file_path.relative_to(source_root).with_suffix("")
         module_name = f"dngine_dynamic_plugins.{source_type}." + ".".join(rel_path.parts)
         if state_manager is not None:
@@ -224,6 +235,14 @@ def _parse_plugin_specs(
                 state["quarantined"] = False
                 state["risk_level"] = "low"
                 state["risk_summary"] = ""
+            elif source_type == "signed":
+                state["risk_level"] = "low"
+                state["risk_summary"] = ""
+                if not has_state:
+                    state["enabled"] = True
+                    state["hidden"] = False
+                    state["trusted"] = True
+                    state["quarantined"] = False
             elif source_type == "custom" and not has_state:
                 state["enabled"] = False
                 state["hidden"] = False
@@ -271,8 +290,12 @@ def _parse_plugin_specs(
                 hidden=state["hidden"],
                 trusted=bool(state.get("trusted", source_type != "custom")),
                 quarantined=bool(state.get("quarantined", False)),
-                signature_status="verified" if source_type == "builtin" else "none",
-                signer="dngine-bundle" if source_type == "builtin" else "",
+                signature_status=(
+                    signature_status
+                    if signature_status is not None
+                    else ("verified" if source_type == "builtin" else "none")
+                ),
+                signer=signer or ("dngine-bundle" if source_type == "builtin" else ""),
                 risk_level=str(state.get("risk_level", "low")),
                 risk_summary=str(state.get("risk_summary", "")),
                 last_error=str(state.get("last_error", "")),
@@ -285,7 +308,7 @@ def _parse_plugin_specs(
 
 
 def _package_details(file_path: Path, source_root: Path, source_type: str) -> tuple[Path, str, str]:
-    if source_type == "custom":
+    if source_type in {"custom", "signed"}:
         rel_parts = file_path.relative_to(source_root).parts
         package_name = rel_parts[0]
         container_path = source_root / package_name
@@ -298,19 +321,23 @@ class PluginManager:
     def __init__(
         self,
         builtin_root: Path,
+        signed_root: Path | None = None,
         custom_root: Path | None = None,
         state_manager=None,
         *,
         builtin_manifest_path: Path | None = None,
         enforce_builtin_manifest: bool | None = None,
+        signed_signers_path: Path | None = None,
         dependency_paths_resolver=None,
         dependency_summary_resolver=None,
     ):
         self.builtin_root = Path(builtin_root)
+        self.signed_root = Path(signed_root) if signed_root is not None else None
         self.custom_root = Path(custom_root) if custom_root is not None else None
         self.state_manager = state_manager
         self.builtin_manifest_path = Path(builtin_manifest_path) if builtin_manifest_path is not None else None
         self.enforce_builtin_manifest = bool(enforce_builtin_manifest) if enforce_builtin_manifest is not None else False
+        self.signed_signers_path = Path(signed_signers_path) if signed_signers_path is not None else None
         self.dependency_paths_resolver = dependency_paths_resolver
         self.dependency_summary_resolver = dependency_summary_resolver
         self._builtin_manifest = (
@@ -367,15 +394,18 @@ class PluginManager:
         if self._specs is None:
             specs: list[PluginSpec] = []
             specs.extend(self._discover_from_root(self.builtin_root, source_type="builtin"))
+            if self.signed_root is not None and self.signed_root.exists():
+                specs.extend(self._discover_from_root(self.signed_root, source_type="signed"))
             if self.custom_root is not None and self.custom_root.exists():
                 specs.extend(self._discover_from_root(self.custom_root, source_type="custom"))
             deduped: dict[str, PluginSpec] = {}
+            priority = {"builtin": 0, "signed": 1, "custom": 2}
             for spec in specs:
                 existing = deduped.get(spec.plugin_id)
                 if existing is None:
                     deduped[spec.plugin_id] = spec
                     continue
-                if existing.source_type == "builtin" and spec.source_type == "custom":
+                if priority.get(spec.source_type, -1) >= priority.get(existing.source_type, -1):
                     deduped[spec.plugin_id] = spec
             self._specs = sorted(
                 deduped.values(),
@@ -430,7 +460,7 @@ class PluginManager:
             raise KeyError(f"Unknown plugin id: {plugin_id}")
         if not spec.enabled:
             raise RuntimeError(f"Plugin '{plugin_id}' is disabled.")
-        if spec.source_type == "custom" and not spec.trusted:
+        if spec.source_type in {"custom", "signed"} and not spec.trusted:
             raise RuntimeError(f"Plugin '{plugin_id}' is not trusted yet. Review it in Settings before loading it.")
         if spec.quarantined:
             raise RuntimeError(f"Plugin '{plugin_id}' is quarantined because it previously failed or was flagged unsafe.")
@@ -484,11 +514,14 @@ class PluginManager:
         if not root.exists():
             return specs
         scan_cache: dict[Path, dict[str, object]] = {}
+        signature_cache: dict[Path, tuple[str, str] | None] = {}
         for file_path in sorted(root.rglob("*.py")):
             if file_path.name.startswith("__"):
                 continue
             effective_source_type = source_type
             scan_report = None
+            signature_status = None
+            signer = ""
             if source_type == "builtin" and self.enforce_builtin_manifest:
                 if not self._manifest_integrity_ok or not self._builtin_manifest:
                     continue
@@ -502,6 +535,21 @@ class PluginManager:
                 inspected_keys = sorted((spec.plugin_id, spec.class_name) for spec in inspected_specs)
                 if tuple(inspected_keys) != manifest_entry.plugins:
                     continue
+            elif source_type == "signed":
+                rel_parts = file_path.relative_to(root).parts
+                if not rel_parts:
+                    continue
+                container = root / rel_parts[0]
+                if container not in signature_cache:
+                    try:
+                        verification = verify_installed_signed_package(container, self.signed_signers_path or Path())
+                        signature_cache[container] = ("verified", verification.signer)
+                    except Exception:
+                        signature_cache[container] = None
+                verification_state = signature_cache[container]
+                if verification_state is None:
+                    continue
+                signature_status, signer = verification_state
             if effective_source_type == "custom":
                 rel_parts = file_path.relative_to(root).parts
                 container = root / rel_parts[0]
@@ -515,6 +563,8 @@ class PluginManager:
                     source_type=effective_source_type,
                     state_manager=self.state_manager,
                     scan_report=scan_report,
+                    signature_status=signature_status,
+                    signer=signer,
                 )
             )
         return specs

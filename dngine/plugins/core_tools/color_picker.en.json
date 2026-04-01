@@ -1,0 +1,18 @@
+{
+  "plugin.name": "Color Picker",
+  "plugin.description": "Pick a color from anywhere on the screen and inspect its preview, RGB, HEX, and HSL values.",
+  "plugin.category": "Media & Images",
+  "title": "Color Picker",
+  "description": "Pick a color from anywhere on the screen, then inspect its preview, RGB, HEX, and HSL values.",
+  "status.ready": "Ready to sample a color from the screen.",
+  "status.live": "Pick mode is active. Click any pixel on screen, or press Esc to cancel.",
+  "status.picked": "Color captured successfully.",
+  "status.canceled": "Pick mode canceled.",
+  "pick": "Pick from screen",
+  "copy.hex": "Copy HEX",
+  "field.hex": "HEX",
+  "field.rgb": "RGB",
+  "field.hsl": "HSL",
+  "warning.title": "Screen capture unavailable",
+  "warning.body": "The screen picker could not start on this session."
+}

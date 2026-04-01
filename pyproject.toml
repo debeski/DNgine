@@ -13,8 +13,6 @@ authors = [
   { name = "debeski" }
 ]
 dependencies = [
-  "pandas",
-  "openpyxl",
   "PySide6",
   "Pillow",
   "pillow-heif",
@@ -25,8 +23,6 @@ dependencies = [
   "python-docx",
   "qt-material",
   "cryptography",
-  "requests",
-  "beautifulsoup4",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -58,6 +54,8 @@ include = ["dngine*"]
 [tool.setuptools.package-data]
 dngine = [
   "*.json",
+  "first_party_catalog.json",
+  "first_party_signers.json",
   "VERSION",
   "assets/*",
   "assets/**/*",

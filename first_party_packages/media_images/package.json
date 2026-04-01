@@ -1,0 +1,13 @@
+{
+  "package_id": "media_images",
+  "display_name": "Media & Images",
+  "display_name_ar": "الوسائط والصور",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "tagger",
+    "img_trans",
+    "color_picker"
+  ],
+  "plugins": []
+}

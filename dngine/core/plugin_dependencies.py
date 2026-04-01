@@ -110,7 +110,7 @@ class PluginDependencyManager:
         return [str(site_packages)]
 
     def manifest_for_spec(self, spec: PluginSpec) -> Path | None:
-        if spec.source_type != "custom":
+        if spec.source_type not in {"custom", "signed"}:
             return None
         stem = spec.file_path.stem
         preferred = spec.file_path.with_name(f"{stem}.deps")
@@ -264,7 +264,7 @@ class PluginDependencyManager:
 
         if exact_pins:
             for other in self.plugin_manager.discover_plugins(include_disabled=True):
-                if other.plugin_id == spec.plugin_id or other.source_type != "custom":
+                if other.plugin_id == spec.plugin_id or other.source_type not in {"custom", "signed"}:
                     continue
                 other_manifest = self.manifest_for_spec(other)
                 if other_manifest is None:

@@ -6,161 +6,8 @@
     "custom"
   ],
   "files": {
-    "data_tools/chart_builder.py": {
-      "sha256": "8a4314affa0108877503c75a2334f1e28e2abf8c9d47d802460a3b5556468f71",
-      "plugins": [
-        {
-          "plugin_id": "chart_builder",
-          "class_name": "ChartBuilderPlugin"
-        }
-      ]
-    },
-    "data_tools/data_link_auditor.py": {
-      "sha256": "8bc8ab545e9e3649683935b272cdf018cde17d965b4418321c894432a06c612b",
-      "plugins": [
-        {
-          "plugin_id": "data_link_auditor",
-          "class_name": "DataLinkAuditorPlugin"
-        }
-      ]
-    },
-    "data_tools/deep_scan_auditor.py": {
-      "sha256": "a44227228e2cb503185525b7a542c11dfca38a500f2644eb2510d1ded4ccd9f6",
-      "plugins": [
-        {
-          "plugin_id": "deep_scan_auditor",
-          "class_name": "DeepScanAuditorPlugin"
-        }
-      ]
-    },
-    "data_tools/folder_mapper.py": {
-      "sha256": "7502c632bcd27dff3672111119c1df1416386d5f69ea6a1dd7ba621c823fd9d6",
-      "plugins": [
-        {
-          "plugin_id": "folder_mapper",
-          "class_name": "FolderMapperPlugin"
-        }
-      ]
-    },
-    "data_tools/sequence_auditor.py": {
-      "sha256": "a1fefe8d8c7560e70441679cc3a36e7000918456cc7e9da9966bbfb8f4e58df9",
-      "plugins": [
-        {
-          "plugin_id": "sequence_auditor",
-          "class_name": "SequenceAuditorPlugin"
-        }
-      ]
-    },
-    "data_tools/web_scraper.py": {
-      "sha256": "612d67dbeeab096a26b2b6cbf578a17a9dfd0420d3e11c3c8856e8bd1015bf09",
-      "plugins": [
-        {
-          "plugin_id": "web_scraper",
-          "class_name": "WebScraperPlugin"
-        }
-      ]
-    },
-    "file_tools/batch_renamer.py": {
-      "sha256": "ff37217dd33022168a0dbcfb83b7da9b19f4222ce1ac994014f9cdbb871d31ee",
-      "plugins": [
-        {
-          "plugin_id": "batch_renamer",
-          "class_name": "BatchRenamerPlugin"
-        }
-      ]
-    },
-    "file_tools/deep_searcher.py": {
-      "sha256": "899106a09e62579c202015f8858b2de76b4ebe9f1b0615fc4c4e78335b108122",
-      "plugins": [
-        {
-          "plugin_id": "deep_searcher",
-          "class_name": "DeepSearcherPlugin"
-        }
-      ]
-    },
-    "file_tools/hash_checker.py": {
-      "sha256": "c14bbc4d02227cce70473f299772b8059650f00db64351ab001d7f0183e16c80",
-      "plugins": [
-        {
-          "plugin_id": "hash_checker",
-          "class_name": "HashCheckerPlugin"
-        }
-      ]
-    },
-    "file_tools/smart_organizer.py": {
-      "sha256": "3e291d039721edb0f3796e55904e68c0b4632d0ca8edd3e3ea60a36d335bf2ac",
-      "plugins": [
-        {
-          "plugin_id": "smart_org",
-          "class_name": "SmartOrganizerPlugin"
-        }
-      ]
-    },
-    "file_tools/usage_analyzer.py": {
-      "sha256": "3604e0c840e4cdce51a0f3d654f6de3564942782331ce0b83d102c61c8442d52",
-      "plugins": [
-        {
-          "plugin_id": "usage_analyzer",
-          "class_name": "UsageAnalyzerPlugin"
-        }
-      ]
-    },
-    "it_tools/code_factory.py": {
-      "sha256": "166026ab96329e9d95aff9371d69de8752d1fef46722e2c5766aa67ce48ec595",
-      "plugins": [
-        {
-          "plugin_id": "code_factory",
-          "class_name": "CodeFactoryPlugin"
-        }
-      ]
-    },
-    "it_tools/credential_scanner.py": {
-      "sha256": "34886d52da6d945a98cf7b654a57457ad3273361f8cc6adbbb5236bee6e6bbf0",
-      "plugins": [
-        {
-          "plugin_id": "cred_scanner",
-          "class_name": "CredentialScannerPlugin"
-        }
-      ]
-    },
-    "it_tools/network_scanner.py": {
-      "sha256": "2f674eeab5512725a7905b792c470fc30baa5f4bf87273095b8ced8a85afeeac",
-      "plugins": [
-        {
-          "plugin_id": "net_scan",
-          "class_name": "NetworkScannerPlugin"
-        }
-      ]
-    },
-    "it_tools/privacy_shredder.py": {
-      "sha256": "8f9d940e434a1656eb763cc7f4795ab301e99d1e934ab25227e4731396bc78f1",
-      "plugins": [
-        {
-          "plugin_id": "privacy_shred",
-          "class_name": "PrivacyShredderPlugin"
-        }
-      ]
-    },
-    "it_tools/system_audit.py": {
-      "sha256": "2b257bc42b719c2a71dca171b00c2f9042faedb9ef6fde4c09d2db8a589ce78e",
-      "plugins": [
-        {
-          "plugin_id": "sys_audit",
-          "class_name": "SystemAuditPlugin"
-        }
-      ]
-    },
-    "it_tools/wifi_profiles.py": {
-      "sha256": "7f35b48527465b048963774adfd6373be458b4f1c96b627e92ae8ce9799b5689",
-      "plugins": [
-        {
-          "plugin_id": "wifi_profiles",
-          "class_name": "WifiProfilesPlugin"
-        }
-      ]
-    },
-    "media_tools/color_picker.py": {
-      "sha256": "ed4ad490bb4b657b379ddf264f1d259776fdb3856da904f21a2f13ca1942e0c6",
+    "core_tools/color_picker.py": {
+      "sha256": "82453ff397e9e6cb340a96855111bbba468c68c74fabcb8da433dcc0437d3373",
       "plugins": [
         {
           "plugin_id": "color_picker",
@@ -168,44 +15,8 @@
         }
       ]
     },
-    "media_tools/image_tagger.py": {
-      "sha256": "84a2994d49850149977d72c574ff1d90d0af5f681a1c49057c4f0abd83b1d11d",
-      "plugins": [
-        {
-          "plugin_id": "tagger",
-          "class_name": "ImageTaggerPlugin"
-        }
-      ]
-    },
-    "media_tools/image_transformer.py": {
-      "sha256": "a70da6f0f7c787c43c26bab1b8281e7bc0315fdcf2bdf9642c85f46a5e46f778",
-      "plugins": [
-        {
-          "plugin_id": "img_trans",
-          "class_name": "ImageTransformerPlugin"
-        }
-      ]
-    },
-    "office_tools/cross_joiner.py": {
-      "sha256": "cd7cb5a8746a693458e7e1e8c68a213cc6854b3029b7bfd80b8c90bb0a6d73b3",
-      "plugins": [
-        {
-          "plugin_id": "cross_joiner",
-          "class_name": "CrossJoinerPlugin"
-        }
-      ]
-    },
-    "office_tools/data_cleaner.py": {
-      "sha256": "aa3952c07db3040d6e816dd6381e52650ed656d3e624b0dd30e7cf5a95f9ad58",
-      "plugins": [
-        {
-          "plugin_id": "cleaner",
-          "class_name": "DataCleanerPlugin"
-        }
-      ]
-    },
-    "office_tools/document_bridge.py": {
-      "sha256": "a31db42f3f30921b06f47969298c1c32653d8f2c0c288ce89514cf858c55ab35",
+    "core_tools/document_bridge.py": {
+      "sha256": "9470a42d4e215e536e8a34d42d1b3fb7dbaf27d2189011f1b46a924b7db1c4e8",
       "plugins": [
         {
           "plugin_id": "doc_bridge",
@@ -213,12 +24,57 @@
         }
       ]
     },
-    "office_tools/pdf_suite.py": {
-      "sha256": "462c7003c3574a06ef29d712ad4114e7e290f8310520fbb5df753972e6336e60",
+    "core_tools/hash_checker.py": {
+      "sha256": "208de3eb4e42019efd5912882b04190fefc1902c6e8d758974081c04370ecf0d",
+      "plugins": [
+        {
+          "plugin_id": "hash_checker",
+          "class_name": "HashCheckerPlugin"
+        }
+      ]
+    },
+    "core_tools/image_tagger.py": {
+      "sha256": "c618342b93eef2a512a22da3fa7bd19c99f42c59775898915c46526655fb8d22",
+      "plugins": [
+        {
+          "plugin_id": "tagger",
+          "class_name": "ImageTaggerPlugin"
+        }
+      ]
+    },
+    "core_tools/image_transformer.py": {
+      "sha256": "a7138c04a9564a9649e2c78ab2046a3a550c683f360b9bd0d38665758e109f27",
+      "plugins": [
+        {
+          "plugin_id": "img_trans",
+          "class_name": "ImageTransformerPlugin"
+        }
+      ]
+    },
+    "core_tools/pdf_suite.py": {
+      "sha256": "20b5cf915ff4af791062f4396e5d3216c1163a0529419ea3dad3a6708da7b9e7",
       "plugins": [
         {
           "plugin_id": "pdf_suite",
           "class_name": "PDFSuitePlugin"
+        }
+      ]
+    },
+    "core_tools/privacy_shredder.py": {
+      "sha256": "cf46075f1f82a1887868e957ecf2d8611293300f65b40d10dde21e0f9a6a4ff4",
+      "plugins": [
+        {
+          "plugin_id": "privacy_shred",
+          "class_name": "PrivacyShredderPlugin"
+        }
+      ]
+    },
+    "core_tools/system_audit.py": {
+      "sha256": "3bf8819d0f07ac1252ee353d6378fa7444d7fe2507286800334c7a2dfadcb586",
+      "plugins": [
+        {
+          "plugin_id": "sys_audit",
+          "class_name": "SystemAuditPlugin"
         }
       ]
     },
@@ -241,7 +97,7 @@
       ]
     },
     "system/command_center.py": {
-      "sha256": "7a1bc667382fca2328d74018e90fae095f46cf0e345d5a2068df0e3a216b9505",
+      "sha256": "a5cb3062950205641d0080078f10f2f27d6d40c04b82103f8bb7e6e00da0f38a",
       "plugins": [
         {
           "plugin_id": "command_center",

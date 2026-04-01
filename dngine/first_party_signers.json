@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "signers": [
+    {
+      "signer": "dngine-first-party-dev",
+      "label": "DNgine First-Party Dev",
+      "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEASTNjsbiybarav1jz8tHj/MmXxcwOfFzDTIUQ45dhri0=\n-----END PUBLIC KEY-----\n"
+    }
+  ]
+}

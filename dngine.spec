@@ -20,12 +20,16 @@ def collect_tree(relative_root: str):
 
 datas = []
 datas.append((str(project_root / "dngine" / "builtin_plugin_manifest.json"), "dngine"))
+datas.append((str(project_root / "dngine" / "first_party_catalog.json"), "dngine"))
+datas.append((str(project_root / "dngine" / "first_party_signers.json"), "dngine"))
 datas.append((str(project_root / "dngine" / "VERSION"), "dngine"))
 datas += collect_tree("dngine/assets")
 datas += collect_tree("dngine/i18n")
-datas += collect_tree("dngine/plugins")
+datas += collect_tree("dngine/plugins/system")
+datas += collect_tree("dngine/plugins/core_tools")
 
-hiddenimports = collect_submodules("dngine.plugins")
+hiddenimports = collect_submodules("dngine.plugins.system")
+hiddenimports += collect_submodules("dngine.plugins.core_tools")
 hiddenimports += collect_submodules("dngine.core")
 hiddenimports += collect_submodules("pip")
 

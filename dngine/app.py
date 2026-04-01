@@ -1515,7 +1515,7 @@ class DNgineWindow(QMainWindow):
         self.page_stack.setCurrentIndex(self.page_indices[plugin_id])
         self._sync_header(spec)
         self.services.logger.set_status(f"Loaded {self.services.plugin_display_name(spec)}")
-        if spec.source_type == "custom":
+        if spec.source_type != "builtin":
             self.services.plugin_state_manager.clear_failures(plugin_id)
 
     def _complete_plugin_open(self, request_id: int, plugin_id: str) -> None:
@@ -2210,11 +2210,11 @@ class DNgineWindow(QMainWindow):
     def _handle_plugin_open_error(self, spec: PluginSpec, exc: Exception) -> None:
         message = str(exc)
         self.services.log(f"Plugin '{spec.plugin_id}' failed to open: {message}", "ERROR")
-        if spec.source_type == "custom":
+        if spec.source_type != "builtin":
             state = self.services.plugin_state_manager.record_failure(spec.plugin_id, message)
             if state.get("quarantined"):
                 self.services.log(
-                    f"Custom plugin '{spec.plugin_id}' was quarantined after repeated failures.",
+                    f"Plugin '{spec.plugin_id}' was quarantined after repeated failures.",
                     "WARNING",
                 )
                 self.reload_plugin_catalog(preferred_plugin_id="command_center")

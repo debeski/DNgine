@@ -14,6 +14,7 @@ DNgine brings practical desktop utilities into one cohesive shell:
 - clipboard history and quick access
 - media and image tools
 - workflows and CLI automation
+- signed first-party package installs
 - custom plugin loading
 
 The app is intentionally desktop-first. It is not a browser wrapper, and it is not built around always-online services. It is meant to stay light, quick, and usable throughout the day.
@@ -33,6 +34,8 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Dashboard shell with a workspace pulse panel, usage snapshots, and recent activity
 - Settings support for default output path and default startup page selection
 - Workflow engine and CLI command surface
+- Core-only base bundle plus installable signed first-party tool packages
+- In-app first-party package catalog with install, update, remove, and local signed import flows
 - Archive-first custom plugin packaging and sharing
 - Custom plugin dependency sidecars with install/repair flow in Plugins
 - Plugin-local translations through sidecar locale files plus shared `bind_tr(...)`, `tr(...)`, and `safe_tr(...)` helpers
@@ -60,7 +63,8 @@ You can download the pre-built binaries from the GitHub Releases page or build f
 #### Requirements
 
 - Python 3.10+
-- the packages listed in [requirements.txt](./requirements.txt)
+- the base runtime packages listed in [requirements.txt](./requirements.txt)
+- optional first-party package dependencies are installed from signed package sidecars when those packages are installed
 
 #### Linux Note
 
@@ -78,6 +82,13 @@ cd dngine
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+Packaged builds should also regenerate the first-party package catalog and builtin manifest before running `PyInstaller`:
+
+```bash
+python tools/build_first_party_packages.py
+python tools/generate_builtin_plugin_manifest.py
 ```
 
 ## Running the App
@@ -127,7 +138,19 @@ Run a headless tool command:
 python -m dngine commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
 ```
 
-Run the built-in web scraper headlessly:
+Refresh the bundled first-party package catalog:
+
+```bash
+python -m dngine packages refresh
+```
+
+Install the `Web Dev` first-party package:
+
+```bash
+python -m dngine packages install web_dev
+```
+
+Run the `Web Scraper` headlessly after the `web_dev` package is installed:
 
 ```bash
 python -m dngine commands run tool.web_scraper.run --args '{"url": "https://example.com/articles", "item_selector": "article", "title_selector": "h2", "link_selector": "a[href]", "text_selector": "p", "max_pages": 1}'
@@ -141,46 +164,7 @@ python -m dngine workflows run my_workflow
 
 ## Included Tools
 
-### Validation and Analysis
-
-- Chart Builder
-- Folder Mapper
-- Deep-Scan Auditor
-- Sequence Auditor
-- Data-Link Auditor
-- Web Scraper
-
-### Office Utilities
-
-- Data Cleaner
-- Data Cross Joiner
-- PDF Core Engine
-- Document Bridge (`Markdown -> DOCX` and `DOCX -> Markdown`)
-
-### File Utilities
-
-- Deep File Searcher
-- Batch File Renamer
-- Smart File Organizer
-- Disk Space Visualizer
-- Hash Checker
-
-### IT Utilities
-
-- System Overview
-- Code Factory
-- Code Exploit Scanner
-- Network Port Scanner
-- Wi-Fi Profiles
-- Privacy Data Shredder
-
-### Media Utilities
-
-- Image Transformer
-- Image Tagger
-- Color Picker
-
-### Standalone Companion Pages
+### Shipped System Pages
 
 - Dashboard
 - Clip Snip
@@ -189,7 +173,64 @@ python -m dngine workflows run my_workflow
 - About Info
 - Dev Lab (`Developer mode`)
 
-## Built-In Tool Notes
+### Shipped Core 8
+
+#### Files & Storage
+
+- Hash Checker
+
+#### Office & Docs
+
+- PDF Core Engine
+- Document Bridge (`Markdown -> DOCX` and `DOCX -> Markdown`)
+
+#### Network & Security
+
+- Privacy Data Shredder
+- System Overview
+
+#### Media & Images
+
+- Image Transformer
+- Image Tagger
+- Color Picker
+
+### Signed First-Party Packages
+
+#### Files & Storage
+
+- Batch File Renamer
+- Deep File Searcher
+- Smart File Organizer
+- Disk Space Visualizer
+
+#### Office & Docs
+
+- Data Cleaner
+- Data Cross Joiner
+
+#### Network & Security
+
+- Network Port Scanner
+- Wi-Fi Profiles
+
+#### Web Dev
+
+- Code Factory
+- Code Exploit Scanner
+- Web Scraper
+
+#### Data & Analysis
+
+- Chart Builder
+- Folder Mapper
+- Deep-Scan Auditor
+- Sequence Auditor
+- Data-Link Auditor
+
+## Tool Notes
+
+The core 8 ship inside the base app. Everything else above is distributed as a signed first-party package that can be installed from `Settings -> Plugins` or the `packages.*` CLI commands.
 
 ### Dashboard
 
@@ -235,6 +276,7 @@ python -m dngine workflows run my_workflow
 
 ### Web Scraper
 
+- Distributed through the signed `web_dev` first-party package
 - Scrapes public static HTML pages only; it is not intended for login flows or JavaScript-rendered sites
 - Uses CSS selectors for items, titles, links, text, and optional pagination
 - Shows extracted rows in-app first with table filtering, detail previews, and right-click copy/open/export actions
@@ -289,6 +331,8 @@ dngine/
   core/
   i18n/
   plugins/
+first_party_packages/
+tools/
 build_linux.sh
 build_macos.sh
 build_windows.sh
@@ -299,11 +343,15 @@ dngine.spec
 ### Runtime Layout
 
 - [dngine](/home/debeski/depy/tools/dngine/dngine) contains code, assets, built-in plugins, and locale files.
+- [first_party_packages](/home/debeski/Desktop/depy/tools/DNgine/first_party_packages) contains the source for signed first-party plugin packages that are built into downloadable archives.
 - Runtime state lives in a per-user storage root, not in the project directory.
 - Windows uses `%LOCALAPPDATA%\\DNgine`
 - macOS uses `~/Library/Application Support/DNgine`
 - Linux uses `$XDG_DATA_HOME/dngine` or `~/.local/share/dngine`
-- Inside that root, `data/` contains config, database, plugin state, workflows, and custom plugins.
+- Inside that root, `data/` contains config, database, plugin state, workflows, custom plugins, installed signed packages, the package catalog cache, and package download cache.
+- Installed signed first-party packages live under `<storage_root>/data/signed_plugins/`.
+- Cached package catalog data lives under `<storage_root>/data/package_catalog/`.
+- Cached package archives live under `<storage_root>/data/package_cache/`.
 - Inside that root, `output/` is the default export/output folder for generated files.
 - `DNGINE_HOME` can override the storage root for development or portable testing.
 - `MICRO_TOOLKIT_HOME` is still accepted as a backward-compatible override.
@@ -320,9 +368,10 @@ The plugin engine is built around:
 - plugin-local sidecar dependencies
 - optional headless command registration
 - optional elevated capability registration
+- signed first-party package installation and verification
 - import/export of custom plugin bundles
 - manifest-verified builtin plugin discovery in packaged builds
-- custom plugin trust review and quarantine state
+- signed-plugin verification plus custom plugin trust review and quarantine state
 
 That means a plugin can contribute:
 
@@ -337,13 +386,15 @@ without changing the core shell.
 
 In packaged `onedir` builds, bundled first-party plugins are verified against `builtin_plugin_manifest.json` before they are treated as builtin. Extra or modified files dropped into the shipped plugin folder do not automatically become first-class app plugins.
 
-### Custom Plugin Safety Model
+### Plugin Safety Model
 
-Custom plugins are supported, but they are not treated like built-in code.
+Builtin, signed, and custom plugins do not all follow the same trust path.
 
 DNgine now applies several safety measures:
 
-- packaged first-party plugins are identified through a build-generated manifest
+- packaged builtin plugins are identified through a build-generated manifest
+- signed first-party packages must pass signature verification against the bundled signer trust store
+- signed packages are trusted by default after verification but still participate in failure quarantine
 - imported plugins start disabled and untrusted
 - manually dropped custom plugins are still discovered as untrusted
 - custom plugins stay out of the sidebar until explicitly trusted
@@ -363,10 +414,23 @@ Trusted plugins still run Python code in the app process. The review and quarant
 DNgine is designed around three plugin origins:
 
 - `builtin`: shipped with the app and verified by the build manifest
-- `signed`: reserved for future signer-verified third-party distribution
+- `signed`: signer-verified first-party or third-party package installs
 - `custom`: local or imported plugins that go through review and trust controls
 
-At the moment, `builtin` and `custom` are active. The `signed` tier is reserved in the architecture so a future trusted-signer flow can be added without redesigning the whole plugin model.
+Current shipping model:
+
+- `builtin` contains system pages plus the curated core 8 tool set
+- `signed` carries the rest of the first-party tools as installable packages grouped by category
+- `custom` remains the flexible local/imported path for development and user-created extensions
+
+The first-party package groups are also the in-app category labels for non-system tools:
+
+- `Files & Storage`
+- `Office & Docs`
+- `Network & Security`
+- `Web Dev`
+- `Media & Images`
+- `Data & Analysis`
 
 ## Multilingual and RTL Support
 
@@ -475,6 +539,20 @@ Stop the broker:
 ```bash
 python -m dngine broker elevated stop
 ```
+
+## First-Party Package Management
+
+Signed first-party packages can be managed from `Settings -> Plugins` or from the CLI.
+
+Available package commands:
+
+- `python -m dngine packages list`
+- `python -m dngine packages refresh`
+- `python -m dngine packages install <package_id>`
+- `python -m dngine packages remove <package_id>`
+- `python -m dngine packages updates`
+
+Manual `.zip` import in `Settings -> Plugins` now recognizes signed first-party archives and installs them into the signed package area instead of treating them as custom plugins.
 
 ## Custom Plugin Development
 
@@ -968,6 +1046,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.9.0 | 2026-04-01 | Reorganized the shipped plugin set into system pages plus a curated core 8 builtin tool set, moved all remaining first-party tools into signed installable packages ***(debloated)*** grouped by the new in-app categories (`Files & Storage`, `Office & Docs`, `Network & Security`, `Web Dev`, `Media & Images`, `Data & Analysis`), activated signer-verified `signed` plugins end to end with catalog/install/update/remove flows, and slimmed the base runtime dependencies so optional package deps are delivered through signed package sidecars instead of the base app. |
 | 0.8.8 | 2026-04-01 | Added the built-in `Web Scraper` data utility for public static HTML pages with CSS-selector extraction, in-app result tables, detail previews, right-click copy/open/export actions, and a new headless `tool.web_scraper.run` command. Added runtime dependencies `requests` and `beautifulsoup4` for scraping support and updated the setup metadata/docs accordingly. |
 | 0.8.7 | 2026-03-31 | Standardized global drag-and-drop path inputs across plugins utilizing native PathLineEdit and new DroppableListWidget / DroppableTableWidget. Fixed PySide6 QPixmap typing crash when clearing image previews. |
 | 0.8.6 | 2026-03-31 | Added the new `Code Factory` IT utility for folder-based code cleanup and safe-to-share preparation, with grouped toggles for cleanup, comment stripping, sanitization, and pack operations, a preview-before-apply workflow, detailed in-app result rows, drag-and-drop folder targeting, and single-run undo for the latest apply session. Added Global reload button in the header card for the current page. |

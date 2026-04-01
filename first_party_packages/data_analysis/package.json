@@ -1,0 +1,71 @@
+{
+  "package_id": "data_analysis",
+  "display_name": "Data & Analysis",
+  "display_name_ar": "البيانات والتحليل",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "chart_builder",
+    "data_link_auditor",
+    "deep_scan_auditor",
+    "folder_mapper",
+    "sequence_auditor"
+  ],
+  "plugins": [
+    {
+      "plugin_id": "chart_builder",
+      "entry": "plugins/chart_builder.py",
+      "dependency_manifest": "plugins/chart_builder.deps",
+      "files": [
+        "plugins/chart_builder.py",
+        "plugins/chart_builder.en.json",
+        "plugins/chart_builder.ar.json",
+        "plugins/chart_builder.deps"
+      ]
+    },
+    {
+      "plugin_id": "data_link_auditor",
+      "entry": "plugins/data_link_auditor.py",
+      "dependency_manifest": "plugins/data_link_auditor.deps",
+      "files": [
+        "plugins/data_link_auditor.py",
+        "plugins/data_link_auditor.en.json",
+        "plugins/data_link_auditor.ar.json",
+        "plugins/data_link_auditor.deps"
+      ]
+    },
+    {
+      "plugin_id": "deep_scan_auditor",
+      "entry": "plugins/deep_scan_auditor.py",
+      "dependency_manifest": "plugins/deep_scan_auditor.deps",
+      "files": [
+        "plugins/deep_scan_auditor.py",
+        "plugins/deep_scan_auditor.en.json",
+        "plugins/deep_scan_auditor.ar.json",
+        "plugins/deep_scan_auditor.deps"
+      ]
+    },
+    {
+      "plugin_id": "folder_mapper",
+      "entry": "plugins/folder_mapper.py",
+      "dependency_manifest": "plugins/folder_mapper.deps",
+      "files": [
+        "plugins/folder_mapper.py",
+        "plugins/folder_mapper.en.json",
+        "plugins/folder_mapper.ar.json",
+        "plugins/folder_mapper.deps"
+      ]
+    },
+    {
+      "plugin_id": "sequence_auditor",
+      "entry": "plugins/sequence_auditor.py",
+      "dependency_manifest": "plugins/sequence_auditor.deps",
+      "files": [
+        "plugins/sequence_auditor.py",
+        "plugins/sequence_auditor.en.json",
+        "plugins/sequence_auditor.ar.json",
+        "plugins/sequence_auditor.deps"
+      ]
+    }
+  ]
+}

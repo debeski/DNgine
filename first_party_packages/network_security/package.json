@@ -1,0 +1,33 @@
+{
+  "package_id": "network_security",
+  "display_name": "Network & Security",
+  "display_name_ar": "الشبكات والأمان",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "net_scan",
+    "wifi_profiles",
+    "privacy_shred",
+    "sys_audit"
+  ],
+  "plugins": [
+    {
+      "plugin_id": "net_scan",
+      "entry": "plugins/network_scanner.py",
+      "files": [
+        "plugins/network_scanner.py",
+        "plugins/network_scanner.en.json",
+        "plugins/network_scanner.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "wifi_profiles",
+      "entry": "plugins/wifi_profiles.py",
+      "files": [
+        "plugins/wifi_profiles.py",
+        "plugins/wifi_profiles.en.json",
+        "plugins/wifi_profiles.ar.json"
+      ]
+    }
+  ]
+}

@@ -44,6 +44,17 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_run = workflows_sub.add_parser("run", help="Run a workflow from the CLI")
     workflow_run.add_argument("name")
 
+    packages = subparsers.add_parser("packages", help="Inspect first-party package catalog state")
+    packages_sub = packages.add_subparsers(dest="packages_command", required=True)
+    packages_sub.add_parser("list", help="List catalog packages and install state")
+    packages_sub.add_parser("updates", help="List packages with newer catalog versions available")
+    packages_refresh = packages_sub.add_parser("refresh", help="Refresh the first-party package catalog")
+    packages_refresh.add_argument("--source", default="", help="Optional local path or URL to the catalog JSON")
+    packages_install = packages_sub.add_parser("install", help="Install one signed first-party package")
+    packages_install.add_argument("package_id")
+    packages_remove = packages_sub.add_parser("remove", help="Remove one installed signed first-party package")
+    packages_remove.add_argument("package_id")
+
     commands = subparsers.add_parser("commands", help="List registered workflow/CLI commands")
     commands_sub = commands.add_subparsers(dest="commands_command", required=True)
     commands_sub.add_parser("list", help="List commands")
@@ -116,6 +127,23 @@ def execute_cli(args) -> int:
                 log_cb=lambda message: print(message),
             )
             print(json.dumps(services.serialize_result(result), indent=2, ensure_ascii=False))
+            return 0
+
+    if args.command == "packages":
+        if args.packages_command == "list":
+            print(json.dumps(services.plugin_package_manager.list_catalog_packages(), indent=2, ensure_ascii=False))
+            return 0
+        if args.packages_command == "updates":
+            print(json.dumps(services.plugin_package_manager.available_updates(), indent=2, ensure_ascii=False))
+            return 0
+        if args.packages_command == "refresh":
+            print(json.dumps(services.plugin_package_manager.refresh_catalog(args.source or None), indent=2, ensure_ascii=False))
+            return 0
+        if args.packages_command == "install":
+            print(json.dumps(services.serialize_result(services._install_catalog_package(args.package_id)), indent=2, ensure_ascii=False))
+            return 0
+        if args.packages_command == "remove":
+            print(json.dumps(services.serialize_result(services._remove_signed_package(args.package_id)), indent=2, ensure_ascii=False))
             return 0
 
     if args.command == "commands":

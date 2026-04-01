@@ -1,0 +1,54 @@
+{
+  "package_id": "files_storage",
+  "display_name": "Files & Storage",
+  "display_name_ar": "الملفات والتخزين",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "batch_renamer",
+    "deep_searcher",
+    "hash_checker",
+    "smart_org",
+    "usage_analyzer"
+  ],
+  "plugins": [
+    {
+      "plugin_id": "batch_renamer",
+      "entry": "plugins/batch_renamer.py",
+      "files": [
+        "plugins/batch_renamer.py",
+        "plugins/batch_renamer.en.json",
+        "plugins/batch_renamer.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "deep_searcher",
+      "entry": "plugins/deep_searcher.py",
+      "files": [
+        "plugins/deep_searcher.py",
+        "plugins/deep_searcher.en.json",
+        "plugins/deep_searcher.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "smart_org",
+      "entry": "plugins/smart_organizer.py",
+      "files": [
+        "plugins/smart_organizer.py",
+        "plugins/smart_organizer.en.json",
+        "plugins/smart_organizer.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "usage_analyzer",
+      "entry": "plugins/usage_analyzer.py",
+      "dependency_manifest": "plugins/usage_analyzer.deps",
+      "files": [
+        "plugins/usage_analyzer.py",
+        "plugins/usage_analyzer.en.json",
+        "plugins/usage_analyzer.ar.json",
+        "plugins/usage_analyzer.deps"
+      ]
+    }
+  ]
+}

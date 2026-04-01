@@ -1,0 +1,43 @@
+{
+  "package_id": "web_dev",
+  "display_name": "Web Dev",
+  "display_name_ar": "تطوير الويب",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "code_factory",
+    "cred_scanner",
+    "web_scraper"
+  ],
+  "plugins": [
+    {
+      "plugin_id": "code_factory",
+      "entry": "plugins/code_factory.py",
+      "files": [
+        "plugins/code_factory.py",
+        "plugins/code_factory.en.json",
+        "plugins/code_factory.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "cred_scanner",
+      "entry": "plugins/credential_scanner.py",
+      "files": [
+        "plugins/credential_scanner.py",
+        "plugins/credential_scanner.en.json",
+        "plugins/credential_scanner.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "web_scraper",
+      "entry": "plugins/web_scraper.py",
+      "dependency_manifest": "plugins/web_scraper.deps",
+      "files": [
+        "plugins/web_scraper.py",
+        "plugins/web_scraper.en.json",
+        "plugins/web_scraper.ar.json",
+        "plugins/web_scraper.deps"
+      ]
+    }
+  ]
+}

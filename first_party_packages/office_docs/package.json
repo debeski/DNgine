@@ -1,0 +1,37 @@
+{
+  "package_id": "office_docs",
+  "display_name": "Office & Docs",
+  "display_name_ar": "المكتب والمستندات",
+  "signer": "dngine-first-party-dev",
+  "package_version": "0.9.0",
+  "category_plugins": [
+    "doc_bridge",
+    "pdf_suite",
+    "cross_joiner",
+    "cleaner"
+  ],
+  "plugins": [
+    {
+      "plugin_id": "cross_joiner",
+      "entry": "plugins/cross_joiner.py",
+      "dependency_manifest": "plugins/cross_joiner.deps",
+      "files": [
+        "plugins/cross_joiner.py",
+        "plugins/cross_joiner.en.json",
+        "plugins/cross_joiner.ar.json",
+        "plugins/cross_joiner.deps"
+      ]
+    },
+    {
+      "plugin_id": "cleaner",
+      "entry": "plugins/data_cleaner.py",
+      "dependency_manifest": "plugins/data_cleaner.deps",
+      "files": [
+        "plugins/data_cleaner.py",
+        "plugins/data_cleaner.en.json",
+        "plugins/data_cleaner.ar.json",
+        "plugins/data_cleaner.deps"
+      ]
+    }
+  ]
+}

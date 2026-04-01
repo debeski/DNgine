@@ -810,6 +810,41 @@ class CommandCenterPage(QWidget):
         layout.setContentsMargins(20, 20, 20, 10)
         layout.setSpacing(14)
 
+        self.packages_note = QLabel()
+        self._configure_note_label(self.packages_note)
+        layout.addWidget(self.packages_note)
+
+        self.packages_table = QTableWidget(0, 6)
+        self.packages_table.setAlternatingRowColors(True)
+        self.packages_table.verticalHeader().setVisible(False)
+        self.packages_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.packages_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.packages_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.packages_table.customContextMenuRequested.connect(self._show_packages_context_menu)
+        self.packages_table.itemSelectionChanged.connect(self._sync_package_action_buttons)
+        self.packages_table.horizontalHeader().setStretchLastSection(True)
+        self.packages_table.setColumnWidth(0, 220)
+        self.packages_table.setColumnWidth(1, 170)
+        self.packages_table.setColumnWidth(2, 120)
+        self.packages_table.setColumnWidth(3, 110)
+        self.packages_table.setColumnWidth(4, 210)
+        layout.addWidget(self.packages_table)
+
+        self.packages_actions_layout = QGridLayout()
+        self.packages_actions_layout.setHorizontalSpacing(8)
+        self.packages_actions_layout.setVerticalSpacing(8)
+        self.refresh_package_catalog_button = self._make_action_button("sync", self._refresh_package_catalog)
+        self.install_package_button = self._make_action_button("download", self._install_selected_package)
+        self.remove_package_button = self._make_action_button("delete", self._remove_selected_package)
+        self.import_signed_package_button = self._make_action_button("open", self._import_signed_package)
+        self._package_action_buttons = [
+            self.refresh_package_catalog_button,
+            self.install_package_button,
+            self.remove_package_button,
+            self.import_signed_package_button,
+        ]
+        layout.addLayout(self.packages_actions_layout)
+
         self.plugins_note = QLabel()
         self._configure_note_label(self.plugins_note)
         layout.addWidget(self.plugins_note)
@@ -888,6 +923,7 @@ class CommandCenterPage(QWidget):
         self._populate_startup_page_combo(str(self.services.config.get("default_start_plugin") or DASHBOARD_PLUGIN_ID))
         self._render_quick_access_settings()
         self._populate_shortcuts()
+        self._populate_packages_table()
         self._populate_plugin_table()
         self._refresh_autostart_status()
         self._refresh_shortcut_status()
@@ -1244,6 +1280,257 @@ class CommandCenterPage(QWidget):
         self._building_shortcut_table = False
         self._refresh_shortcut_status()
 
+    def _populate_packages_table(self) -> None:
+        entries = self.services.plugin_package_manager.list_catalog_packages()
+        self._package_rows = {}
+        self.packages_table.setRowCount(len(entries))
+        self.packages_table.setHorizontalHeaderLabels(
+            [
+                self.tr("packages.name", "Package"),
+                self.tr("packages.category", "Category"),
+                self.tr("packages.version", "Version"),
+                self.tr("packages.status", "Status"),
+                self.tr("packages.plugins", "Plugins"),
+                self.tr("packages.signer", "Signer"),
+            ]
+        )
+        for row_index, entry in enumerate(entries):
+            package_id = str(entry.get("package_id", "")).strip()
+            self._package_rows[package_id] = dict(entry)
+
+            name_item = QTableWidgetItem(str(entry.get("display_name") or package_id))
+            name_item.setData(Qt.ItemDataRole.UserRole, package_id)
+            name_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 0, name_item)
+
+            category_item = QTableWidgetItem(str(entry.get("category_label", "")))
+            category_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 1, category_item)
+
+            version_text = str(entry.get("installed_version") or entry.get("package_version") or "")
+            version_item = QTableWidgetItem(version_text)
+            version_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 2, version_item)
+
+            status_item = QTableWidgetItem(self._package_status_text(entry))
+            status_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 3, status_item)
+
+            plugins_text = ", ".join(str(item) for item in entry.get("group_plugin_ids", entry.get("plugin_ids", [])))
+            plugins_item = QTableWidgetItem(plugins_text)
+            plugins_item.setToolTip(plugins_text)
+            plugins_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 4, plugins_item)
+
+            signer_item = QTableWidgetItem(str(entry.get("signer", "")))
+            signer_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            self.packages_table.setItem(row_index, 5, signer_item)
+        self.packages_table.resizeColumnToContents(0)
+        self.packages_table.resizeColumnToContents(2)
+        self.packages_table.resizeColumnToContents(3)
+        self.packages_table.resizeColumnToContents(5)
+        self._sync_package_action_buttons()
+
+    def _package_status_text(self, entry: dict[str, object]) -> str:
+        if bool(entry.get("installed")) and bool(entry.get("update_available")):
+            return self.tr("packages.status.update", "Installed · Update Available")
+        if bool(entry.get("installed")):
+            return self.tr("packages.status.installed", "Installed")
+        return self.tr("packages.status.available", "Available")
+
+    def _selected_package_entry(self) -> dict[str, object] | None:
+        items = self.packages_table.selectedItems()
+        if not items:
+            return None
+        row = items[0].row()
+        name_item = self.packages_table.item(row, 0)
+        if name_item is None:
+            return None
+        package_id = str(name_item.data(Qt.ItemDataRole.UserRole) or "").strip()
+        if not package_id:
+            return None
+        return dict(self._package_rows.get(package_id, {}))
+
+    def _sync_package_action_buttons(self) -> None:
+        entry = self._selected_package_entry()
+        has_selection = entry is not None
+        is_installed = bool(entry and entry.get("installed"))
+        self.install_package_button.setEnabled(has_selection)
+        self.remove_package_button.setEnabled(has_selection and is_installed)
+
+    def _show_packages_context_menu(self, position) -> None:
+        index = self.packages_table.indexAt(position)
+        if not index.isValid():
+            return
+        self.packages_table.selectRow(index.row())
+        entry = self._selected_package_entry()
+        if entry is None:
+            return
+        menu = QMenu(self)
+        refresh_action = menu.addAction(self.tr("packages.refresh", "Refresh Catalog"))
+        refresh_action.triggered.connect(self._refresh_package_catalog)
+        install_action = menu.addAction(
+            self.tr(
+                "packages.install_update" if bool(entry.get("installed")) else "packages.install",
+                "Update Package" if bool(entry.get("installed")) else "Install Package",
+            )
+        )
+        install_action.triggered.connect(self._install_selected_package)
+        if bool(entry.get("installed")):
+            remove_action = menu.addAction(self.tr("packages.remove", "Remove Package"))
+            remove_action.triggered.connect(self._remove_selected_package)
+        import_action = menu.addAction(self.tr("packages.import_local", "Import Signed Package..."))
+        import_action.triggered.connect(self._import_signed_package)
+        menu.exec(self.packages_table.viewport().mapToGlobal(position))
+
+    def _refresh_package_catalog(self) -> None:
+        window = self.services.main_window
+        if window is not None:
+            window.begin_loading(self.tr("loading.packages_refresh", "Refreshing package catalog..."))
+
+        def _on_result(payload: object) -> None:
+            result = dict(payload) if isinstance(payload, dict) else {}
+            self._populate_packages_table()
+            QMessageBox.information(
+                self,
+                self.tr("packages.refreshed.title", "Catalog refreshed"),
+                self.tr(
+                    "packages.refreshed.body",
+                    "Loaded {count} first-party packages from the catalog.",
+                    count=str(result.get("count", 0)),
+                ),
+            )
+
+        def _on_error(payload: object) -> None:
+            message = payload.get("message", self.tr("packages.failed.body", "The package operation failed.")) if isinstance(payload, dict) else str(payload)
+            QMessageBox.critical(self, self.tr("packages.failed.title", "Package operation failed"), message)
+
+        def _on_finished() -> None:
+            if window is not None:
+                window.end_loading()
+            self._populate_packages_table()
+
+        self.services.run_task(
+            lambda _context: self.services.plugin_package_manager.refresh_catalog(),
+            on_result=_on_result,
+            on_error=_on_error,
+            on_finished=_on_finished,
+            status_text=self.tr("loading.packages_refresh", "Refreshing package catalog..."),
+        )
+
+    def _install_selected_package(self) -> None:
+        entry = self._selected_package_entry()
+        if entry is None:
+            QMessageBox.information(
+                self,
+                self.tr("packages.selection.title", "Select a package"),
+                self.tr("packages.selection.body", "Select one package from the table first."),
+            )
+            return
+        package_id = str(entry.get("package_id", "")).strip()
+        package_name = str(entry.get("display_name", package_id))
+        window = self.services.main_window
+        if window is not None:
+            window.begin_loading(self.tr("loading.packages_install", "Installing package..."))
+
+        def _on_result(payload: object) -> None:
+            result = dict(payload) if isinstance(payload, dict) else {}
+            self.services.reload_plugins()
+            self._populate_packages_table()
+            self._populate_plugin_table()
+            QMessageBox.information(
+                self,
+                self.tr("packages.installed.title", "Package installed"),
+                self.tr(
+                    "packages.installed.body",
+                    "Installed {package} with {count} plugin(s).",
+                    package=package_name,
+                    count=str(len(result.get("plugin_ids", []))),
+                ),
+            )
+
+        def _on_error(payload: object) -> None:
+            message = payload.get("message", self.tr("packages.failed.body", "The package operation failed.")) if isinstance(payload, dict) else str(payload)
+            QMessageBox.critical(self, self.tr("packages.failed.title", "Package operation failed"), message)
+
+        def _on_finished() -> None:
+            if window is not None:
+                window.end_loading()
+            self._populate_packages_table()
+            self._populate_plugin_table()
+
+        self.services.run_task(
+            lambda _context: self.services._install_catalog_package(package_id),
+            on_result=_on_result,
+            on_error=_on_error,
+            on_finished=_on_finished,
+            status_text=self.tr("loading.packages_install", "Installing package..."),
+        )
+
+    def _remove_selected_package(self) -> None:
+        entry = self._selected_package_entry()
+        if entry is None:
+            QMessageBox.information(
+                self,
+                self.tr("packages.selection.title", "Select a package"),
+                self.tr("packages.selection.body", "Select one package from the table first."),
+            )
+            return
+        if not bool(entry.get("installed")):
+            return
+        package_id = str(entry.get("package_id", "")).strip()
+        package_name = str(entry.get("display_name", package_id))
+        confirmed = confirm_action(
+            self,
+            title=self.tr("packages.remove_confirm.title", "Remove package?"),
+            body=self.tr(
+                "packages.remove_confirm.body",
+                "Remove the installed signed package {package} and its managed dependency runtimes?",
+                package=package_name,
+            ),
+            confirm_text=self.tr("packages.remove", "Remove Package"),
+            cancel_text=self.tr("confirm.cancel", "Cancel"),
+        )
+        if not confirmed:
+            return
+        try:
+            result = self.services._remove_signed_package(package_id)
+        except Exception as exc:
+            QMessageBox.critical(self, self.tr("packages.failed.title", "Package operation failed"), str(exc))
+            return
+        self.services.reload_plugins()
+        self._populate_packages_table()
+        self._populate_plugin_table()
+        QMessageBox.information(
+            self,
+            self.tr("packages.removed.title", "Package removed"),
+            self.tr(
+                "packages.removed.body",
+                "Removed {package} and {count} plugin(s).",
+                package=package_name,
+                count=str(len(result.get("plugin_ids", []))),
+            ),
+        )
+
+    def _import_signed_package(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.tr("packages.import_local", "Import Signed Package..."),
+            str(Path.home()),
+            self.tr("plugins.import_package.filter", "Plugin Package (*.zip)"),
+        )
+        if not file_path:
+            return
+        try:
+            plugin_ids = self.services.plugin_package_manager.import_plugin_package(Path(file_path))
+        except Exception as exc:
+            QMessageBox.critical(self, self.tr("packages.failed.title", "Package operation failed"), str(exc))
+            return
+        self.services.reload_plugins()
+        self._populate_packages_table()
+        self._populate_plugin_table()
+        self._show_plugin_import_result(plugin_ids)
+
     def _populate_plugin_table(self) -> None:
         self._building_plugin_table = True
         try:
@@ -1292,7 +1579,7 @@ class CommandCenterPage(QWidget):
 
                 trusted_item = QTableWidgetItem()
                 trusted_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
-                if spec.source_type != "builtin":
+                if spec.source_type == "custom":
                     trusted_item.setFlags(trusted_flags)
                 else:
                     trusted_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
@@ -1357,6 +1644,7 @@ class CommandCenterPage(QWidget):
         apply_semantic_class(export_check, "transparent_class")
         export_check.setChecked(selected)
         export_check.setToolTip(self.tr("plugins.export", "Select for export"))
+        export_check.setEnabled(spec.source_type == "custom")
         layout.addWidget(export_check)
         return container
 
@@ -1509,9 +1797,9 @@ class CommandCenterPage(QWidget):
         enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else spec.enabled
         hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else spec.hidden
 
-        if spec.source_type == "builtin":
-            trusted = True
-            self._set_plugin_item_check_state(trusted_item, True)
+        if spec.source_type in {"builtin", "signed"}:
+            trusted = spec.trusted
+            self._set_plugin_item_check_state(trusted_item, spec.trusted)
 
         if spec.source_type == "custom" and spec.risk_level == "critical" and (trusted or enabled):
             self.services.plugin_state_manager.quarantine(
@@ -1593,7 +1881,7 @@ class CommandCenterPage(QWidget):
         enabled_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 6))
         hidden_action = menu.addAction(self.tr("plugins.menu.toggle_hidden", "Toggle hidden"))
         hidden_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 7))
-        if spec.source_type != "builtin":
+        if spec.source_type == "custom":
             trusted_action = menu.addAction(self.tr("plugins.menu.toggle_trusted", "Toggle trusted"))
             trusted_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 5))
 
@@ -1639,9 +1927,9 @@ class CommandCenterPage(QWidget):
         spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
         if spec is None:
             return
-        if spec.source_type != "custom":
+        if spec.source_type not in {"custom", "signed"}:
             return
-        if not spec.trusted:
+        if spec.source_type == "custom" and not spec.trusted:
             QMessageBox.warning(
                 self,
                 self.tr("plugins.deps.review_required.title", "Trust required"),
@@ -2037,6 +2325,17 @@ class CommandCenterPage(QWidget):
                         "summary": spec.risk_summary,
                     },
                 )
+            elif spec.source_type == "signed":
+                self.services.plugin_state_manager.set_enabled(spec.plugin_id, True)
+                self.services.plugin_state_manager.set_hidden(spec.plugin_id, False)
+                self.services.plugin_state_manager.set_trusted(spec.plugin_id, True)
+                self.services.plugin_state_manager.set_scan_report(
+                    spec.plugin_id,
+                    {
+                        "risk_level": "low",
+                        "summary": "",
+                    },
+                )
         self.services.reload_plugins()
         QMessageBox.information(self, self.tr("plugins.reset.title", "Plugins reset"), self.tr("plugins.reset.body", "Plugin overrides and states were reset to their defaults."))
 
@@ -2308,8 +2607,8 @@ class CommandCenterPage(QWidget):
             trusted = trusted_item.checkState() == Qt.CheckState.Checked if trusted_item is not None else spec.trusted
             enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else True
             hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else False
-            if spec.source_type == "builtin":
-                trusted = True
+            if spec.source_type in {"builtin", "signed"}:
+                trusted = spec.trusted
             if spec.source_type == "custom" and spec.risk_level == "critical":
                 trusted = False
                 enabled = False
@@ -2417,6 +2716,8 @@ class CommandCenterPage(QWidget):
 
     def _show_plugin_import_result(self, plugin_ids: list[str]) -> None:
         dependency_plugins: list[str] = []
+        signed_plugins: list[str] = []
+        custom_plugins: list[str] = []
         for plugin_id in plugin_ids:
             spec = self.services.plugin_manager.get_spec(plugin_id, include_disabled=True)
             if spec is None:
@@ -2424,18 +2725,35 @@ class CommandCenterPage(QWidget):
             summary = self._plugin_dependency_summary(spec)
             if summary.has_manifest:
                 dependency_plugins.append(self.services.plugin_display_name(spec))
-        body = self.tr(
-            "plugins.imported.body",
-            "Imported plugins: {plugins}. They were added disabled and untrusted pending review.",
-            plugins=", ".join(plugin_ids),
-        )
+            if spec.source_type == "signed":
+                signed_plugins.append(self.services.plugin_display_name(spec))
+            else:
+                custom_plugins.append(self.services.plugin_display_name(spec))
+        sections: list[str] = []
+        if signed_plugins:
+            sections.append(
+                self.tr(
+                    "plugins.imported.signed.body",
+                    "Installed signed first-party plugins: {plugins}. They were verified and added to the app immediately.",
+                    plugins=", ".join(signed_plugins),
+                )
+            )
+        if custom_plugins:
+            sections.append(
+                self.tr(
+                    "plugins.imported.body",
+                    "Imported plugins: {plugins}. They were added disabled and untrusted pending review.",
+                    plugins=", ".join(custom_plugins),
+                )
+            )
+        body = "\n\n".join(section for section in sections if section)
         if dependency_plugins:
             body = "\n\n".join(
                 [
                     body,
                     self.tr(
                         "plugins.imported.deps_body",
-                        "Dependency sidecars were detected for: {plugins}. Review and trust those plugins first, then right-click a row to install or repair dependencies.",
+                        "Dependency sidecars were detected for: {plugins}. Use the plugin context menu to install or repair dependencies after the package or plugin is in place.",
                         plugins=", ".join(dependency_plugins),
                     ),
                 ]
@@ -2454,7 +2772,7 @@ class CommandCenterPage(QWidget):
         self._export_specs(specs)
 
     def _export_all_plugins(self) -> None:
-        specs = self.services.manageable_plugin_specs(include_disabled=True)
+        specs = [spec for spec in self.services.manageable_plugin_specs(include_disabled=True) if spec.source_type == "custom"]
         self._export_specs(specs)
 
     def _export_specs(self, specs) -> None:
@@ -2485,6 +2803,7 @@ class CommandCenterPage(QWidget):
         specs_by_id = {
             spec.plugin_id: spec
             for spec in self.services.manageable_plugin_specs(include_disabled=True)
+            if spec.source_type == "custom"
         }
         selected = []
         for row_index in range(self.plugins_table.rowCount()):
@@ -2605,10 +2924,24 @@ class CommandCenterPage(QWidget):
                 "Application shortcuts are always available while the app is focused. Global shortcuts are optional, may depend on desktop permissions, and shortcut edits apply immediately.",
             )
         )
+        self.packages_note.setText(
+            self.tr(
+                "packages.note",
+                "Browse the signed first-party package catalog here. Install optional groups on demand, refresh the catalog, or import a signed package archive directly.",
+            )
+        )
+        self.refresh_package_catalog_button.setText(self.tr("packages.refresh", "Refresh Catalog"))
+        self.install_package_button.setText(self.tr("packages.install", "Install Package"))
+        self.remove_package_button.setText(self.tr("packages.remove", "Remove Package"))
+        self.import_signed_package_button.setText(self.tr("packages.import_local", "Import Signed Package..."))
+        self.refresh_package_catalog_button.setToolTip(self.refresh_package_catalog_button.text())
+        self.install_package_button.setToolTip(self.install_package_button.text())
+        self.remove_package_button.setToolTip(self.remove_package_button.text())
+        self.import_signed_package_button.setToolTip(self.import_signed_package_button.text())
         self.plugins_note.setText(
             self.tr(
                 "plugins.note",
-                "Manage built-in and custom plugins here. Import plugin packages for the cleanest sharing flow, then use the table and context menu for direct trust, enabled, hidden, and display updates. Loose file and folder imports remain available for development and manual workflows.",
+                "Manage built-in, signed, and custom plugins here. Signed first-party packages install from the catalog above, while loose file and folder imports remain available for development and manual workflows.",
             )
         )
         self.import_package_button.setText(self.tr("plugins.import_package_button", "Import Package"))
@@ -2629,6 +2962,7 @@ class CommandCenterPage(QWidget):
         self.general_reset_button.setText(self.tr("reset", "Reset defaults"))
         self.shortcuts_reset_button.setText(self.tr("shortcuts.reset", "Reset shortcuts"))
         self._populate_shortcuts()
+        self._populate_packages_table()
         self._populate_plugin_table()
         self._refresh_autostart_status()
         self._refresh_backup_status()
@@ -2643,6 +2977,7 @@ class CommandCenterPage(QWidget):
 
     def _handle_tab_changed(self, index: int) -> None:
         if self.tabs.widget(index) is self.plugins_tab:
+            self._populate_packages_table()
             self._populate_plugin_table()
         self._schedule_responsive_refresh()
         self._schedule_page_geometry_refresh()
@@ -2784,10 +3119,23 @@ class CommandCenterPage(QWidget):
             widget = item.widget()
             if widget is not None:
                 widget.setParent(self.plugins_tab)
+        while self.packages_actions_layout.count():
+            item = self.packages_actions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self.plugins_tab)
         available_width = min(
             visible_parent_width(self),
             self.plugins_tab.contentsRect().width() or self.plugins_tab.width() or self.width(),
         )
+        package_button_widths = [button.sizeHint().width() for button in self._package_action_buttons]
+        package_spacing = self.packages_actions_layout.horizontalSpacing()
+        required_package_width = sum(package_button_widths) + (package_spacing * max(0, len(package_button_widths) - 1))
+        package_columns = len(package_button_widths) if available_width >= required_package_width else 2
+        for index, button in enumerate(self._package_action_buttons):
+            self.packages_actions_layout.addWidget(button, index // package_columns, index % package_columns)
+        for column in range(package_columns):
+            self.packages_actions_layout.setColumnStretch(column, 1)
         visible_plugin_buttons = self._visible_plugin_action_buttons()
         plugin_button_widths = [button.sizeHint().width() for button in visible_plugin_buttons]
         plugin_spacing = self.plugins_actions_layout.horizontalSpacing()
@@ -2829,6 +3177,7 @@ class CommandCenterPage(QWidget):
         self._sync_theme_picker()
         self._sync_font_picker()
         if self.tabs.currentWidget() is self.plugins_tab:
+            self._populate_packages_table()
             self._populate_plugin_table()
 
     def _apply_theme_styles(self) -> None:

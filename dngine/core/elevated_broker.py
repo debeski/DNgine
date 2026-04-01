@@ -168,7 +168,9 @@ def _backup_restore_capability(context: ElevatedCapabilityContext, payload: dict
 
 def load_elevated_capability_registry(
     plugins_root: Path,
+    signed_plugins_root: Path,
     custom_plugins_root: Path,
+    signed_signers_path: Path,
     plugin_state_path: Path,
     data_root: Path,
     output_root: Path,
@@ -183,10 +185,12 @@ def load_elevated_capability_registry(
     state_manager = PluginStateManager(plugin_state_path)
     plugin_manager = PluginManager(
         plugins_root,
+        signed_plugins_root,
         custom_plugins_root,
         state_manager,
         builtin_manifest_path=builtin_manifest_path,
         enforce_builtin_manifest=enforce_builtin_manifest,
+        signed_signers_path=signed_signers_path,
     )
     for spec in plugin_manager.discover_plugins():
         try:
@@ -269,6 +273,8 @@ class ElevatedBrokerManager(QObject):
         plugins_root: Path,
         builtin_manifest_path: Path,
         custom_plugins_root: Path,
+        signed_plugins_root: Path,
+        signed_signers_path: Path,
         plugin_state_path: Path,
         logger,
     ):
@@ -279,6 +285,8 @@ class ElevatedBrokerManager(QObject):
         self.plugins_root = Path(plugins_root)
         self.builtin_manifest_path = Path(builtin_manifest_path)
         self.custom_plugins_root = Path(custom_plugins_root)
+        self.signed_plugins_root = Path(signed_plugins_root)
+        self.signed_signers_path = Path(signed_signers_path)
         self.plugin_state_path = Path(plugin_state_path)
         self.logger = logger
         self.runtime_root = self.data_root / "runtime"
@@ -314,7 +322,9 @@ class ElevatedBrokerManager(QObject):
         if self._cached_capabilities is None:
             registry = load_elevated_capability_registry(
                 self.plugins_root,
+                self.signed_plugins_root,
                 self.custom_plugins_root,
+                self.signed_signers_path,
                 self.plugin_state_path,
                 self.data_root,
                 self.output_root,
@@ -489,6 +499,10 @@ class ElevatedBrokerManager(QObject):
             str(self.builtin_manifest_path),
             "--custom-plugins-root",
             str(self.custom_plugins_root),
+            "--signed-plugins-root",
+            str(self.signed_plugins_root),
+            "--signed-signers-path",
+            str(self.signed_signers_path),
             "--plugin-state-path",
             str(self.plugin_state_path),
         )
@@ -536,6 +550,8 @@ def build_elevated_broker_parser(subparsers) -> None:
     broker.add_argument("--plugins-root", required=True)
     broker.add_argument("--builtin-manifest-path", required=True)
     broker.add_argument("--custom-plugins-root", required=True)
+    broker.add_argument("--signed-plugins-root", required=True)
+    broker.add_argument("--signed-signers-path", required=True)
     broker.add_argument("--plugin-state-path", required=True)
 
 
@@ -543,7 +559,9 @@ def run_elevated_broker_service(args) -> int:
     runtime = ElevatedBrokerRuntime(Path(args.data_root), Path(args.output_root), Path(args.assets_root))
     registry = load_elevated_capability_registry(
         Path(args.plugins_root),
+        Path(args.signed_plugins_root),
         Path(args.custom_plugins_root),
+        Path(args.signed_signers_path),
         Path(args.plugin_state_path),
         Path(args.data_root),
         Path(args.output_root),

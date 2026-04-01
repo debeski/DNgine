@@ -27,12 +27,16 @@ echo Installing build dependencies...
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt pyinstaller
 
-echo Generating builtin plugin manifest...
-python tools\generate_builtin_plugin_manifest.py
-
 echo Cleaning previous build artifacts...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
+if exist dngine.egg-info rmdir /s /q dngine.egg-info
+
+echo Building signed first-party packages...
+python tools\build_first_party_packages.py
+
+echo Generating builtin plugin manifest...
+python tools\generate_builtin_plugin_manifest.py
 
 echo Building Windows onedir package...
 python -m PyInstaller --noconfirm --clean dngine.spec

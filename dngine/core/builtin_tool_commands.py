@@ -11,6 +11,11 @@ from dngine.core.command_runtime import HeadlessTaskContext, describe_command_re
 
 
 def register_builtin_tool_commands(registry, services) -> None:
+    available_plugin_ids = {
+        spec.plugin_id
+        for spec in services.plugin_manager.discover_plugins(include_disabled=True)
+    }
+
     def register_task_command(
         command_id: str,
         title: str,
@@ -22,6 +27,9 @@ def register_builtin_tool_commands(registry, services) -> None:
         argument_adapter=None,
         result_adapter=None,
     ) -> None:
+        if plugin_id not in available_plugin_ids:
+            return
+
         def handler(**kwargs):
             module = importlib.import_module(module_path)
             task_fn = getattr(module, function_name)
@@ -64,7 +72,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run System Audit",
         "Collect local OS, CPU, memory, and disk details.",
         "sys_audit",
-        "dngine.plugins.it_tools.system_audit",
+        "dngine.plugins.core_tools.system_audit",
         "gather_system_audit",
     )
     register_task_command(
@@ -72,7 +80,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Chart Builder",
         "Shape workbook data, build charts, and return a result table.",
         "chart_builder",
-        "dngine.plugins.data_tools.chart_builder",
+        "first_party_packages.data_analysis.plugins.chart_builder",
         "run_chart_builder_task",
         argument_adapter=chart_builder_payload,
     )
@@ -81,7 +89,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Quick Analytics",
         "Backward-compatible alias for Chart Builder.",
         "chart_builder",
-        "dngine.plugins.data_tools.chart_builder",
+        "first_party_packages.data_analysis.plugins.chart_builder",
         "run_chart_builder_task",
         argument_adapter=chart_builder_payload,
     )
@@ -90,7 +98,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Code Exploit Scanner",
         "Scan a folder for exposed secrets, risky files, and exploit indicators.",
         "cred_scanner",
-        "dngine.plugins.it_tools.credential_scanner",
+        "first_party_packages.web_dev.plugins.credential_scanner",
         "run_credential_scan",
     )
     register_task_command(
@@ -98,7 +106,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Network Scan",
         "Scan a host across the requested TCP ports.",
         "net_scan",
-        "dngine.plugins.it_tools.network_scanner",
+        "first_party_packages.network_security.plugins.network_scanner",
         "run_network_scan",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -110,8 +118,8 @@ def register_builtin_tool_commands(registry, services) -> None:
         "tool.shredder.run",
         "Shred File",
         "Securely overwrite and delete a file.",
-        "shredder",
-        "dngine.plugins.it_tools.privacy_shredder",
+        "privacy_shred",
+        "dngine.plugins.core_tools.privacy_shredder",
         "secure_shred_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -123,7 +131,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Folder Mapper",
         "Map file metadata from a folder tree into an Excel workbook.",
         "folder_mapper",
-        "dngine.plugins.data_tools.folder_mapper",
+        "first_party_packages.data_analysis.plugins.folder_mapper",
         "map_folder_contents_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -135,7 +143,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Data-Link Auditor",
         "Audit workbook-linked filenames against one or more source folders.",
         "data_link_auditor",
-        "dngine.plugins.data_tools.data_link_auditor",
+        "first_party_packages.data_analysis.plugins.data_link_auditor",
         "audit_data_links_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -151,7 +159,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Sequence Auditor",
         "Audit a folder listing or workbook column for sequence gaps.",
         "sequence_auditor",
-        "dngine.plugins.data_tools.sequence_auditor",
+        "first_party_packages.data_analysis.plugins.sequence_auditor",
         "sequence_auditor_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -163,7 +171,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Deep-Scan Auditor (Excel)",
         "Audit workbook rows for duplicate combinations.",
         "deep_scan_auditor",
-        "dngine.plugins.data_tools.deep_scan_auditor",
+        "first_party_packages.data_analysis.plugins.deep_scan_auditor",
         "audit_excel_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -175,7 +183,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Deep-Scan Auditor (Folder)",
         "Audit folder trees for duplicate files.",
         "deep_scan_auditor",
-        "dngine.plugins.data_tools.deep_scan_auditor",
+        "first_party_packages.data_analysis.plugins.deep_scan_auditor",
         "audit_folder_duplicates_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -188,7 +196,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Data Cleaner",
         "Clean an Excel workbook and write a new output file.",
         "cleaner",
-        "dngine.plugins.office_tools.data_cleaner",
+        "first_party_packages.office_docs.plugins.data_cleaner",
         "sanitize_data_task",
         argument_adapter=lambda svc, payload: {
             "file_path": payload["file_path"],
@@ -203,7 +211,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Cross Join",
         "Compare two workbooks and export matches and deltas.",
         "cross_joiner",
-        "dngine.plugins.office_tools.cross_joiner",
+        "first_party_packages.office_docs.plugins.cross_joiner",
         "cross_join_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -215,7 +223,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Merge PDFs",
         "Merge multiple PDF files into one output document.",
         "pdf_suite",
-        "dngine.plugins.office_tools.pdf_suite",
+        "dngine.plugins.core_tools.pdf_suite",
         "merge_pdfs_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -228,7 +236,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Batch Rename Files",
         "Rename files in bulk using text or regex replacement.",
         "batch_renamer",
-        "dngine.plugins.file_tools.batch_renamer",
+        "first_party_packages.files_storage.plugins.batch_renamer",
         "batch_rename_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -241,7 +249,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Organize Files",
         "Organize root-level files by extension or date.",
         "smart_org",
-        "dngine.plugins.file_tools.smart_organizer",
+        "first_party_packages.files_storage.plugins.smart_organizer",
         "organize_files_task",
     )
     register_task_command(
@@ -249,7 +257,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Undo Organization",
         "Undo the last saved smart organization run.",
         "smart_org",
-        "dngine.plugins.file_tools.smart_organizer",
+        "first_party_packages.files_storage.plugins.smart_organizer",
         "undo_organization_task",
     )
     register_task_command(
@@ -257,7 +265,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Run Deep Search",
         "Search file contents under a folder tree.",
         "deep_searcher",
-        "dngine.plugins.file_tools.deep_searcher",
+        "first_party_packages.files_storage.plugins.deep_searcher",
         "run_deep_search_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -269,7 +277,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Analyze Usage",
         "Summarize top-level file and folder sizes.",
         "usage_analyzer",
-        "dngine.plugins.file_tools.usage_analyzer",
+        "first_party_packages.files_storage.plugins.usage_analyzer",
         "analyze_usage_task",
     )
     register_task_command(
@@ -277,7 +285,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Transform Images",
         "Batch transform images using rotate, resize, and format options.",
         "img_trans",
-        "dngine.plugins.media_tools.image_transformer",
+        "dngine.plugins.core_tools.image_transformer",
         "run_image_transform_task",
         argument_adapter=lambda svc, payload: {
             **payload,
@@ -291,7 +299,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Tag Images",
         "Batch apply date/name tags to images.",
         "tagger",
-        "dngine.plugins.media_tools.image_tagger",
+        "dngine.plugins.core_tools.image_tagger",
         "run_image_tagger_task",
         argument_adapter=lambda svc, payload: {
             **payload,
