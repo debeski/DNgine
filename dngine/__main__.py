@@ -1,4 +1,23 @@
+from pathlib import Path
 import sys
+
+
+def _bootstrap_source_tree_imports() -> None:
+    """Allow `python dngine` to run from a source checkout.
+
+    When Python is pointed at the package directory directly, it executes
+    `dngine/__main__.py` as a script and sets `sys.path[0]` to the package
+    directory instead of the project root. Absolute imports like
+    `from dngine.core...` then stop resolving unless we prepend the parent
+    directory ourselves.
+    """
+    if __package__ not in {None, ""}:
+        return
+
+    project_root = Path(__file__).resolve().parent.parent
+    project_root_text = str(project_root)
+    if project_root_text not in sys.path:
+        sys.path.insert(0, project_root_text)
 
 
 def _suppress_macos_dock_icon() -> None:
@@ -40,6 +59,8 @@ def _suppress_macos_dock_icon() -> None:
 # ── Early dock-icon suppression for background sub-processes ──────────
 # This MUST run before any PySide6 import, because importing PySide6 on
 # macOS initializes NSApplication which immediately creates a dock icon.
+_bootstrap_source_tree_imports()
+
 if len(sys.argv) >= 2 and sys.argv[1] in {"hotkey-helper", "elevated-broker"}:
     _suppress_macos_dock_icon()
 

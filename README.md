@@ -130,6 +130,12 @@ On Windows PowerShell, if you prefer calling the venv interpreter directly:
 .\venv\Scripts\python.exe -m dngine
 ```
 
+On macOS / Linux, the equivalent direct venv command is:
+
+```bash
+./venv/bin/python -m dngine
+```
+
 Launch directly into GUI mode:
 
 ```bash
