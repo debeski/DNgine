@@ -174,16 +174,25 @@ class PluginDependencyManager:
         self.reset(spec.plugin_id)
         return removed
 
-    def install_for_spec(self, spec: PluginSpec, context, *, repair: bool = False) -> dict[str, str]:
+    def install_for_spec(
+        self,
+        spec: PluginSpec,
+        context,
+        *,
+        repair: bool = False,
+        display_name: str | None = None,
+    ) -> dict[str, str]:
         manifest_path = self.manifest_for_spec(spec)
         if manifest_path is None:
             raise RuntimeError("This plugin does not declare any dependency sidecar.")
         manifest_hash = self._file_hash(manifest_path)
         site_packages = self.site_packages_dir(spec.plugin_id)
         runtime_dir = self.runtime_dir(spec.plugin_id)
+        plugin_label = str(display_name or spec.plugin_id).strip() or spec.plugin_id
 
         if repair and runtime_dir.exists():
-            context.log(f"Clearing previous dependency runtime for '{spec.plugin_id}'.")
+            context.log(f"Clearing previous dependency runtime for {plugin_label}.")
+            context.progress(0.08)
             shutil.rmtree(runtime_dir, ignore_errors=True)
 
         runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -191,7 +200,8 @@ class PluginDependencyManager:
         self._set_state(spec.plugin_id, status="installing", manifest_hash=manifest_hash)
 
         try:
-            context.log(f"Installing dependency sidecar for '{spec.plugin_id}' from {manifest_path.name}.")
+            context.log(f"Installing dependency sidecar for {plugin_label} from {manifest_path.name}.")
+            context.progress(0.16)
             exit_code = self._run_pip_install(manifest_path, site_packages)
             if exit_code != 0:
                 raise RuntimeError(f"pip exited with status {exit_code}.")
@@ -209,11 +219,14 @@ class PluginDependencyManager:
             spec.plugin_id,
             status="installed",
             manifest_hash=manifest_hash,
-            last_error="",
-            last_installed_at=installed_at,
+                last_error="",
+                last_installed_at=installed_at,
         )
+        context.progress(1.0)
+        context.log(f"Dependencies ready for {plugin_label}.")
         return {
             "plugin_id": spec.plugin_id,
+            "plugin_name": plugin_label,
             "manifest_path": str(manifest_path),
             "site_packages": str(site_packages),
             "installed_at": installed_at,

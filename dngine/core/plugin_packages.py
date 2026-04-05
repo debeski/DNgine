@@ -23,15 +23,26 @@ from dngine.core.shell_registry import is_system_component
 CATALOG_FILENAME = "first_party_catalog.json"
 
 
-class _PackageInstallContext:
-    def __init__(self):
-        self.log_messages: list[dict[str, str]] = []
-
-    def log(self, message: str, level: str = "INFO") -> None:
-        self.log_messages.append({"level": str(level), "message": str(message)})
+class _NullTaskContext:
+    def log(self, _message: str, _level: str = "INFO") -> None:
+        return None
 
     def progress(self, _value: float) -> None:
         return None
+
+
+class _ScaledTaskContext:
+    def __init__(self, parent, start: float, end: float):
+        self._parent = parent
+        self._start = float(start)
+        self._end = float(end)
+
+    def log(self, message: str, level: str = "INFO") -> None:
+        self._parent.log(message, level)
+
+    def progress(self, value: float) -> None:
+        clamped = max(0.0, min(1.0, float(value)))
+        self._parent.progress(self._start + ((self._end - self._start) * clamped))
 
 
 class PluginPackageManager:
@@ -221,10 +232,13 @@ class PluginPackageManager:
     def available_updates(self) -> list[dict[str, object]]:
         return [entry for entry in self.list_catalog_packages() if bool(entry.get("update_available"))]
 
-    def install_catalog_package(self, package_id: str) -> dict[str, object]:
+    def install_catalog_package(self, package_id: str, context=None) -> dict[str, object]:
         package_id = str(package_id or "").strip()
         if not package_id:
             raise ValueError("package_id is required.")
+        task_context = self._task_context(context)
+        task_context.progress(0.02)
+        task_context.log(f"Resolving package '{package_id}' from the catalog.")
         catalog = self._load_catalog_payload()
         entry = next(
             (
@@ -236,18 +250,41 @@ class PluginPackageManager:
         )
         if entry is None:
             raise ValueError(f"Unknown package id: {package_id}")
+        package_label = str(entry.get("display_name", package_id)).strip() or package_id
+        task_context.progress(0.08)
+        task_context.log(f"Installing {package_label}: locating package archive.")
         download_target = self._resolve_download_target(entry, catalog)
+        download_kind = self._download_target_kind(download_target)
+        task_context.log(f"Installing {package_label}: {download_kind} package archive.")
         archive_path = self._obtain_archive(download_target, package_id)
-        return self.install_signed_package_archive(archive_path)
+        task_context.progress(0.20)
+        return self.install_signed_package_archive(
+            archive_path,
+            context=task_context,
+            package_label=package_label,
+        )
 
-    def install_signed_package_archive(self, archive_path: Path) -> dict[str, object]:
+    def install_signed_package_archive(
+        self,
+        archive_path: Path,
+        *,
+        context=None,
+        package_label: str | None = None,
+    ) -> dict[str, object]:
+        task_context = self._task_context(context)
+        task_context.progress(0.22)
+        archive_label = str(package_label or Path(archive_path).stem).strip() or "package"
+        task_context.log(f"Installing {archive_label}: verifying package signature.")
         verification = verify_signed_archive(archive_path, self.signers_path)
         manifest = verification.manifest
         package_id = verification.package_id
         if not package_id:
             raise ValueError("Signed package manifest is missing a package id.")
+        package_display_name = str(manifest.get("display_name", archive_label)).strip() or archive_label
         plugins = [entry for entry in manifest.get("plugins", []) if isinstance(entry, dict)]
         self._ensure_manifest_conflicts(plugins, package_id=package_id)
+        task_context.progress(0.32)
+        task_context.log(f"Installing {package_display_name}: extracting plugin files.")
 
         target_dir = self.signed_plugins_root / package_id
         temp_dir = self.signed_plugins_root / f".{package_id}.installing"
@@ -274,7 +311,9 @@ class PluginPackageManager:
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise
 
+        task_context.progress(0.54)
         self.plugin_manager.invalidate_cache(clear_instances=True)
+        task_context.log(f"Installing {package_display_name}: discovering installed plugins.")
         specs = [
             spec
             for spec in self.plugin_manager.discover_plugins(include_disabled=True)
@@ -282,32 +321,72 @@ class PluginPackageManager:
         ]
         plugin_ids = [spec.plugin_id for spec in specs]
         self._initialize_signed_plugins(plugin_ids)
+        task_context.progress(0.62)
         dependency_results: list[dict[str, str]] = []
         dependency_errors: list[dict[str, str]] = []
+        dependency_specs = []
         for spec in specs:
             summary = self.dependency_manager.summary_for_spec(spec)
             if not summary.has_manifest:
                 continue
-            try:
-                repair = self.dependency_manager.runtime_dir(spec.plugin_id).exists()
-                dependency_results.append(
-                    self.dependency_manager.install_for_spec(
-                        spec,
-                        _PackageInstallContext(),
-                        repair=repair,
-                    )
+            dependency_specs.append(spec)
+        dependency_count = len(dependency_specs)
+        if dependency_count:
+            for index, spec in enumerate(dependency_specs, start=1):
+                plugin_label = self._plugin_display_label(spec)
+                progress_start = 0.62 + ((index - 1) / dependency_count) * 0.26
+                progress_end = 0.62 + (index / dependency_count) * 0.26
+                task_context.progress(progress_start)
+                task_context.log(
+                    f"Installing {package_display_name}: dependencies {index}/{dependency_count} ({plugin_label})."
                 )
-            except Exception as exc:
-                dependency_errors.append({"plugin_id": spec.plugin_id, "error": str(exc)})
+                dependency_context = _ScaledTaskContext(task_context, progress_start, progress_end)
+                repair = self.dependency_manager.runtime_dir(spec.plugin_id).exists()
+                try:
+                    dependency_results.append(
+                        self.dependency_manager.install_for_spec(
+                            spec,
+                            dependency_context,
+                            repair=repair,
+                            display_name=plugin_label,
+                        )
+                    )
+                except Exception as exc:
+                    dependency_errors.append(
+                        {
+                            "plugin_id": spec.plugin_id,
+                            "plugin_name": plugin_label,
+                            "error": str(exc),
+                        }
+                    )
+                    task_context.log(
+                        f"Installing {package_display_name}: dependency setup failed for {plugin_label}: {exc}",
+                        "WARNING",
+                    )
+        else:
+            task_context.log(f"Installing {package_display_name}: no dependency sidecars required.")
+            task_context.progress(0.88)
         self.plugin_manager.invalidate_cache(clear_instances=True)
+        task_context.progress(0.92)
+        if dependency_errors:
+            task_context.log(
+                f"Installed {package_display_name} with {len(plugin_ids)} plugin(s); "
+                f"{len(dependency_errors)} dependency setup step(s) still need attention.",
+                "WARNING",
+            )
+        else:
+            task_context.log(f"Installed {package_display_name} with {len(plugin_ids)} plugin(s).")
         return {
             "package_id": package_id,
+            "display_name": package_display_name,
             "package_version": verification.package_version,
             "signer": verification.signer,
             "plugin_ids": plugin_ids,
             "install_path": str(target_dir),
             "dependency_results": dependency_results,
             "dependency_errors": dependency_errors,
+            "dependency_error_count": len(dependency_errors),
+            "status": "installed_with_dependency_errors" if dependency_errors else "installed",
         }
 
     def remove_package(self, package_id: str) -> dict[str, object]:
@@ -438,6 +517,43 @@ class PluginPackageManager:
             return env_override
         return self.bundled_catalog_path
 
+    def _payload_signature(self, payload: dict[str, object]) -> tuple[tuple[str, str], ...]:
+        rows: list[tuple[str, str]] = []
+        for entry in payload.get("packages", []):
+            if not isinstance(entry, dict):
+                continue
+            package_id = str(entry.get("package_id", "")).strip()
+            package_version = str(entry.get("package_version", "")).strip()
+            if package_id:
+                rows.append((package_id, package_version))
+        return tuple(sorted(rows))
+
+    def _source_matches_bundled(self, source: str | Path | None) -> bool:
+        source_text = str(source or "").strip()
+        if not source_text:
+            return True
+        try:
+            source_path = Path(source_text)
+            if not source_path.is_absolute():
+                source_path = source_path.resolve()
+            return source_path == self.bundled_catalog_path.resolve()
+        except Exception:
+            return False
+
+    def _should_refresh_cached_catalog(self, payload: dict[str, object]) -> bool:
+        default_source = self._default_catalog_source()
+        if not isinstance(default_source, Path):
+            return False
+        if not self._source_matches_bundled(payload.get("source")):
+            return False
+        try:
+            bundled_payload = json.loads(self.bundled_catalog_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        if not isinstance(bundled_payload, dict):
+            return False
+        return self._payload_signature(payload) != self._payload_signature(bundled_payload)
+
     def _load_catalog_payload(self) -> dict[str, object]:
         target = self.catalog_path()
         if target.exists():
@@ -446,6 +562,10 @@ class PluginPackageManager:
             except Exception:
                 payload = {}
             if isinstance(payload, dict):
+                if self._should_refresh_cached_catalog(payload):
+                    self.refresh_catalog()
+                    refreshed = json.loads(target.read_text(encoding="utf-8"))
+                    return refreshed if isinstance(refreshed, dict) else {"packages": []}
                 return payload
         self.refresh_catalog()
         payload = json.loads(target.read_text(encoding="utf-8"))
@@ -495,6 +615,14 @@ class PluginPackageManager:
         if parsed.scheme == "file":
             return Path(urllib.request.url2pathname(parsed.path))
         return Path(target).expanduser().resolve()
+
+    def _download_target_kind(self, target: str) -> str:
+        parsed = urllib.parse.urlparse(target)
+        if parsed.scheme in {"http", "https"}:
+            return "downloading"
+        if parsed.scheme == "file":
+            return "copying local"
+        return "using local"
 
     def _ensure_manifest_conflicts(self, plugins: list[dict[str, object]], *, package_id: str) -> None:
         existing_by_id = {spec.plugin_id: spec for spec in self.plugin_manager.discover_plugins(include_disabled=True)}
@@ -596,3 +724,17 @@ class PluginPackageManager:
             except Exception:
                 parts.append(0)
         return tuple(parts or [0])
+
+    def _plugin_display_label(self, spec: PluginSpec) -> str:
+        try:
+            localized = str(spec.localized_name("en")).strip()
+        except Exception:
+            localized = ""
+        return localized or spec.plugin_id
+
+    def _task_context(self, context):
+        if context is None:
+            return _NullTaskContext()
+        if hasattr(context, "log") and hasattr(context, "progress"):
+            return context
+        return _NullTaskContext()

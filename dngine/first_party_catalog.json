@@ -7,7 +7,7 @@
       "display_name_ar": "البيانات والتحليل",
       "category_label": "Data & Analysis",
       "category_label_ar": "البيانات والتحليل",
-      "package_version": "0.9.0",
+      "package_version": "0.9.1",
       "signer": "dngine-first-party-dev",
       "plugin_ids": [
         "chart_builder",
@@ -23,7 +23,7 @@
         "folder_mapper",
         "sequence_auditor"
       ],
-      "download_url": "../dist/first_party_packages/data_analysis-0.9.0.zip"
+      "download_url": "../dist/first_party_packages/data_analysis-0.9.1.zip"
     },
     {
       "package_id": "files_storage",
@@ -31,7 +31,7 @@
       "display_name_ar": "الملفات والتخزين",
       "category_label": "Files & Storage",
       "category_label_ar": "الملفات والتخزين",
-      "package_version": "0.9.0",
+      "package_version": "0.9.1",
       "signer": "dngine-first-party-dev",
       "plugin_ids": [
         "batch_renamer",
@@ -46,7 +46,29 @@
         "smart_org",
         "usage_analyzer"
       ],
-      "download_url": "../dist/first_party_packages/files_storage-0.9.0.zip"
+      "download_url": "../dist/first_party_packages/files_storage-0.9.1.zip"
+    },
+    {
+      "package_id": "media_images",
+      "display_name": "Media & Images",
+      "display_name_ar": "الوسائط والصور",
+      "category_label": "Media & Images",
+      "category_label_ar": "الوسائط والصور",
+      "package_version": "0.9.1",
+      "signer": "dngine-first-party-dev",
+      "plugin_ids": [
+        "img_trans",
+        "smart_bg",
+        "smart_exif"
+      ],
+      "group_plugin_ids": [
+        "tagger",
+        "color_picker",
+        "img_trans",
+        "smart_bg",
+        "smart_exif"
+      ],
+      "download_url": "../dist/first_party_packages/media_images-0.9.1.zip"
     },
     {
       "package_id": "network_security",
@@ -54,7 +76,7 @@
       "display_name_ar": "الشبكات والأمان",
       "category_label": "Network & Security",
       "category_label_ar": "الشبكات والأمان",
-      "package_version": "0.9.0",
+      "package_version": "0.9.1",
       "signer": "dngine-first-party-dev",
       "plugin_ids": [
         "net_scan",
@@ -66,7 +88,7 @@
         "privacy_shred",
         "sys_audit"
       ],
-      "download_url": "../dist/first_party_packages/network_security-0.9.0.zip"
+      "download_url": "../dist/first_party_packages/network_security-0.9.1.zip"
     },
     {
       "package_id": "office_docs",
@@ -74,7 +96,7 @@
       "display_name_ar": "المكتب والمستندات",
       "category_label": "Office & Docs",
       "category_label_ar": "المكتب والمستندات",
-      "package_version": "0.9.0",
+      "package_version": "0.9.1",
       "signer": "dngine-first-party-dev",
       "plugin_ids": [
         "cross_joiner",
@@ -86,7 +108,7 @@
         "cross_joiner",
         "cleaner"
       ],
-      "download_url": "../dist/first_party_packages/office_docs-0.9.0.zip"
+      "download_url": "../dist/first_party_packages/office_docs-0.9.1.zip"
     },
     {
       "package_id": "web_dev",
@@ -94,7 +116,7 @@
       "display_name_ar": "تطوير الويب",
       "category_label": "Web Dev",
       "category_label_ar": "تطوير الويب",
-      "package_version": "0.9.0",
+      "package_version": "0.9.1",
       "signer": "dngine-first-party-dev",
       "plugin_ids": [
         "code_factory",
@@ -106,7 +128,7 @@
         "cred_scanner",
         "web_scraper"
       ],
-      "download_url": "../dist/first_party_packages/web_dev-0.9.0.zip"
+      "download_url": "../dist/first_party_packages/web_dev-0.9.1.zip"
     }
   ]
 }

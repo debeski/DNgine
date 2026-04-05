@@ -203,7 +203,7 @@ python -m dngine workflows run my_workflow
 - About Info
 - Dev Lab (`Developer mode`)
 
-### Shipped Core 8
+### Shipped Core 7
 
 #### Files & Storage
 
@@ -221,7 +221,6 @@ python -m dngine workflows run my_workflow
 
 #### Media & Images
 
-- Image Transformer
 - Image Tagger
 - Color Picker
 
@@ -249,6 +248,12 @@ python -m dngine workflows run my_workflow
 - Code Factory
 - Code Exploit Scanner
 - Web Scraper
+
+#### Media & Images
+
+- Image Transformer
+- SMART Background Remover
+- SMART EXIF Editor
 
 #### Data & Analysis
 
@@ -1076,6 +1081,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.9.1 | 2026-04-04 | Moved `Image Transformer` out of the base app and into the signed `Media & Images` package, added install-on-demand opening for packaged first-party tools, and introduced the new signed `SMART Background Remover` and `SMART EXIF Editor` media plugins with batch-oriented UIs, dependency sidecars, and last-run EXIF undo support for in-place edits. |
 | 0.9.0 | 2026-04-01 | Reorganized the shipped plugin set into system pages plus a curated core 8 builtin tool set, moved all remaining first-party tools into signed installable packages ***(debloated)*** grouped by the new in-app categories (`Files & Storage`, `Office & Docs`, `Network & Security`, `Web Dev`, `Media & Images`, `Data & Analysis`), activated signer-verified `signed` plugins end to end with catalog/install/update/remove flows, and slimmed the base runtime dependencies so optional package deps are delivered through signed package sidecars instead of the base app. |
 | 0.8.8 | 2026-04-01 | Added the built-in `Web Scraper` data utility for public static HTML pages with CSS-selector extraction, in-app result tables, detail previews, right-click copy/open/export actions, and a new headless `tool.web_scraper.run` command. Added runtime dependencies `requests` and `beautifulsoup4` for scraping support and updated the setup metadata/docs accordingly. |
 | 0.8.7 | 2026-03-31 | Standardized global drag-and-drop path inputs across plugins utilizing native PathLineEdit and new DroppableListWidget / DroppableTableWidget. Fixed PySide6 QPixmap typing crash when clearing image previews. |

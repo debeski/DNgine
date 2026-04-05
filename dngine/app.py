@@ -36,9 +36,11 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QMessageBox,
 )
 
 from dngine.core.confirm_dialog import confirm_action, confirm_action_with_option
+from dngine.core.first_party_packages import fallback_plugin_label, is_optional_first_party_plugin, package_group_for_plugin
 from dngine.core.icon_registry import icon_from_name
 from dngine.core.page_style import apply_semantic_class
 from dngine.core.plugin_manager import PluginSpec
@@ -490,6 +492,7 @@ class DNgineWindow(QMainWindow):
         self._visual_busy_depth = 0
         self._busy_cursor_active = False
         self._busy_status_restore = ""
+        self._busy_status_message = ""
         self._plugin_open_request_id = 0
         self._pending_plugin_open_id: str | None = None
         self._plugin_open_loading_active = False
@@ -811,6 +814,7 @@ class DNgineWindow(QMainWindow):
         self._busy_depth += 1
         self._sync_busy_cursor()
         self.top_refresh_spinner.start()
+        self._busy_status_message = message
         self.status_label.setText(message)
         QApplication.processEvents()
 
@@ -818,8 +822,10 @@ class DNgineWindow(QMainWindow):
         self._busy_depth = max(0, self._busy_depth - 1)
         if (self._busy_depth + self._visual_busy_depth) == 0:
             self.top_refresh_spinner.stop()
-            if self._busy_status_restore:
+            current_status = getattr(self.status_label, "_full_text", self.status_label.text())
+            if self._busy_status_restore and current_status == self._busy_status_message:
                 self.status_label.setText(self._busy_status_restore)
+            self._busy_status_message = ""
         self._sync_busy_cursor()
 
     @contextmanager
@@ -836,6 +842,7 @@ class DNgineWindow(QMainWindow):
         self._visual_busy_depth += 1
         self._sync_busy_cursor()
         self.top_refresh_spinner.start()
+        self._busy_status_message = message
         self.status_label.setText(message)
         QApplication.processEvents()
 
@@ -843,8 +850,10 @@ class DNgineWindow(QMainWindow):
         self._visual_busy_depth = max(0, self._visual_busy_depth - 1)
         if (self._busy_depth + self._visual_busy_depth) == 0:
             self.top_refresh_spinner.stop()
-            if self._busy_status_restore:
+            current_status = getattr(self.status_label, "_full_text", self.status_label.text())
+            if self._busy_status_restore and current_status == self._busy_status_message:
                 self.status_label.setText(self._busy_status_restore)
+            self._busy_status_message = ""
         self._sync_busy_cursor()
 
     def _sync_busy_cursor(self) -> None:
@@ -1543,9 +1552,111 @@ class DNgineWindow(QMainWindow):
         if spec is not None and request_id == self._plugin_open_request_id:
             self._activate_plugin_page(spec)
 
+    def _install_optional_first_party_plugin(self, plugin_id: str) -> bool:
+        plugin_id = str(plugin_id or "").strip()
+        if not plugin_id or not is_optional_first_party_plugin(plugin_id):
+            return False
+        group = package_group_for_plugin(plugin_id)
+        if group is None:
+            return False
+
+        for entry in self.services.plugin_package_manager.list_catalog_packages():
+            if str(entry.get("package_id", "")).strip() == group.package_id and bool(entry.get("installed")):
+                return False
+
+        language = self.services.i18n.current_language()
+        package_label = group.label_ar if language.lower().startswith("ar") else group.label
+        plugin_label = fallback_plugin_label(plugin_id, language) or plugin_id.replace("_", " ").title()
+        confirmed = confirm_action(
+            self,
+            title=self.services.i18n.tr("shell.package_missing.title", "Install package?"),
+            body=self.services.i18n.tr(
+                "shell.package_missing.body",
+                "{plugin} is not installed yet. Install the signed {package} package now?",
+                plugin=plugin_label,
+                package=package_label,
+            ),
+            confirm_text=self.services.i18n.tr("shell.package_missing.install", "Install Package"),
+            cancel_text=self.services.i18n.tr("confirm.cancel", "Cancel"),
+        )
+        if not confirmed:
+            return True
+
+        self.begin_loading(self.services.i18n.tr("shell.package_installing", "Installing package..."))
+
+        def _on_result(payload: object) -> None:
+            result = dict(payload) if isinstance(payload, dict) else {}
+            package_display_name = str(result.get("display_name", package_label))
+            self.services.log(
+                self.services.i18n.tr(
+                    "shell.package_reloading",
+                    "Installing {package}: reloading plugins...",
+                    package=package_display_name,
+                )
+            )
+            self.services.reload_plugins()
+            dependency_errors = [
+                str(item.get("plugin_name") or item.get("plugin_id") or "").strip()
+                for item in result.get("dependency_errors", [])
+                if isinstance(item, dict)
+            ]
+            dependency_errors = [name for name in dependency_errors if name]
+            if dependency_errors:
+                QMessageBox.warning(
+                    self,
+                    self.services.i18n.tr(
+                        "shell.package_partial.title",
+                        "Package installed with warnings",
+                    ),
+                    self.services.i18n.tr(
+                        "shell.package_partial.body",
+                        "Installed {package}, but dependency setup still needs attention for: {failures}.",
+                        package=package_display_name,
+                        failures=", ".join(dependency_errors),
+                    ),
+                )
+                self.services.logger.set_status(
+                    self.services.i18n.tr(
+                        "shell.package_partial.status",
+                        "{package} installed with dependency warnings.",
+                        package=package_display_name,
+                    )
+                )
+            else:
+                self.services.logger.set_status(
+                    self.services.i18n.tr(
+                        "shell.package_installed.status",
+                        "{package} installed.",
+                        package=package_display_name,
+                    )
+                )
+            QTimer.singleShot(0, lambda: self.open_plugin(plugin_id))
+
+        def _on_error(payload: object) -> None:
+            message = payload.get("message", "Package installation failed.") if isinstance(payload, dict) else str(payload)
+            QMessageBox.critical(
+                self,
+                self.services.i18n.tr("shell.package_failed.title", "Package install failed"),
+                message,
+            )
+
+        def _on_finished() -> None:
+            self.end_loading()
+
+        self.services.run_task(
+            lambda context: self.services._install_catalog_package(group.package_id, context=context),
+            on_result=_on_result,
+            on_error=_on_error,
+            on_finished=_on_finished,
+            status_text=self.services.i18n.tr("shell.package_installing", "Installing package..."),
+        )
+        return True
+
     def open_plugin(self, plugin_id: str) -> None:
         spec = self.plugin_by_id.get(plugin_id)
         if spec is None:
+            if self._install_optional_first_party_plugin(plugin_id):
+                return
             return
         needs_build = plugin_id in self._stale_theme_pages or plugin_id not in self.page_indices
         if not needs_build:

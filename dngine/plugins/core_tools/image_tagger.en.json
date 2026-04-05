@@ -14,6 +14,7 @@
   "date_mode.custom": "Custom date",
   "add": "Add Images",
   "clear": "Clear All",
+  "list.remove": "Remove from list",
   "run": "Run Tagger",
   "preview.empty": "Select an image to preview.",
   "preview.default_name": "PREVIEW",

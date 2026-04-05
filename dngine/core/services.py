@@ -83,10 +83,6 @@ class _ShellTaskBridge(QObject):
     def handle_finished(self) -> None:
         self._services._finish_shell_task_progress(self._task_id)
 
-    @Slot(object)
-    def handle_finished_payload(self, _payload: object) -> None:
-        self._services._finish_shell_task_progress(self._task_id)
-
 
 class _TaskCallbackBridge(QObject):
     def __init__(
@@ -908,8 +904,6 @@ class AppServices(QObject):
             shell_task_bridge = _ShellTaskBridge(self, shell_task_id)
             worker._shell_task_bridge = shell_task_bridge
             worker.signals.progress.connect(shell_task_bridge.handle_progress)
-            worker.signals.result.connect(shell_task_bridge.handle_finished_payload)
-            worker.signals.error.connect(shell_task_bridge.handle_finished_payload)
             worker.signals.finished.connect(shell_task_bridge.handle_finished)
         callback_bridge = _TaskCallbackBridge(
             self,
@@ -962,8 +956,8 @@ class AppServices(QObject):
             "file_path": str(spec.file_path),
         }
 
-    def _install_catalog_package(self, package_id: str) -> dict:
-        return self.plugin_package_manager.install_catalog_package(package_id)
+    def _install_catalog_package(self, package_id: str, *, context=None) -> dict:
+        return self.plugin_package_manager.install_catalog_package(package_id, context=context)
 
     def _remove_signed_package(self, package_id: str) -> dict:
         return self.plugin_package_manager.remove_package(package_id)

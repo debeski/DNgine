@@ -32,6 +32,13 @@ class FirstPartyPackageSource:
     category_plugins: tuple[str, ...]
 
 
+PLUGIN_LABELS: dict[str, dict[str, str]] = {
+    "img_trans": {"en": "Image Transformer", "ar": "تحويل الصور"},
+    "smart_bg": {"en": "SMART Background Remover", "ar": "إزالة الخلفية الذكية"},
+    "smart_exif": {"en": "SMART EXIF Editor", "ar": "محرر EXIF الذكي"},
+}
+
+
 PACKAGE_GROUPS: tuple[PackageGroup, ...] = (
     PackageGroup(
         package_id="files_storage",
@@ -61,7 +68,7 @@ PACKAGE_GROUPS: tuple[PackageGroup, ...] = (
         package_id="media_images",
         label="Media & Images",
         label_ar="الوسائط والصور",
-        plugin_ids=("tagger", "img_trans", "color_picker"),
+        plugin_ids=("tagger", "color_picker", "img_trans", "smart_bg", "smart_exif"),
     ),
     PackageGroup(
         package_id="data_analysis",
@@ -77,7 +84,6 @@ CORE_BUILTIN_PLUGIN_IDS = frozenset(
         "doc_bridge",
         "pdf_suite",
         "tagger",
-        "img_trans",
         "privacy_shred",
         "sys_audit",
         "color_picker",
@@ -101,11 +107,31 @@ def package_group_for_plugin(plugin_id: str) -> PackageGroup | None:
     return PLUGIN_TO_GROUP.get(str(plugin_id or "").strip())
 
 
+def package_id_for_plugin(plugin_id: str) -> str | None:
+    group = package_group_for_plugin(plugin_id)
+    if group is None:
+        return None
+    return group.package_id
+
+
+def is_optional_first_party_plugin(plugin_id: str) -> bool:
+    return str(plugin_id or "").strip() in OPTIONAL_FIRST_PARTY_PLUGIN_IDS
+
+
 def category_label_for_plugin(plugin_id: str, language: str = "en") -> str | None:
     group = package_group_for_plugin(plugin_id)
     if group is None:
         return None
     return group.label_ar if str(language or "").lower().startswith("ar") else group.label
+
+
+def fallback_plugin_label(plugin_id: str, language: str = "en") -> str | None:
+    bundle = PLUGIN_LABELS.get(str(plugin_id or "").strip())
+    if not bundle:
+        return None
+    if str(language or "").lower().startswith("ar"):
+        return bundle.get("ar") or bundle.get("en")
+    return bundle.get("en") or bundle.get("ar")
 
 
 def category_bundles_for_plugin(plugin_id: str) -> dict[str, dict[str, str]]:

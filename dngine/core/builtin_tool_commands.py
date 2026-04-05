@@ -285,7 +285,7 @@ def register_builtin_tool_commands(registry, services) -> None:
         "Transform Images",
         "Batch transform images using rotate, resize, and format options.",
         "img_trans",
-        "dngine.plugins.core_tools.image_transformer",
+        "first_party_packages.media_images.plugins.image_transformer",
         "run_image_transform_task",
         argument_adapter=lambda svc, payload: {
             **payload,

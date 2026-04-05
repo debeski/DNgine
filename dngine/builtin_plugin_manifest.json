@@ -16,7 +16,7 @@
       ]
     },
     "core_tools/document_bridge.py": {
-      "sha256": "9470a42d4e215e536e8a34d42d1b3fb7dbaf27d2189011f1b46a924b7db1c4e8",
+      "sha256": "b258ec531de2f605a2c84c65b6f5c1091e93fdffdb5944a84fe57ed56b50e9a3",
       "plugins": [
         {
           "plugin_id": "doc_bridge",
@@ -39,15 +39,6 @@
         {
           "plugin_id": "tagger",
           "class_name": "ImageTaggerPlugin"
-        }
-      ]
-    },
-    "core_tools/image_transformer.py": {
-      "sha256": "a7138c04a9564a9649e2c78ab2046a3a550c683f360b9bd0d38665758e109f27",
-      "plugins": [
-        {
-          "plugin_id": "img_trans",
-          "class_name": "ImageTransformerPlugin"
         }
       ]
     },
@@ -97,7 +88,7 @@
       ]
     },
     "system/command_center.py": {
-      "sha256": "a5cb3062950205641d0080078f10f2f27d6d40c04b82103f8bb7e6e00da0f38a",
+      "sha256": "71ec2e995913c3eac0d684626d952c78548a5bf0899573e5cd49501ab4a5d2db",
       "plugins": [
         {
           "plugin_id": "command_center",

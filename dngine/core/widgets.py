@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, Signal
+from PySide6.QtCore import QCoreApplication, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QComboBox,
     QLineEdit,
     QListWidget,
+    QMenu,
     QSizePolicy,
     QSlider,
     QTableWidget,
@@ -188,18 +189,38 @@ class PathLineEdit(QLineEdit):
 
 class DroppableListWidget(QListWidget):
     files_dropped = Signal(list)
+    remove_requested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None, *, mode: str = "any", allowed_extensions: list[str] | None = None):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self._mode = mode
         self.set_allowed_extensions(allowed_extensions)
+        self._remove_action_text = "Remove from list"
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
         
     def set_mode(self, mode: str) -> None:
         self._mode = mode
 
     def set_allowed_extensions(self, extensions: list[str] | None) -> None:
         self._allowed_extensions = {ext.lower().lstrip('.') for ext in extensions} if extensions else None
+
+    def set_remove_action_text(self, text: str) -> None:
+        self._remove_action_text = str(text or "").strip() or "Remove from list"
+
+    def _show_context_menu(self, position) -> None:
+        item = self.itemAt(position)
+        if item is None:
+            return
+        row = self.row(item)
+        if row < 0:
+            return
+        menu = QMenu(self)
+        remove_action = menu.addAction(self._remove_action_text)
+        chosen = menu.exec(self.viewport().mapToGlobal(position))
+        if chosen is remove_action:
+            self.remove_requested.emit(row)
 
     def _is_valid_url(self, url) -> bool:
         if not self._allowed_extensions:

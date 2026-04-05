@@ -34,4 +34,5 @@ celerybeat-schedule-wal
 # Ignore Sensetive Secrets
 .env
 .key
+tools/first_party_signing_private_key.pem
 startx.sh

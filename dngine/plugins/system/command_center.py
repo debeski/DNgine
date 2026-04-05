@@ -1435,18 +1435,59 @@ class CommandCenterPage(QWidget):
 
         def _on_result(payload: object) -> None:
             result = dict(payload) if isinstance(payload, dict) else {}
+            installed_name = str(result.get("display_name", package_name))
+            self.services.log(
+                self.tr(
+                    "loading.packages_reload",
+                    "Installing {package}: reloading plugins...",
+                    package=installed_name,
+                )
+            )
             self.services.reload_plugins()
             self._populate_packages_table()
             self._populate_plugin_table()
+            dependency_errors = [
+                str(item.get("plugin_name") or item.get("plugin_id") or "").strip()
+                for item in result.get("dependency_errors", [])
+                if isinstance(item, dict)
+            ]
+            dependency_errors = [name for name in dependency_errors if name]
+            if dependency_errors:
+                QMessageBox.warning(
+                    self,
+                    self.tr("packages.installed.partial_title", "Package installed with warnings"),
+                    self.tr(
+                        "packages.installed.partial_body",
+                        "Installed {package} with {count} plugin(s), but dependency setup still needs attention for: {failures}.",
+                        package=installed_name,
+                        count=str(len(result.get("plugin_ids", []))),
+                        failures=", ".join(dependency_errors),
+                    ),
+                )
+                self.services.logger.set_status(
+                    self.tr(
+                        "packages.installed.partial_status",
+                        "{package} installed with dependency warnings.",
+                        package=installed_name,
+                    )
+                )
+                return
             QMessageBox.information(
                 self,
                 self.tr("packages.installed.title", "Package installed"),
                 self.tr(
                     "packages.installed.body",
                     "Installed {package} with {count} plugin(s).",
-                    package=package_name,
+                    package=installed_name,
                     count=str(len(result.get("plugin_ids", []))),
                 ),
+            )
+            self.services.logger.set_status(
+                self.tr(
+                    "packages.installed.status",
+                    "{package} installed.",
+                    package=installed_name,
+                )
             )
 
         def _on_error(payload: object) -> None:
@@ -1460,7 +1501,7 @@ class CommandCenterPage(QWidget):
             self._populate_plugin_table()
 
         self.services.run_task(
-            lambda _context: self.services._install_catalog_package(package_id),
+            lambda context: self.services._install_catalog_package(package_id, context=context),
             on_result=_on_result,
             on_error=_on_error,
             on_finished=_on_finished,

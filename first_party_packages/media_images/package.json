@@ -3,11 +3,45 @@
   "display_name": "Media & Images",
   "display_name_ar": "الوسائط والصور",
   "signer": "dngine-first-party-dev",
-  "package_version": "0.9.0",
+  "package_version": "0.9.1",
   "category_plugins": [
     "tagger",
+    "color_picker",
     "img_trans",
-    "color_picker"
+    "smart_bg",
+    "smart_exif"
   ],
-  "plugins": []
+  "plugins": [
+    {
+      "plugin_id": "img_trans",
+      "entry": "plugins/image_transformer.py",
+      "files": [
+        "plugins/image_transformer.py",
+        "plugins/image_transformer.en.json",
+        "plugins/image_transformer.ar.json"
+      ]
+    },
+    {
+      "plugin_id": "smart_bg",
+      "entry": "plugins/smart_background_remover.py",
+      "dependency_manifest": "plugins/smart_background_remover.deps",
+      "files": [
+        "plugins/smart_background_remover.py",
+        "plugins/smart_background_remover.en.json",
+        "plugins/smart_background_remover.ar.json",
+        "plugins/smart_background_remover.deps"
+      ]
+    },
+    {
+      "plugin_id": "smart_exif",
+      "entry": "plugins/smart_exif_editor.py",
+      "dependency_manifest": "plugins/smart_exif_editor.deps",
+      "files": [
+        "plugins/smart_exif_editor.py",
+        "plugins/smart_exif_editor.en.json",
+        "plugins/smart_exif_editor.ar.json",
+        "plugins/smart_exif_editor.deps"
+      ]
+    }
+  ]
 }
