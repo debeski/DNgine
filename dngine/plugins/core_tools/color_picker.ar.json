@@ -10,6 +10,7 @@
   "status.canceled": "تم إلغاء وضع الالتقاط.",
   "pick": "التقاط من الشاشة",
   "copy.hex": "نسخ HEX",
+  "field.status": "الحالة",
   "field.hex": "HEX",
   "field.rgb": "RGB",
   "field.hsl": "HSL",

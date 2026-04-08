@@ -2,18 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, Qt, Signal
+from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCore import QCoreApplication, QMargins, Qt, Signal
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractScrollArea,
     QComboBox,
     QLineEdit,
     QListWidget,
-    QMenu,
     QSizePolicy,
     QSlider,
     QTableWidget,
+    QVBoxLayout,
+    QLabel,
+    QFrame,
     QWidget,
 )
+
+from dngine.core.context_menus import MenuActionSpec, attach_list_context_menu
 
 
 def width_breakpoint(width: int, *, compact_max: int = 900, medium_max: int = 1280) -> str:
@@ -197,8 +203,7 @@ class DroppableListWidget(QListWidget):
         self._mode = mode
         self.set_allowed_extensions(allowed_extensions)
         self._remove_action_text = "Remove from list"
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._show_context_menu)
+        attach_list_context_menu(self, self._context_menu_items)
         
     def set_mode(self, mode: str) -> None:
         self._mode = mode
@@ -209,18 +214,13 @@ class DroppableListWidget(QListWidget):
     def set_remove_action_text(self, text: str) -> None:
         self._remove_action_text = str(text or "").strip() or "Remove from list"
 
-    def _show_context_menu(self, position) -> None:
-        item = self.itemAt(position)
-        if item is None:
-            return
-        row = self.row(item)
-        if row < 0:
-            return
-        menu = QMenu(self)
-        remove_action = menu.addAction(self._remove_action_text)
-        chosen = menu.exec(self.viewport().mapToGlobal(position))
-        if chosen is remove_action:
-            self.remove_requested.emit(row)
+    def _context_menu_items(self, row: int) -> list[MenuActionSpec]:
+        return [
+            MenuActionSpec(
+                label=self._remove_action_text,
+                callback=lambda: self.remove_requested.emit(row),
+            )
+        ]
 
     def _is_valid_url(self, url) -> bool:
         if not self._allowed_extensions:
@@ -353,3 +353,78 @@ class DroppableTableWidget(QTableWidget):
             event.acceptProposedAction()
 
         super().dropEvent(event)
+
+
+class MetricDonutWidget(QFrame):
+    def __init__(self, title: str):
+        super().__init__()
+        self._title = title
+        self.title_label = QLabel(title)
+        self.value_label = QLabel("--")
+        self.caption_label = QLabel("")
+        self.chart_view = QChartView()
+        self.chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.chart_view.setFixedHeight(122)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(240)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(6)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.chart_view, 0, Qt.AlignmentFlag.AlignCenter)
+        self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.value_label)
+        self.caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.caption_label.setWordWrap(True)
+        layout.addWidget(self.caption_label)
+        layout.addStretch(1)
+
+    def set_title(self, title: str) -> None:
+        self._title = title
+        self.title_label.setText(title)
+
+    def set_metric(self, percent: float, caption: str, accent: str, remainder: str) -> None:
+        percent = max(0.0, min(100.0, float(percent)))
+        self.value_label.setText(f"{percent:.0f}%")
+        self.caption_label.setText(caption)
+        self.chart_view.setChart(self._build_chart(percent, accent, remainder))
+
+    def _build_chart(self, percent: float, accent: str, remainder: str) -> QChart:
+        series = QPieSeries()
+        series.setHoleSize(0.68)
+        used = series.append(self._title, percent)
+        free = series.append("Remaining", max(0.0, 100.0 - percent))
+        used.setColor(QColor(accent))
+        used.setBorderColor(QColor(accent))
+        free.setColor(QColor(remainder))
+        free.setBorderColor(QColor(remainder))
+        used.setLabelVisible(False)
+        free.setLabelVisible(False)
+
+        chart = QChart()
+        chart.addSeries(series)
+        chart.legend().hide()
+        chart.setBackgroundVisible(False)
+        chart.setMargins(QMargins(0, 0, 0, 0))
+        return chart
+
+
+class InfoCardWidget(QFrame):
+    def __init__(self, title: str):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(8)
+        self.title_label = QLabel(title)
+        self.body_label = QLabel("")
+        self.body_label.setWordWrap(True)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.body_label)
+        layout.addStretch(1)
+
+    def set_rows(self, rows: list[tuple[str, object]]) -> None:
+        if not rows:
+            self.body_label.setText("")
+            return
+        self.body_label.setText("\n".join(f"{label}: {value}" for label, value in rows))

@@ -53,8 +53,14 @@ def audit_file(path: Path) -> list[str]:
         findings.append(f"{relative}:{line_number_for_offset(content, match.start())}: stale self._pt reference still present")
     for match in re.finditer(r"\bself\._t\b", content):
         findings.append(f"{relative}:{line_number_for_offset(content, match.start())}: stale self._t reference still present")
+    for match in re.finditer(r"\bQMenu\s*\(", content):
+        findings.append(f"{relative}:{line_number_for_offset(content, match.start())}: direct QMenu usage still present")
 
     if "plugins" in relative.parts:
+        for match in re.finditer(r"\bregister_commands\s*\(", content):
+            findings.append(
+                f"{relative}:{line_number_for_offset(content, match.start())}: direct command registration still present"
+            )
         for match in re.finditer(r"\bplugin_text\s*\(", content):
             findings.append(
                 f"{relative}:{line_number_for_offset(content, match.start())}: direct plugin_text wrapper/use still present"

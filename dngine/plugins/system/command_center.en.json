@@ -1,8 +1,8 @@
 {
   "plugin.name": "Command Center",
-  "plugin.description": "Application settings for appearance, automation, shortcuts, and plugin management.",
+  "plugin.description": "Application settings for appearance, automation, shortcuts, and shell behavior.",
   "title": "Command Center",
-  "description": "Control appearance, language, startup behavior, tray behavior, shortcuts, and plugin management from one place.",
+  "description": "Control appearance, language, startup behavior, tray behavior, and shortcuts from one place.",
   "tab.general": "General",
   "tab.appearance": "Appearance",
   "tab.automation": "Automation",

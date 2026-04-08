@@ -24,15 +24,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dngine.core.plugin_api import QtPlugin, bind_tr
+from dngine.core.plugin_api import bind_tr
 from dngine.core.page_style import apply_page_chrome, apply_semantic_class, section_title_style
 from dngine.core.widgets import ScrollSafeComboBox, width_breakpoint
+from dngine.sdk import AdvancedPagePlugin
 
 
 QComboBox = ScrollSafeComboBox
 
 
-class WorkflowStudioPlugin(QtPlugin):
+class WorkflowStudioPlugin(AdvancedPagePlugin):
     plugin_id = "workflow_studio"
     name = "Workflows"
     description = "Build saved command workflows for app actions and reusable automation sequences."
@@ -49,7 +50,7 @@ class WorkflowStudioPlugin(QtPlugin):
         },
     }
 
-    def create_widget(self, services) -> QWidget:
+    def build_advanced_widget(self, services) -> QWidget:
         return WorkflowStudioPage(services)
 
 

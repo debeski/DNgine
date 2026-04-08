@@ -4,28 +4,12 @@ import platform
 from importlib import metadata
 
 import psutil
-from PySide6.QtCore import QSize, Qt, QUrl
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (
-    QFrame,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QStyle,
-    QTableWidget,
-    QTableWidgetItem,
-    QToolButton,
-    QVBoxLayout,
-    QWidget,
-)
 
 from dngine import APP_NAME, __version__
-from dngine.core.icon_registry import icon_from_name
-from dngine.core.page_style import apply_page_chrome, apply_semantic_class, muted_text_style, section_title_style
-from dngine.core.plugin_api import QtPlugin, bind_tr
+from dngine.sdk import DeclarativePlugin, InfoCard, Row, Table, bind_tr
 
 
-class AboutInfoPlugin(QtPlugin):
+class AboutInfoPlugin(DeclarativePlugin):
     plugin_id = "about_info"
     name = "About Info"
     description = "Project information, support links, runtime versions, and system details."
@@ -33,201 +17,74 @@ class AboutInfoPlugin(QtPlugin):
     standalone = True
     preferred_icon = "info"
 
-    def create_widget(self, services) -> QWidget:
-        return AboutInfoPage(services, self.plugin_id)
-
-
-class AboutInfoPage(QWidget):
-    def __init__(self, services, plugin_id: str):
-        super().__init__()
-        self.services = services
-        self.plugin_id = plugin_id
-        self.tr = bind_tr(services, plugin_id)
-        self._build_ui()
-        self._apply_texts()
-        self.services.i18n.language_changed.connect(self._apply_texts)
-        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _build_ui(self) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 28, 28, 28)
-        outer.setSpacing(18)
-
-        self.hero_card = self._make_card()
-        hero_layout = QVBoxLayout(self.hero_card)
-        hero_layout.setContentsMargins(20, 20, 20, 20)
-        hero_layout.setSpacing(10)
-
-        title_row = QHBoxLayout()
-        title_row.setSpacing(12)
-        self.title_label = QLabel()
-        title_row.addWidget(self.title_label, 1)
-
-        self.github_button = QToolButton()
-        apply_semantic_class(self.github_button, "inline_icon_button_class")
-        self.github_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self.github_button.setIcon(
-            icon_from_name("github", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView)
-        )
-        self.github_button.setAutoRaise(True)
-        self.github_button.setIconSize(QSize(16, 16))
-        self.github_button.setFixedSize(28, 28)
-        self.github_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl("https://github.com/debeski/micro-Toolkit"))
-        )
-        title_row.addWidget(self.github_button, 0, Qt.AlignmentFlag.AlignTop)
-        hero_layout.addLayout(title_row)
-
-        self.summary_label = QLabel()
-        self.summary_label.setWordWrap(True)
-        hero_layout.addWidget(self.summary_label)
-
-        self.identity_label = QLabel()
-        self.identity_label.setWordWrap(True)
-        hero_layout.addWidget(self.identity_label)
-        outer.addWidget(self.hero_card)
-
-        info_grid = QGridLayout()
-        info_grid.setHorizontalSpacing(14)
-        info_grid.setVerticalSpacing(14)
-
-        self.project_card = self._make_card()
-        project_layout = QVBoxLayout(self.project_card)
-        project_layout.setContentsMargins(18, 16, 18, 16)
-        project_layout.setSpacing(8)
-        self.project_heading = QLabel()
-        project_layout.addWidget(self.project_heading)
-        self.project_body = QLabel()
-        self.project_body.setWordWrap(True)
-        project_layout.addWidget(self.project_body)
-        info_grid.addWidget(self.project_card, 0, 0)
-
-        self.license_card = self._make_card()
-        license_layout = QVBoxLayout(self.license_card)
-        license_layout.setContentsMargins(18, 16, 18, 16)
-        license_layout.setSpacing(8)
-        self.license_heading = QLabel()
-        license_layout.addWidget(self.license_heading)
-        self.license_body = QLabel()
-        self.license_body.setWordWrap(True)
-        license_layout.addWidget(self.license_body)
-        info_grid.addWidget(self.license_card, 0, 1)
-
-        self.system_card = self._make_card()
-        system_layout = QVBoxLayout(self.system_card)
-        system_layout.setContentsMargins(18, 16, 18, 16)
-        system_layout.setSpacing(8)
-        self.system_heading = QLabel()
-        system_layout.addWidget(self.system_heading)
-        self.system_body = QLabel()
-        self.system_body.setWordWrap(True)
-        system_layout.addWidget(self.system_body)
-        info_grid.addWidget(self.system_card, 1, 0)
-
-        self.support_card = self._make_card()
-        support_layout = QVBoxLayout(self.support_card)
-        support_layout.setContentsMargins(18, 16, 18, 16)
-        support_layout.setSpacing(8)
-        self.support_heading = QLabel()
-        support_layout.addWidget(self.support_heading)
-        self.support_body = QLabel()
-        self.support_body.setWordWrap(True)
-        self.support_body.setOpenExternalLinks(True)
-        support_layout.addWidget(self.support_body)
-        info_grid.addWidget(self.support_card, 1, 1)
-
-        outer.addLayout(info_grid)
-
-        self.libs_card = self._make_card()
-        libs_layout = QVBoxLayout(self.libs_card)
-        libs_layout.setContentsMargins(18, 16, 18, 16)
-        libs_layout.setSpacing(10)
-        self.libs_heading = QLabel()
-        libs_layout.addWidget(self.libs_heading)
-
-        self.libs_table = QTableWidget(0, 2)
-        self.libs_table.setAlternatingRowColors(True)
-        self.libs_table.verticalHeader().setVisible(False)
-        self.libs_table.horizontalHeader().setStretchLastSection(True)
-        self.libs_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.libs_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        libs_layout.addWidget(self.libs_table, 1)
-        outer.addWidget(self.libs_card, 1)
-
-    def _apply_texts(self) -> None:
-        self._apply_theme_styles()
-        self.title_label.setText(self.tr("title", f"About {APP_NAME}"))
-        self.summary_label.setText(
-            self.tr(
-                "summary",
-                f"{APP_NAME} is a fast desktop companion for office and home use, built around a dynamic plugin engine, lazy loading, app-level services, multilingual UI support, workflow automation, and desktop-native integrations.",
-            )
-        )
-        self.identity_label.setText(
-            self.tr(
-                "identity",
-                "DeBeski (micro)\nLibyan Economic Information and Documentation Center\n2026",
-            )
-        )
-        self.project_heading.setText(self.tr("project.heading", "Project"))
-        self.project_body.setText(
-            self.tr(
-                "project.body",
-                "The app shell, plugin discovery, translations, workflows, elevated broker, hotkey helper, and runtime services are all part of the same underlying desktop codebase rather than stitched-on external layers.",
-            )
-        )
-        self.license_heading.setText(self.tr("license.heading", "License"))
-        self.license_body.setText(self.tr("license.body", "NON-COMMERCIAL LICENSE"))
-        self.system_heading.setText(self.tr("system.heading", "System"))
-        self.system_body.setText(self._system_summary())
-        self.support_heading.setText(self.tr("support.heading", "Support"))
-        self.support_body.setText(
-            self.tr(
-                "support.body",
-                'Report issues at: <a href="https://github.com/debeski/micro-Toolkit/issues">github.com/debeski/micro-Toolkit/issues</a>',
-            )
-        )
-        self.libs_heading.setText(self.tr("libs.heading", "Used Tools and Libraries"))
-        self.github_button.setToolTip(self.tr("github.tooltip", "Open GitHub repository"))
-        self._populate_libs()
-
-    def _handle_theme_change(self, _mode: str) -> None:
-        self._apply_texts()
-
-    def _apply_theme_styles(self) -> None:
-        palette = self.services.theme_manager.current_palette()
-        apply_page_chrome(
-            palette,
-            title_label=self.title_label,
-            cards=(
-                self.hero_card,
-                self.project_card,
-                self.license_card,
-                self.system_card,
-                self.support_card,
-                self.libs_card,
+    def declare_page(self, services):
+        tr = bind_tr(services, self.plugin_id)
+        return {
+            "overview_top": Row(
+                fields={
+                    "identity_card": InfoCard(
+                        title=tr("identity.heading", "Identity"),
+                        rows=(
+                            (tr("identity.name", "Project"), tr("identity.name_value", "DeBeski (micro)")),
+                            (
+                                tr("identity.org", "Organization"),
+                                tr("identity.org_value", "Libyan Economic Information and Documentation Center"),
+                            ),
+                            (tr("identity.year", "Year"), tr("identity.year_value", "2026")),
+                        ),
+                    ),
+                    "license_card": InfoCard(
+                        title=tr("license.heading", "License"),
+                        rows=((tr("license.label", "Type"), tr("license.body", "NON-COMMERCIAL LICENSE")),),
+                    ),
+                    "system_card": InfoCard(
+                        title=tr("system.heading", "System"),
+                        rows=self._system_rows(tr),
+                    ),
+                },
             ),
-            summary_label=self.summary_label,
-        )
-        self.identity_label.setStyleSheet(muted_text_style(palette))
-        for heading in (
-            self.project_heading,
-            self.license_heading,
-            self.system_heading,
-            self.support_heading,
-            self.libs_heading,
-        ):
-            heading.setStyleSheet(section_title_style(palette))
-        for body in (
-            self.project_body,
-            self.license_body,
-            self.system_body,
-            self.support_body,
-        ):
-            body.setStyleSheet(muted_text_style(palette))
+            "overview_bottom": Row(
+                fields={
+                    "project_card": InfoCard(
+                        title=tr("project.heading", "Project"),
+                        rows=(
+                            (
+                                tr("project.scope", "Scope"),
+                                tr(
+                                    "project.body",
+                                    "The app shell, plugin discovery, translations, workflows, elevated broker, hotkey helper, and runtime services are all part of the same underlying desktop codebase rather than stitched-on external layers.",
+                                ),
+                            ),
+                        ),
+                    ),
+                    "support_card": InfoCard(
+                        title=tr("support.heading", "Support"),
+                        rows=(
+                            (
+                                tr("support.repo", "Repository"),
+                                tr("support.repo_value", "github.com/debeski/micro-Toolkit"),
+                            ),
+                            (
+                                tr("support.issues", "Report issues"),
+                                tr("support.issues_value", "github.com/debeski/micro-Toolkit/issues"),
+                            ),
+                        ),
+                    ),
+                },
+            ),
+            "libraries": Table(
+                title=tr("libs.heading", "Used Tools and Libraries"),
+                headers=(
+                    tr("libs.name", "Component"),
+                    tr("libs.version", "Version"),
+                ),
+                rows=self._library_rows(),
+                stretch=1,
+            ),
+        }
 
-    def _populate_libs(self) -> None:
-        rows = [
+    def _library_rows(self) -> list[tuple[str, str]]:
+        return [
             (APP_NAME, __version__),
             ("Python", platform.python_version()),
             ("PySide6", self._version("PySide6")),
@@ -240,32 +97,21 @@ class AboutInfoPage(QWidget):
             ("pillow-heif", self._version("pillow-heif")),
             ("cryptography", self._version("cryptography")),
             ("python-dateutil", self._version("python-dateutil")),
-            ("qt-material", self._version("qt-material")),
             ("psutil", self._version("psutil")),
             ("keyboard", self._version("keyboard")),
             ("Bundled SVG icons", "Bootstrap Icons"),
         ]
-        self.libs_table.setRowCount(len(rows))
-        self.libs_table.setHorizontalHeaderLabels(
-            [
-                self.tr("libs.name", "Component"),
-                self.tr("libs.version", "Version"),
-            ]
-        )
-        for row, (name, version) in enumerate(rows):
-            self.libs_table.setItem(row, 0, QTableWidgetItem(name))
-            self.libs_table.setItem(row, 1, QTableWidgetItem(version))
 
-    def _system_summary(self) -> str:
-        total_memory = psutil.virtual_memory().total / (1024 ** 3)
-        cpu_name = platform.processor() or platform.machine() or self.tr("system.unknown", "Unknown")
-        return "\n".join(
-            [
-                f"{self.tr('system.os', 'Operating system')}: {platform.system()} {platform.release()}",
-                f"{self.tr('system.cpu', 'Processor')}: {cpu_name}",
-                f"{self.tr('system.memory', 'Memory')}: {total_memory:.1f} GB",
-                f"{self.tr('system.runtime', 'Runtime')}: Python {platform.python_version()}",
-            ]
+    def _system_rows(self, tr) -> tuple[tuple[str, str], ...]:
+        cpu = platform.processor() or tr("system.unknown_cpu", "Unknown CPU")
+        memory_gb = psutil.virtual_memory().total / (1024 ** 3)
+        return (
+            (tr("system.platform", "Platform"), platform.platform()),
+            (tr("system.cpu", "CPU"), cpu),
+            (
+                tr("system.memory", "Memory"),
+                tr("system.memory_value", "{memory:.1f} GB", memory=memory_gb),
+            ),
         )
 
     @staticmethod
@@ -274,8 +120,3 @@ class AboutInfoPage(QWidget):
             return metadata.version(package_name)
         except metadata.PackageNotFoundError:
             return "Not installed"
-        except Exception:
-            return "Unavailable"
-
-    def _make_card(self) -> QFrame:
-        return QFrame()

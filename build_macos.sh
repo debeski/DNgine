@@ -29,10 +29,10 @@ echo "Cleaning previous build artifacts..."
 rm -rf build dist dngine.egg-info
 
 echo "Building signed first-party packages..."
-python tools/build_first_party_packages.py
+python tools/build_fp_plugins.py
 
 echo "Generating builtin plugin manifest..."
-python tools/generate_builtin_plugin_manifest.py
+python tools/gen_builtin_manifest.py
 
 echo "Building macOS app bundle..."
 python -m PyInstaller --noconfirm --clean dngine.spec

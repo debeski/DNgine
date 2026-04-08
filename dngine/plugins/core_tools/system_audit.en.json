@@ -5,6 +5,8 @@
   "title": "System Overview",
   "description": "Monitor live resource usage, hardware profile, runtime details, and local system health from one place.",
   "refresh": "Refresh overview",
+  "command.run.title": "Run System Audit",
+  "command.run.description": "Collect local OS, CPU, memory, and disk details.",
   "timestamp": "Updated {time}",
   "cpu.title": "CPU",
   "cpu.caption": "{count} threads active",

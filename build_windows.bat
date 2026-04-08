@@ -33,10 +33,10 @@ if exist dist rmdir /s /q dist
 if exist dngine.egg-info rmdir /s /q dngine.egg-info
 
 echo Building signed first-party packages...
-python tools\build_first_party_packages.py
+python tools\build_fp_plugins.py
 
 echo Generating builtin plugin manifest...
-python tools\generate_builtin_plugin_manifest.py
+python tools\gen_builtin_manifest.py
 
 echo Building Windows onedir package...
 python -m PyInstaller --noconfirm --clean dngine.spec

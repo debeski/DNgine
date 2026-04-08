@@ -6,8 +6,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from first_party_packages.media_images.plugins.smart_background_remover import apply_background_removal, run_smart_background_task
-from first_party_packages.media_images.plugins.smart_exif_editor import run_smart_exif_task, undo_smart_exif_task
+from fp_plugins.media_images.plugins.smart_background_remover import apply_background_removal, run_smart_background_task
+from fp_plugins.media_images.plugins.smart_exif_editor import run_smart_exif_task, undo_smart_exif_task
 
 
 class _DummyContext:

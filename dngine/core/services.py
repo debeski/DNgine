@@ -687,6 +687,8 @@ class AppServices(QObject):
         register_builtin_tool_commands(self.command_registry, self)
 
         for spec in self.plugin_manager.discover_plugins():
+            if spec.contract_status in {"sdk_valid", "advanced_contract"}:
+                continue
             try:
                 plugin = self.plugin_manager.load_plugin(spec.plugin_id)
                 plugin.register_commands(self.command_registry, self)
@@ -726,6 +728,7 @@ class AppServices(QObject):
                     "enabled": spec.enabled,
                     "hidden": spec.hidden,
                     "source_type": spec.source_type,
+                    "contract_status": spec.contract_status,
                 }
                 for spec in self.plugin_manager.discover_plugins(include_disabled=True)
             ],
@@ -953,6 +956,7 @@ class AppServices(QObject):
             "last_error": spec.last_error,
             "failure_count": spec.failure_count,
             "source_type": spec.source_type,
+            "contract_status": spec.contract_status,
             "file_path": str(spec.file_path),
         }
 

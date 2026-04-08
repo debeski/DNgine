@@ -25,14 +25,12 @@ build/
 output/
 data/
 *.egg-info/
+project-r/
 
 # Ignore celery-related files
-celerybeat-schedule
-celerybeat-schedule-shm
-celerybeat-schedule-wal
+celerybeat*
 
 # Ignore Sensetive Secrets
 .env
 .key
 tools/first_party_signing_private_key.pem
-startx.sh

@@ -87,7 +87,7 @@ def execute_cli(args) -> int:
         specs = services.plugin_manager.discover_plugins()
         if args.plugins_command == "list":
             for spec in specs:
-                print(f"{spec.plugin_id}\t{spec.name}\t{spec.category or 'Standalone'}")
+                print(f"{spec.plugin_id}\t{spec.name}\t{spec.category or 'Standalone'}\t{spec.contract_status}")
             return 0
         spec = services.plugin_manager.get_spec(args.plugin_id)
         if spec is None:

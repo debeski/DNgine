@@ -23,7 +23,7 @@
         "folder_mapper",
         "sequence_auditor"
       ],
-      "download_url": "../dist/first_party_packages/data_analysis-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/data_analysis-0.9.1.zip"
     },
     {
       "package_id": "files_storage",
@@ -46,7 +46,7 @@
         "smart_org",
         "usage_analyzer"
       ],
-      "download_url": "../dist/first_party_packages/files_storage-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/files_storage-0.9.1.zip"
     },
     {
       "package_id": "media_images",
@@ -68,7 +68,7 @@
         "smart_bg",
         "smart_exif"
       ],
-      "download_url": "../dist/first_party_packages/media_images-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/media_images-0.9.1.zip"
     },
     {
       "package_id": "network_security",
@@ -88,7 +88,7 @@
         "privacy_shred",
         "sys_audit"
       ],
-      "download_url": "../dist/first_party_packages/network_security-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/network_security-0.9.1.zip"
     },
     {
       "package_id": "office_docs",
@@ -108,7 +108,7 @@
         "cross_joiner",
         "cleaner"
       ],
-      "download_url": "../dist/first_party_packages/office_docs-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/office_docs-0.9.1.zip"
     },
     {
       "package_id": "web_dev",
@@ -128,7 +128,7 @@
         "cred_scanner",
         "web_scraper"
       ],
-      "download_url": "../dist/first_party_packages/web_dev-0.9.1.zip"
+      "download_url": "../dist/fp_plugins/web_dev-0.9.1.zip"
     }
   ]
 }

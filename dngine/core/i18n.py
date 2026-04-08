@@ -4,9 +4,49 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtWidgets import QApplication, QBoxLayout, QFormLayout, QWidget
 
 
 RTL_LANGUAGES = {"ar", "fa", "he", "ur"}
+
+
+def _apply_layout_direction(layout, direction: Qt.LayoutDirection) -> None:
+    rtl = direction == Qt.LayoutDirection.RightToLeft
+    if isinstance(layout, QFormLayout):
+        horizontal_alignment = (
+            Qt.AlignmentFlag.AlignRight if rtl else Qt.AlignmentFlag.AlignLeft
+        )
+        layout.setLabelAlignment(horizontal_alignment | Qt.AlignmentFlag.AlignVCenter)
+        layout.setFormAlignment(horizontal_alignment | Qt.AlignmentFlag.AlignTop)
+    elif isinstance(layout, QBoxLayout):
+        current_direction = layout.direction()
+        if current_direction in {
+            QBoxLayout.Direction.LeftToRight,
+            QBoxLayout.Direction.RightToLeft,
+        }:
+            layout.setDirection(
+                QBoxLayout.Direction.RightToLeft if rtl else QBoxLayout.Direction.LeftToRight
+            )
+    layout.invalidate()
+    for index in range(layout.count()):
+        child_layout = layout.itemAt(index).layout()
+        if child_layout is not None:
+            _apply_layout_direction(child_layout, direction)
+    layout.activate()
+
+
+def apply_widget_direction(widget: QWidget | None, direction: Qt.LayoutDirection) -> Qt.LayoutDirection:
+    if widget is None:
+        return direction
+    widget.setLayoutDirection(direction)
+    layout = widget.layout()
+    if layout is not None:
+        _apply_layout_direction(layout, direction)
+    for child in widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+        apply_widget_direction(child, direction)
+    widget.updateGeometry()
+    widget.update()
+    return direction
 
 
 class TranslationManager(QObject):
@@ -35,6 +75,9 @@ class TranslationManager(QObject):
         if normalized not in self._catalogs:
             normalized = "en"
         self._current_language = normalized
+        app = QApplication.instance()
+        if app is not None:
+            app.setLayoutDirection(self.layout_direction())
         self.language_changed.emit(normalized)
         self.direction_changed.emit(self.layout_direction())
 

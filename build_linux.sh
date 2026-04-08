@@ -199,10 +199,10 @@ echo "Cleaning previous build artifacts..."
 rm -rf build dist dngine.egg-info
 
 echo "Building signed first-party packages..."
-python tools/build_first_party_packages.py
+python tools/build_fp_plugins.py
 
 echo "Generating builtin plugin manifest..."
-python tools/generate_builtin_plugin_manifest.py
+python tools/gen_builtin_manifest.py
 
 if [ "$SKIP_BINARY" -eq 0 ]; then
     echo "Building Linux onedir package..."

@@ -1,0 +1,71 @@
+# Changelog
+
+## 2.0.0a2 - 2026-04-07 (Project-R)
+
+- **CLI command contract**: Plugins declare `commands = [Command(...)]` alongside their `page` dict; engine collects them into a central `CommandRegistry` for workflows and headless access.
+- **Embedded Terminal**: Real shell (bash/zsh/cmd) via QProcess, Tokyo Night colour scheme, command history (Up/Down), ANSI stripping, Ctrl+C passthrough, auto-restart on exit.
+- **Activity Console**: Dark-themed log viewer capturing all `dngine.*` logger output with colour-coded levels (info/warn/error).
+- **Bottom Panel**: Terminal + Console in a tabbed, resizable split at the bottom of the shell, toggleable via `Ctrl+\`` shortcut.
+- **Workflows system plugin**: JSON-based workflow editor — create named sequences of registered commands, save/load/delete, sequential execution with per-step error reporting.
+- **Plugin Manager system plugin**: Table of all installed plugins with ID, name, category, description, command count, and detail panel showing declared CLI commands.
+- **Shortcuts system plugin**: Key-capture editor for keyboard shortcuts, bind/remove actions, immediate re-application, persisted to config.
+- **ShortcutManager**: Engine-level manager mapping key sequences → commands, with `QShortcut` application on the shell window.
+- **Engine commands**: `shell.dashboard`, `shell.settings`, `shell.toggle_panel`, `shell.set_theme`, `shell.toggle_dark`, `shell.set_language` registered at boot.
+- 8 system plugins total: Dashboard, Settings, Workflows, Plugin Manager, Shortcuts, About.
+
+## 2.0.0a1 - 2026-04-07 (Project-R)
+
+- **Clean-slate rebuild** of the DNgine plugin engine as `project-r/`.
+- Framework-first architecture: the SDK owns rendering, theming, translation, state, tasks, and lifecycle.
+- Plugins reduced to a simple dict mapping to predefined SDK components (`Text`, `Choice`, `Toggle`, `Numeric`, `Path`, `FileList`, `Table`, `Preview`, `Action`, `Output`, `Separator`, `Group`).
+- Pure Fusion style + palette-driven stylesheet — removed `qt-material` dependency entirely.
+- 5 accent colour families (Pink, Blue, Orange, Green, Red) with auto-computed dark/light variants.
+- Auto-layout renderer: consecutive inputs → settings cards, FileList+Preview → horizontal splitter, actions → button rows.
+- Per-page state machine with bidirectional widget↔state sync, `visible_when`/`enabled_when` rules, debounced preview updates.
+- Background task runner with `ctx.progress()`, `ctx.log()`, `ctx.cancelled` for worker functions.
+- Plugin discovery from `dngine/system/` (always loaded) + `plugins/` (external, file-drop install).
+- Sidecar translations for plugins (`{plugin_stem}.{lang}.json`), RTL/LTR auto-direction.
+- System plugins: Dashboard, Settings (colour picker, dark mode, language, font, output dir), About.
+- 29 automated tests covering components, renderer, runtime wiring, config, theme, i18n, plugin loading, and shell boot.
+- New `Plugin` and `SystemPlugin` base classes as the single public authoring surface.
+- CLI / headless command registration via `sdk/commands.py`.
+
+## 0.10.0 - 2026-04-05
+
+- Added the strict `dngine.sdk` groundwork for future plugin migration, including standard plugin bases, declarative page/task/command specs, shared context-menu helpers, and global translation/direction helpers.
+- Added plugin contract classification so legacy plugins are explicitly marked non-standard for audit and migration work.
+- Restructured documentation toward a root `README.md` entrypoint plus a dedicated `docs/` tree.
+
+## Previous History
+
+| Ver. | Date | Highlights |
+| --- | --- | --- |
+| 0.9.1 | 2026-04-04 | Moved `Image Transformer` out of the base app and into the signed `Media & Images` package, added install-on-demand opening for packaged first-party tools, and introduced the new signed `SMART Background Remover` and `SMART EXIF Editor` media plugins with batch-oriented UIs, dependency sidecars, and last-run EXIF undo support for in-place edits. |
+| 0.9.0 | 2026-04-01 | Reorganized the shipped plugin set into system pages plus a curated core 8 builtin tool set, moved all remaining first-party tools into signed installable packages ***(debloated)*** grouped by the new in-app categories (`Files & Storage`, `Office & Docs`, `Network & Security`, `Web Dev`, `Media & Images`, `Data & Analysis`), activated signer-verified `signed` plugins end to end with catalog/install/update/remove flows, and slimmed the base runtime dependencies so optional package deps are delivered through signed package sidecars instead of the base app. |
+| 0.8.8 | 2026-04-01 | Added the built-in `Web Scraper` data utility for public static HTML pages with CSS-selector extraction, in-app result tables, detail previews, right-click copy/open/export actions, and a new headless `tool.web_scraper.run` command. Added runtime dependencies `requests` and `beautifulsoup4` for scraping support and updated the setup metadata/docs accordingly. |
+| 0.8.7 | 2026-03-31 | Standardized global drag-and-drop path inputs across plugins utilizing native PathLineEdit and new DroppableListWidget / DroppableTableWidget. Fixed PySide6 QPixmap typing crash when clearing image previews. |
+| 0.8.6 | 2026-03-31 | Added the new `Code Factory` IT utility for folder-based code cleanup and safe-to-share preparation, with grouped toggles for cleanup, comment stripping, sanitization, and pack operations, a preview-before-apply workflow, detailed in-app result rows, drag-and-drop folder targeting, and single-run undo for the latest apply session. Added Global reload button in the header card for the current page. |
+| 0.8.5 | 2026-03-31 | Fixed the `Clip Snip` follow-up stability regressions: frozen builds now bundle plugin-only core helpers such as `clip_edit_dialog`, failed dynamic plugin imports no longer leave behind invalid half-loaded classes, and the macOS tray `Show Quick Panel` flow now reopens the quick clipboard panel reliably after it was dismissed. |
+| 0.8.4 | 2026-03-29 | Stability pass for clipboard workflows: removed the second clipboard app instance by folding `Clip-Monitor` fully into the main app, kept the quick panel under main-app ownership, added the new `Hash Checker` utility for `MD5` / `SHA-256` calculation and checksum verification, improved `Code Exploit Scanner` with broader secret and risky-file detection plus masked previews and review-report output, and expanded `Clip Snip` with edit, transform, merge, and queued-paste actions. |
+| 0.8.3 | 2026-03-29 | Simplified clipboard monitoring back into the main app: `X` now always hides DNgine to the tray, `Exit` from the tray is the only real app shutdown path with confirmation, the quick clipboard panel returned to main-app ownership, and `Clip-Monitor` no longer runs as a separate tray-owning app instance. |
+| 0.8.2 | 2026-03-29 | Fixed macOS dock showing a second app icon for the `Clip-Monitor` background process by suppressing the dock icon via `NSApplication` activation policy before the monitor's `QApplication` is created. |
+| 0.8.1 | 2026-03-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI and GitHub, and added built-in plugin manifest hash verification at runtime. |
+| 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar, Global Cairo font usage. |
+| 0.7.8 | 2026-03-27 | Finished the compact icon-button stabilization pass across the shell and plugins, separating lightweight auto-raise action icons from regular buttons so hover states no longer inflate rows, distort compact containers, or overflow shell utility bars and table action cells. |
+| 0.7.7 | 2026-03-27 | Reworked the compact shell chrome so the utility bar, system-icon rail, and header rhythm align more cleanly, while also tightening `Dev Lab` card layout and the overall top-shell proportions. |
+| 0.7.6 | 2026-03-27 | Added a broader global interaction layer for buttons, checkboxes, dropdowns, and related controls, including shared hover feedback, pointer behavior, and busy-cursor polish during loading and visual refresh work. |
+| 0.7.5 | 2026-03-27 | Compacted the shell sidebar with a slimmer rail, tighter section rhythm, smaller brand header treatment, and denser item spacing so navigation feels lighter without losing clarity. |
+| 0.7.4 | 2026-03-27 | Simplified `Command Center` so settings and shortcuts apply live, plugin row trust/enabled/hidden changes apply immediately, persistence regressions were corrected, and the page’s tooltip treatment was brought back onto the shared shell theme. |
+| 0.7.3 | 2026-03-27 | Fixed the next `Clip-Monitor` handoff regressions: the main app now yields tray ownership cleanly before the monitor takes over so it does not leave a dead duplicate tray icon behind, and monitor helper preference is now carried over explicitly instead of being treated like a fresh Linux elevation request during normal monitor enable/quit flows. |
+| 0.7.2 | 2026-03-27 | Fixed the first Clip-Monitor follow-up regressions: opening `Clip Snip` from the quick panel or tray now restores the app instead of only switching its hidden page, the app and monitor tray status rows render more reliably on Linux themes, the monitor tray menu no longer rebuilds itself while open, and the monitor regained Linux elevated-helper support for the global quick clipboard shortcut. |
+| 0.7.1 | 2026-03-27 | Rebuilt clipboard capture around a persistent `Clip-Monitor` companion so history no longer depends on opening the `Clip Snip` page or keeping the main app window alive. Added a new `Enable Clip-Monitor` setting in both `Clip Snip` and `Command Center`, kept a single tray surface with `App` / `Clip-Monitor` ON/OFF status rows, upgraded the quick clipboard panel with an `Open Clip Snip` action, and separated tray behavior from clipboard continuity so quitting the app can leave the monitor running when enabled. |
+| 0.7.0 | 2026-03-27 | Added custom plugin dependency sidecars (`.deps` / `.deps.txt`), plugin-specific dependency install and repair actions in `Settings -> Plugins`, combined plugin review and dependency status reporting, and prepared packaged builds to bundle pip support for dependency installs. Promoted the existing zip archive flow into the primary custom plugin package format, reframed the Plugins UI and README guidance around package-based sharing, and de-emphasized loose file and folder imports as development-oriented paths while preserving manual drop-in support. |
+| 0.6.5 | 2026-03-26 | Completed full Arabic localization and Western numeral enforcement for all IT Utilities plugins (`Code Exploit Scanner`, `Network Port Scanner`, `Privacy Data Shredder`, `System Audit`, and `Wi-Fi Profiles`). Migrated plugin-local translations to external JSON catalogs and implemented real-time UI refreshing via the `language_changed` signal. |
+| 0.6.4 | 2026-03-26 | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
+| 0.6.3 | 2026-03-26 | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
+| 0.6.2 | 2026-03-26 | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
+| 0.6.1 | 2026-03-26 | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
+| 0.6.0 | 2026-03-26 | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
+| 0.5.2 | 2026-03-25 | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
+| 0.5.1 | 2026-03-25 | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
+| 0.5.0 | 2026-03-25 | First full DNgine desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |

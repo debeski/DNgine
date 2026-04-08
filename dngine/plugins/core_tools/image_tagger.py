@@ -1,45 +1,38 @@
 from __future__ import annotations
-
 import os
 from pathlib import Path
-
 from PIL import Image
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QComboBox,
-    QFileDialog,
-    QFrame,
-    QFormLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPlainTextEdit,
-    QPushButton,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
+from dngine.sdk import (
+    Action,
+    Choice,
+    CommandSpec,
+    DeclarativePlugin,
+    FileList,
+    Output,
+    PayloadRequirement,
+    Preview,
+    SUPPORTED_IMAGE_FILTER,
+    Text,
+    _pt,
+    apply_tag,
+    before_task_run,
+    bind_tr,
+    build_runtime_payload,
+    handle_task_error,
+    handle_task_success,
+    pil_to_pixmap,
+    safe_output_extension,
 )
 
-from dngine.core.media_utils import SUPPORTED_IMAGE_FILTER, apply_tag, pil_to_pixmap, safe_output_extension
-from dngine.core.page_style import apply_page_chrome, label_surface_style, muted_text_style
-from dngine.core.plugin_api import QtPlugin, bind_tr, safe_tr
-from dngine.core.widgets import ScrollSafeComboBox, DroppableListWidget
-
-
-QComboBox = ScrollSafeComboBox
-
-def _pt(translate, key: str, default: str | None = None, **kwargs) -> str:
-    return safe_tr(translate, key, default, **kwargs)
-
+SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff", ".heic", ".heif")
 
 def run_image_tagger_task(
     context,
     files: list[str],
     output_dir: str,
     name: str,
-    date_mode: str,
-    custom_date: str,
+    date_mode: str = "taken",
+    custom_date: str = "",
     *,
     translate=None,
 ):
@@ -51,335 +44,156 @@ def run_image_tagger_task(
         image = Image.open(file_path)
         tagged = apply_tag(image, name, date_mode, custom_date)
         output_ext = safe_output_extension(file_path, None)
-        output_name = f"tagged_{Path(file_path).stem}{output_ext}"
-        output_path = os.path.join(output_dir, output_name)
+        output_path = os.path.join(output_dir, f"tagged_{Path(file_path).stem}{output_ext}")
         save_format = output_ext.lstrip(".").upper()
-        if save_format == "JPG":
-            save_format = "JPEG"
-        tagged.save(output_path, format=save_format)
+        tagged.save(output_path, format="JPEG" if save_format == "JPG" else save_format)
         output_files.append(output_path)
-
     context.log(_pt(translate, "log.done", "Batch tagging complete. Wrote {count} files.", count=len(output_files)))
-    return {
-        "count": len(output_files),
-        "output_dir": output_dir,
-        "files": output_files,
-    }
+    return {"count": len(output_files), "output_dir": output_dir, "files": output_files}
 
+def _preview_name(runtime) -> str:
+    return str(runtime.value("name", "") or "").strip() or _pt(runtime.tr, "preview.default_name", "PREVIEW")
 
-class ImageTaggerPlugin(QtPlugin):
+def build_image_tagger_preview(runtime):
+    path = runtime.selected_file("files")
+    if not path:
+        return {"pixmap": None, "text": _pt(runtime.tr, "preview.empty", "Select an image to preview.")}
+    with Image.open(path) as image:
+        tagged_preview = apply_tag(
+            image,
+            _preview_name(runtime),
+            str(runtime.value("date_mode", "taken") or "taken"),
+            str(runtime.value("custom_date", "") or "").strip(),
+        )
+    return {"pixmap": pil_to_pixmap(tagged_preview), "text": ""}
+
+def _build_payload(runtime):
+    return build_runtime_payload(
+        runtime,
+        required=(
+            PayloadRequirement(
+                "files",
+                lambda rt: rt.files("files"),
+                _pt(runtime.tr, "error.missing_files", "Add at least one image first."),
+                title=_pt(runtime.tr, "error.missing_input.title", "Missing Input"),
+            ),
+            PayloadRequirement(
+                "name",
+                lambda rt: str(rt.value("name", "") or "").strip(),
+                _pt(runtime.tr, "error.missing_name", "Enter a tag name first."),
+                title=_pt(runtime.tr, "error.missing_input.title", "Missing Input"),
+            ),
+        ),
+        choose_directory=("output_dir", _pt(runtime.tr, "dialog.select_output", "Select Output Folder")),
+        extras={
+            "date_mode": lambda rt: str(rt.value("date_mode", "taken") or "taken"),
+            "custom_date": lambda rt: str(rt.value("custom_date", "") or "").strip(),
+            "translate": lambda rt: rt.tr,
+        },
+    )
+
+class ImageTaggerPlugin(DeclarativePlugin):
     plugin_id = "tagger"
     name = "Image Tagger"
     description = "Batch-apply a smart glassmorphic date/name tag to images with live preview and cleaner controls."
     category = "Media & Images"
 
-    def create_widget(self, services) -> QWidget:
-        return ImageTaggerPage(services, self.plugin_id)
-
-
-class ImageTaggerPage(QWidget):
-    def __init__(self, services, plugin_id: str):
-        super().__init__()
-        self.services = services
-        self.plugin_id = plugin_id
-        self.tr = bind_tr(services, plugin_id)
-        self.files: list[str] = []
-        self._build_ui()
-        self._apply_texts()
-        self.services.i18n.language_changed.connect(self._handle_language_change)
-        self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str | None = None, **kwargs) -> str:
-        return _pt(self.tr, key, default, **kwargs)
-
-    def _build_ui(self) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 28, 28, 28)
-        outer.setSpacing(16)
-
-        self.title_label = QLabel()
-        outer.addWidget(self.title_label)
-
-        self.description_label = QLabel()
-        self.description_label.setWordWrap(True)
-        outer.addWidget(self.description_label)
-
-        self.form_card = QFrame()
-        form = QFormLayout(self.form_card)
-        form.setContentsMargins(16, 14, 16, 14)
-        form.setSpacing(10)
-
-        self.name_input = QLineEdit()
-        self.name_input.textChanged.connect(self._refresh_preview)
-        self.name_label = QLabel()
-        form.addRow(self.name_label, self.name_input)
-
-        self.date_mode = QComboBox()
-        self.date_mode.currentIndexChanged.connect(self._update_custom_date_visibility)
-        self.date_mode.currentTextChanged.connect(self._update_custom_date_visibility)
-        self.date_mode.currentIndexChanged.connect(self._refresh_preview)
-        self.date_mode.currentTextChanged.connect(self._refresh_preview)
-        self.date_mode_label = QLabel()
-        form.addRow(self.date_mode_label, self.date_mode)
-
-        self.custom_date_input = QLineEdit()
-        self.custom_date_input.textChanged.connect(self._refresh_preview)
-        self.custom_date_label = QLabel()
-        form.addRow(self.custom_date_label, self.custom_date_input)
-        outer.addWidget(self.form_card)
-
-        files_row = QHBoxLayout()
-        self.add_button = QPushButton()
-        self.add_button.clicked.connect(self._add_files)
-        self.clear_button = QPushButton()
-        self.clear_button.clicked.connect(self._clear_files)
-        files_row.addWidget(self.add_button)
-        files_row.addWidget(self.clear_button)
-        files_row.addStretch(1)
-        outer.addLayout(files_row)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
-
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(10)
-        self.file_list = DroppableListWidget(mode="file", allowed_extensions=[".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff"])
-        self.file_list.remove_requested.connect(self._remove_file_at)
-        self.file_list.currentRowChanged.connect(self._show_preview_for_row)
-        self.file_list.files_dropped.connect(self._handle_files_dropped)
-        left_layout.addWidget(self.file_list, 1)
-        splitter.addWidget(left_panel)
-
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(10)
-        self.preview_label = QLabel()
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumHeight(320)
-        right_layout.addWidget(self.preview_label, 1)
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
-
-        controls = QHBoxLayout()
-        self.run_button = QPushButton()
-        self.run_button.clicked.connect(self._run)
-        controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
-        outer.addLayout(controls)
-
-        self.summary_output = QPlainTextEdit()
-        self.summary_output.setReadOnly(True)
-        outer.addWidget(self.summary_output, 1)
-
-        self._update_custom_date_visibility()
-
-    def _update_custom_date_visibility(self) -> None:
-        is_custom = self._selected_date_mode() == "custom"
-        self.custom_date_input.setVisible(is_custom)
-        self.custom_date_label.setVisible(is_custom)
-
-    def _selected_date_mode(self) -> str:
-        return str(self.date_mode.currentData() or self.date_mode.currentText() or "taken")
-
-    def _set_combo_items(self, combo: QComboBox, items: list[tuple[str, str]]) -> None:
-        current_value = str(combo.currentData() or combo.currentText() or "")
-        combo.blockSignals(True)
-        combo.clear()
-        for value, label in items:
-            combo.addItem(label, value)
-        index = combo.findData(current_value)
-        if index < 0:
-            index = 0
-        combo.setCurrentIndex(index)
-        combo.blockSignals(False)
-
-    def _handle_language_change(self) -> None:
-        self._apply_texts()
-        self._refresh_file_list()
-        if self.file_list.currentRow() >= 0:
-            self._show_preview_for_row(self.file_list.currentRow())
-
-    def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "Image Tagger"))
-        self.description_label.setText(
-            self._pt(
-                "description",
-                "Apply a clean bottom-right tag using EXIF date, today's date, or a custom date while previewing the selected image.",
-            )
-        )
-        self.name_label.setText(self._pt("label.name", "Tag Name"))
-        self.date_mode_label.setText(self._pt("label.date_source", "Date Source"))
-        self.custom_date_label.setText(self._pt("label.custom_date", "Custom Date"))
-        self.name_input.setPlaceholderText(self._pt("placeholder.name", "Name or signature"))
-        self.custom_date_input.setPlaceholderText(self._pt("placeholder.date", "YYYY-MM-DD or any parseable date"))
-        self._set_combo_items(
-            self.date_mode,
-            [
-                ("taken", self._pt("date_mode.taken", "Taken date")),
-                ("today", self._pt("date_mode.today", "Today's date")),
-                ("custom", self._pt("date_mode.custom", "Custom date")),
-            ],
-        )
-        self.add_button.setText(self._pt("add", "Add Images"))
-        self.clear_button.setText(self._pt("clear", "Clear All"))
-        self.file_list.set_remove_action_text(self._pt("list.remove", "Remove from list"))
-        self.run_button.setText(self._pt("run", "Run Tagger"))
-        if not self.preview_label.pixmap():
-            self.preview_label.setText(self._pt("preview.empty", "Select an image to preview."))
-        self.summary_output.setPlaceholderText(self._pt("summary.placeholder", "Tagger summary will appear here."))
-        self._update_custom_date_visibility()
-        self._apply_theme_styles()
-
-    def _apply_theme_styles(self) -> None:
-        palette = self.services.theme_manager.current_palette()
-        apply_page_chrome(
-            palette,
-            title_label=self.title_label,
-            description_label=self.description_label,
-            cards=(self.form_card,),
-            title_size=26,
-            title_weight=700,
-            card_radius=14,
-        )
-        self.preview_label.setStyleSheet(label_surface_style(palette, radius=14) + muted_text_style(palette))
-
-    def _handle_theme_change(self, _mode: str) -> None:
-        self._apply_theme_styles()
-
-    def _add_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(
-            self,
-            self._pt("dialog.select_images", "Select Images"),
-            str(self.services.default_output_path()),
-            SUPPORTED_IMAGE_FILTER,
-        )
-        if not files:
-            return
-        for file_path in files:
-            if file_path not in self.files:
-                self.files.append(file_path)
-        self._refresh_file_list()
-        if self.files and self.file_list.currentRow() < 0:
-            self.file_list.setCurrentRow(0)
-
-    def _clear_files(self) -> None:
-        self.files = []
-        self.file_list.clear()
-        self.preview_label.clear()
-        self.preview_label.setText(self.tr("preview.empty", "Select an image to preview."))
-
-    def _refresh_file_list(self) -> None:
-        self.file_list.clear()
-        self.file_list.addItems([os.path.basename(p) for p in self.files])
-
-    def _handle_files_dropped(self, paths: list[str]) -> None:
-        for path in paths:
-            if path not in self.files:
-                self.files.append(path)
-        self._refresh_file_list()
-        if self.files and self.file_list.currentRow() < 0:
-            self.file_list.setCurrentRow(0)
-
-    def _remove_file_at(self, row: int) -> None:
-        if row < 0 or row >= len(self.files):
-            return
-        del self.files[row]
-        self._refresh_file_list()
-        if not self.files:
-            self.preview_label.clear()
-            self.preview_label.setText(self._pt("preview.empty", "Select an image to preview."))
-            return
-        self.file_list.setCurrentRow(min(row, len(self.files) - 1))
-
-    def _refresh_preview(self) -> None:
-        row = self.file_list.currentRow()
-        if row < 0 or row >= len(self.files):
-            return
-        self._show_preview_for_row(row)
-
-    def _show_preview_for_row(self, row: int) -> None:
-        if row < 0 or row >= len(self.files):
-            return
-        path = self.files[row]
-        try:
-            image = Image.open(path)
-            preview_name = self.name_input.text().strip() or self._pt("preview.default_name", "PREVIEW")
-            custom_date = self.custom_date_input.text().strip()
-            tagged_preview = apply_tag(image, preview_name, self._selected_date_mode(), custom_date)
-            self.preview_label.setPixmap(pil_to_pixmap(tagged_preview))
-            self.preview_label.setText("")
-        except Exception as exc:
-            self.preview_label.clear()
-            self.preview_label.setText(self._pt("preview.error", "Preview error: {message}", message=exc))
-
-    def _run(self) -> None:
-        if not self.files:
-            QMessageBox.warning(
-                self,
-                self._pt("error.missing_input.title", "Missing Input"),
-                self._pt("error.missing_files", "Add at least one image first."),
-            )
-            return
-        name = self.name_input.text().strip()
-        if not name:
-            QMessageBox.warning(
-                self,
-                self._pt("error.missing_input.title", "Missing Input"),
-                self._pt("error.missing_name", "Enter a tag name first."),
-            )
-            return
-        output_dir = QFileDialog.getExistingDirectory(
-            self,
-            self._pt("dialog.select_output", "Select Output Folder"),
-            str(self.services.default_output_path()),
-        )
-        if not output_dir:
-            return
-
-        date_mode = self._selected_date_mode()
-        custom_date = self.custom_date_input.text().strip()
-
-        self.run_button.setEnabled(False)
-        self.summary_output.clear()
-        self.services.run_task(
-            lambda context: run_image_tagger_task(
-                context,
-                list(self.files),
-                output_dir,
-                name,
-                date_mode,
-                custom_date,
-                translate=self.tr,
+    def declare_page(self, services):
+        tr = bind_tr(services, self.plugin_id)
+        return {
+            "name": Text(tr("label.name", "Tag Name"), placeholder=tr("placeholder.name", "Name or signature")),
+            "date_mode": Choice(
+                tr("label.date_source", "Date Source"),
+                options=(
+                    ("taken", tr("date_mode.taken", "Taken date")),
+                    ("today", tr("date_mode.today", "Today's date")),
+                    ("custom", tr("date_mode.custom", "Custom date")),
+                ),
+                default="taken",
             ),
-            on_result=self._handle_result,
-            on_error=self._handle_error,
-            on_finished=self._finish_run,
-        )
+            "custom_date": Text(
+                tr("label.custom_date", "Custom Date"),
+                placeholder=tr("placeholder.date", "YYYY-MM-DD or any parseable date"),
+                visible_when={"date_mode": "custom"},
+            ),
+            "files": FileList(
+                extensions=SUPPORTED_EXTENSIONS,
+                add_label=tr("add", "Add Images"),
+                clear_label=tr("clear", "Clear All"),
+                remove_label=tr("list.remove", "Remove from list"),
+                dialog_title=tr("dialog.select_images", "Select Images"),
+                file_filter=SUPPORTED_IMAGE_FILTER,
+            ),
+            "preview": Preview(
+                builder=build_image_tagger_preview,
+                empty_text=tr("preview.empty", "Select an image to preview."),
+                dependencies=("files", "files.__selected_row", "name", "date_mode", "custom_date"),
+            ),
+            "run": Action(
+                tr("run", "Run Tagger"),
+                worker=run_image_tagger_task,
+                payload_builder=_build_payload,
+                before_run=lambda runtime: before_task_run(
+                    runtime,
+                    _pt(runtime.tr, "summary.running", "Running image tagger..."),
+                ),
+                on_result=lambda runtime, payload: handle_task_success(
+                    runtime,
+                    payload,
+                    summary=_pt(runtime.tr, "summary.complete", "Image tagger complete."),
+                    output=lambda result: _pt(
+                        runtime.tr,
+                        "summary.done",
+                        "Batch tagging complete.\nFiles written: {count}\nOutput folder: {output_dir}",
+                        count=result["count"],
+                        output_dir=result["output_dir"],
+                    ),
+                    run_detail=lambda result: _pt(
+                        runtime.tr,
+                        "run.success",
+                        "Tagged {count} images",
+                        count=result["count"],
+                    ),
+                ),
+                on_error=lambda runtime, payload: handle_task_error(
+                    runtime,
+                    payload,
+                    summary=_pt(runtime.tr, "summary.failed", "Image tagger failed."),
+                    fallback=_pt(runtime.tr, "error.unknown", "Unknown image tagger error"),
+                    log_message=_pt(runtime.tr, "log.failed", "Image tagger failed."),
+                ),
+                running_text=tr("summary.running", "Running image tagger..."),
+                success_text=tr("summary.complete", "Image tagger complete."),
+                error_text=tr("summary.failed", "Image tagger failed."),
+            ),
+            "result": Output(
+                ready_text=tr("summary.ready", "Choose images and configure the tag to begin."),
+                placeholder=tr("summary.placeholder", "Tagger summary will appear here."),
+            ),
+        }
 
-    def _handle_result(self, payload: object) -> None:
-        result = dict(payload)
-        self.summary_output.setPlainText(
-            self._pt(
-                "summary.done",
-                "Batch tagging complete.\nFiles written: {count}\nOutput folder: {output_dir}",
-                count=result["count"],
-                output_dir=result["output_dir"],
-            )
+    def declare_command_specs(self, services):
+        tr = bind_tr(services, self.plugin_id)
+        return (
+            CommandSpec(
+                command_id="tool.tagger.run",
+                title=tr("command.run.title", "Tag Images"),
+                description=tr("command.run.description", "Batch apply date and name tags to images."),
+                worker=lambda context, files, output_dir, name, date_mode="taken", custom_date="": run_image_tagger_task(
+                    context,
+                    files,
+                    output_dir,
+                    name,
+                    date_mode,
+                    custom_date,
+                    translate=tr,
+                ),
+                input_adapter=lambda payload, svc=services: {
+                    "files": list(payload.get("files", [])),
+                    "output_dir": str(payload.get("output_dir") or svc.default_output_path()),
+                    "name": str(payload.get("name", "")),
+                    "date_mode": str(payload.get("date_mode", "taken")),
+                    "custom_date": str(payload.get("custom_date", "")),
+                },
+            ),
         )
-        self.services.record_run(
-            self.plugin_id,
-            "SUCCESS",
-            self._pt("run.success", "Tagged {count} images", count=result["count"]),
-        )
-
-    def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("error.unknown", "Unknown image tagger error")) if isinstance(payload, dict) else str(payload)
-        self.summary_output.setPlainText(message)
-        self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Image tagger failed."), "ERROR")
-
-    def _finish_run(self) -> None:
-        self.run_button.setEnabled(True)

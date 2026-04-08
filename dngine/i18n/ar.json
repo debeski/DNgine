@@ -107,5 +107,11 @@
   "workflow.warning.name": "أدخل اسماً لسلسلة العمل قبل الحفظ أو التشغيل.",
   "workflow.saved.title": "تم حفظ سلسلة العمل",
   "workflow.saved.body": "تم حفظ سلسلة العمل بنجاح.",
-  "workflow.run_failed.title": "فشل تشغيل السلسلة"
+  "workflow.run_failed.title": "فشل تشغيل السلسلة",
+  "plugins.status.with_contract": "{status} · {contract}",
+  "plugins.contract.detail": "العقد: {status}",
+  "plugins.contract.sdk_valid": "متوافق مع الـ SDK",
+  "plugins.contract.sdk_invalid": "غير صالح للـ SDK",
+  "plugins.contract.legacy_contract": "عقد قديم",
+  "plugins.contract.advanced_contract": "عقد متقدم"
 }

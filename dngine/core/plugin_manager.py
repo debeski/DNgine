@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dngine.core.builtin_manifest import load_builtin_manifest, sha256_file, verify_manifest_integrity
-from dngine.core.first_party_packages import category_bundles_for_plugin, category_label_for_plugin
+from dngine.core.fp_plugins import category_bundles_for_plugin, category_label_for_plugin
 from dngine.core.plugin_api import QtPlugin
 from dngine.core.plugin_signing import verify_installed_signed_package
 from dngine.core.plugin_security import scan_plugin_path
@@ -45,6 +45,7 @@ class PluginSpec:
     last_error: str = ""
     failure_count: int = 0
     locale_bundles: dict[str, dict[str, str]] = field(default_factory=dict)
+    contract_status: str = "legacy_contract"
 
     def localized_name(self, language: str) -> str:
         bundle = self.locale_bundles.get(language, {})
@@ -73,13 +74,65 @@ PLUGIN_DEFAULTS = {
 }
 
 
+SDK_STANDARD_BASES = {
+    "DeclarativePlugin",
+    "StandardPlugin",
+    "TaskPlugin",
+    "BatchFilePlugin",
+    "TableToolPlugin",
+    "HeadlessOnlyPlugin",
+}
+SDK_ADVANCED_BASES = {"AdvancedPagePlugin"}
+
+
+def _base_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _base_names(node: ast.ClassDef) -> set[str]:
+    return {_base_name(base) for base in node.bases if _base_name(base)}
+
+
 def _inherits_qt_plugin(node: ast.ClassDef) -> bool:
-    for base in node.bases:
-        if isinstance(base, ast.Name) and base.id == "QtPlugin":
-            return True
-        if isinstance(base, ast.Attribute) and base.attr == "QtPlugin":
-            return True
-    return False
+    bases = _base_names(node)
+    return bool(bases & ({"QtPlugin"} | SDK_STANDARD_BASES | SDK_ADVANCED_BASES))
+
+
+def _contract_status_for_node(node: ast.ClassDef) -> str:
+    bases = _base_names(node)
+    method_names = {
+        item.name
+        for item in node.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assigned_names = {
+        target.id
+        for item in node.body
+        if isinstance(item, ast.Assign)
+        for target in item.targets
+        if isinstance(target, ast.Name)
+    }
+    if bases & SDK_ADVANCED_BASES:
+        return "advanced_contract" if "build_advanced_widget" in method_names else "sdk_invalid"
+    if "HeadlessOnlyPlugin" in bases:
+        return "sdk_valid"
+    if "DeclarativePlugin" in bases:
+        if "create_widget" in method_names or "build_advanced_widget" in method_names:
+            return "sdk_invalid"
+        if "declare_page" in method_names or "page" in assigned_names:
+            return "sdk_valid"
+        return "sdk_invalid"
+    if bases & SDK_STANDARD_BASES:
+        if "declare_page_spec" not in method_names:
+            return "sdk_invalid"
+        if "create_widget" in method_names or "build_advanced_widget" in method_names:
+            return "sdk_invalid"
+        return "sdk_valid"
+    return "legacy_contract"
 
 
 def _extract_string(node: ast.AST) -> str | None:
@@ -301,6 +354,7 @@ def _parse_plugin_specs(
                 last_error=str(state.get("last_error", "")),
                 failure_count=int(state.get("failure_count", 0)),
                 locale_bundles=locale_bundles,
+                contract_status=_contract_status_for_node(node),
             )
         )
 

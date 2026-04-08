@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QSortFilterProxyModel, QTimer
-from PySide6.QtGui import QAction, QGuiApplication, QPixmap
+from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QBoxLayout,
@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -34,9 +33,10 @@ from PySide6.QtWidgets import (
 
 from dngine.core.clipboard_store import ClipboardEntry, ClipboardStore
 from dngine.core.clip_edit_dialog import ClipEditDialog
-from dngine.core.plugin_api import QtPlugin, bind_tr
+from dngine.core.plugin_api import bind_tr
 from dngine.core.page_style import apply_page_chrome, apply_semantic_class
 from dngine.core.widgets import ScrollSafeComboBox, adaptive_grid_columns, width_breakpoint
+from dngine.sdk import AdvancedPagePlugin, MenuActionSpec, show_context_menu
 
 
 QComboBox = ScrollSafeComboBox
@@ -233,14 +233,14 @@ class NameManagerDialog(QDialog):
             self._refresh()
 
 
-class ClipSnipPlugin(QtPlugin):
+class ClipSnipPlugin(AdvancedPagePlugin):
     plugin_id = "clip_snip"
     name = "Clip Snip"
     description = "A clipboard workspace with persistent history, pinned snippets, categories, and multi-format capture."
     category = ""
     standalone = True
 
-    def create_widget(self, services) -> QWidget:
+    def build_advanced_widget(self, services) -> QWidget:
         return ClipSnipPage(services, self.plugin_id)
 
 
@@ -862,79 +862,102 @@ class ClipSnipPage(QWidget):
         rows = self._selected_rows()
         if not rows:
             return
-        menu = QMenu(self)
+        items: list[MenuActionSpec] = []
 
         if len(rows) == 1:
             row = rows[0]
-            copy_action = QAction(self.tr("menu.copy", "Copy Selected"), self)
-            copy_action.triggered.connect(self._copy_selected)
-            menu.addAction(copy_action)
-
-            pin_action = QAction(
-                self.tr("menu.unpin", "Unpin Selected") if row.pinned else self.tr("menu.pin", "Pin Selected"), self
+            items.extend(
+                [
+                    MenuActionSpec(
+                        label=self.tr("menu.copy", "Copy Selected"),
+                        callback=self._copy_selected,
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.unpin", "Unpin Selected") if row.pinned else self.tr("menu.pin", "Pin Selected"),
+                        callback=self._toggle_pin_selected,
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.set_label", "Set Label"),
+                        callback=self._set_label_for_selected,
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.set_category", "Set Category"),
+                        callback=self._set_category_for_selected,
+                    ),
+                    MenuActionSpec(separator=True),
+                    MenuActionSpec(
+                        label=self.tr("menu.edit_copy", "Edit && Copy"),
+                        callback=lambda: self._edit_entry(row.entry_id),
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.transform", "Transform Text"),
+                        callback=lambda: self._transform_entry(row.entry_id),
+                    ),
+                ]
             )
-            pin_action.triggered.connect(self._toggle_pin_selected)
-            menu.addAction(pin_action)
-
-            label_action = QAction(self.tr("menu.set_label", "Set Label"), self)
-            label_action.triggered.connect(self._set_label_for_selected)
-            menu.addAction(label_action)
-
-            category_action = QAction(self.tr("menu.set_category", "Set Category"), self)
-            category_action.triggered.connect(self._set_category_for_selected)
-            menu.addAction(category_action)
-
-            menu.addSeparator()
-
-            edit_action = QAction(self.tr("menu.edit_copy", "Edit && Copy"), self)
-            edit_action.triggered.connect(lambda: self._edit_entry(row.entry_id))
-            menu.addAction(edit_action)
-
-            transform_action = QAction(self.tr("menu.transform", "Transform Text"), self)
-            transform_action.triggered.connect(lambda: self._transform_entry(row.entry_id))
-            menu.addAction(transform_action)
 
             if row.content_type == "image" and row.image_path:
-                img_trans_action = QAction(self.tr("menu.send_to_img_trans", "Send to Image Transformer"), self)
-                img_trans_action.triggered.connect(lambda: self._send_to_image_transformer([row]))
-                menu.addAction(img_trans_action)
+                items.append(
+                    MenuActionSpec(
+                        label=self.tr("menu.send_to_img_trans", "Send to Image Transformer"),
+                        callback=lambda: self._send_to_image_transformer([row]),
+                    )
+                )
 
-            menu.addSeparator()
-
-            delete_action = QAction(self.tr("menu.delete", "Delete Selected"), self)
-            delete_action.triggered.connect(self._delete_selected)
-            menu.addAction(delete_action)
+            items.extend(
+                [
+                    MenuActionSpec(separator=True),
+                    MenuActionSpec(
+                        label=self.tr("menu.delete", "Delete Selected"),
+                        callback=self._delete_selected,
+                    ),
+                ]
+            )
         else:
-            merge_action = QAction(self.tr("menu.merge_copy", "Merge && Copy"), self)
-            merge_action.triggered.connect(lambda: self._merge_and_copy(rows))
-            menu.addAction(merge_action)
-
-            queue_action = QAction(self.tr("menu.queue_paste", "Queue for Paste"), self)
-            queue_action.triggered.connect(lambda: self._queue_for_paste(rows))
-            menu.addAction(queue_action)
+            items.extend(
+                [
+                    MenuActionSpec(
+                        label=self.tr("menu.merge_copy", "Merge && Copy"),
+                        callback=lambda: self._merge_and_copy(rows),
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.queue_paste", "Queue for Paste"),
+                        callback=lambda: self._queue_for_paste(rows),
+                    ),
+                ]
+            )
 
             image_rows = [r for r in rows if r.content_type == "image" and r.image_path]
             if image_rows:
-                img_trans_action = QAction(self.tr("menu.send_to_img_trans", "Send to Image Transformer"), self)
-                img_trans_action.triggered.connect(lambda: self._send_to_image_transformer(image_rows))
-                menu.addAction(img_trans_action)
+                items.append(
+                    MenuActionSpec(
+                        label=self.tr("menu.send_to_img_trans", "Send to Image Transformer"),
+                        callback=lambda: self._send_to_image_transformer(image_rows),
+                    )
+                )
 
-            menu.addSeparator()
+            items.append(MenuActionSpec(separator=True))
 
             all_pinned = all(r.pinned for r in rows)
-            pin_bulk_action = QAction(
-                self.tr("menu.unpin_selected", "Unpin Selected") if all_pinned
-                else self.tr("menu.pin_selected", "Pin Selected"),
-                self,
+            items.extend(
+                [
+                    MenuActionSpec(
+                        label=self.tr("menu.unpin_selected", "Unpin Selected") if all_pinned
+                        else self.tr("menu.pin_selected", "Pin Selected"),
+                        callback=lambda: self._bulk_toggle_pin(rows, not all_pinned),
+                    ),
+                    MenuActionSpec(
+                        label=self.tr("menu.delete_selected", "Delete Selected"),
+                        callback=lambda: self._bulk_delete(rows),
+                    ),
+                ]
             )
-            pin_bulk_action.triggered.connect(lambda: self._bulk_toggle_pin(rows, not all_pinned))
-            menu.addAction(pin_bulk_action)
 
-            delete_bulk_action = QAction(self.tr("menu.delete_selected", "Delete Selected"), self)
-            delete_bulk_action.triggered.connect(lambda: self._bulk_delete(rows))
-            menu.addAction(delete_bulk_action)
-
-        menu.exec(self.table_view.viewport().mapToGlobal(position))
+        show_context_menu(
+            self,
+            self.table_view.viewport().mapToGlobal(position),
+            items,
+        )
 
     # ------------------------------------------------------------------
     # New actions

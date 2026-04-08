@@ -206,3 +206,21 @@ def safe_output_extension(original_path: str, requested_format: str | None = Non
     if extension == ".jpeg":
         return ".jpg"
     return extension
+
+
+def solid_color_preview(hex_color: str, default_hex: str = "#000000") -> dict[str, object]:
+    from PySide6.QtGui import QColor, QPainter, QPixmap
+    from PySide6.QtCore import Qt
+    
+    color = QColor(str(hex_color or default_hex))
+    if not color.isValid():
+        color = QColor(default_hex)
+    pixmap = QPixmap(240, 240)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    painter.drawRoundedRect(pixmap.rect().adjusted(10, 10, -10, -10), 28, 28)
+    painter.end()
+    return {"pixmap": pixmap, "text": ""}

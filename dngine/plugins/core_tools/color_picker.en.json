@@ -10,6 +10,7 @@
   "status.canceled": "Pick mode canceled.",
   "pick": "Pick from screen",
   "copy.hex": "Copy HEX",
+  "field.status": "Status",
   "field.hex": "HEX",
   "field.rgb": "RGB",
   "field.hsl": "HSL",

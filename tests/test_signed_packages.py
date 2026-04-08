@@ -18,7 +18,7 @@ from dngine.core.plugin_manager import PluginManager
 from dngine.core.plugin_packages import PluginPackageManager
 from dngine.core.plugin_signing import verify_installed_signed_package, verify_signed_archive
 from dngine.core.plugin_state import PluginStateManager
-from tools.build_first_party_packages import build_first_party_packages
+from tools.build_fp_plugins import build_fp_plugins
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +83,10 @@ class _StubServices:
         self._output_root.mkdir(parents=True, exist_ok=True)
         return self._output_root
 
+    def plugin_text(self, _plugin_id: str, _key: str, default: str | None = None, **kwargs) -> str:
+        template = default or ""
+        return template.format(**kwargs) if kwargs else template
+
     def record_run(self, _plugin_id: str, _status: str, _details: str = "") -> None:
         return None
 
@@ -138,7 +142,7 @@ class SignedPackageTests(unittest.TestCase):
 
     def _write_signing_materials(self, temp_root: Path) -> tuple[Path, Path]:
         private_key = Ed25519PrivateKey.generate()
-        private_key_path = temp_root / "first_party_signing_private_key.pem"
+        private_key_path = temp_root / "fp_plugins_private_key.pem"
         signers_path = temp_root / "first_party_signers.json"
         private_key_path.write_bytes(
             private_key.private_bytes(
@@ -170,10 +174,10 @@ class SignedPackageTests(unittest.TestCase):
         return private_key_path, signers_path
 
     def _build_packages(self, temp_root: Path, private_key_path: Path) -> tuple[dict[str, object], Path]:
-        output_dir = temp_root / "dist" / "first_party_packages"
+        output_dir = temp_root / "dist" / "fp_plugins"
         catalog_path = temp_root / "dngine" / "first_party_catalog.json"
         catalog_path.parent.mkdir(parents=True, exist_ok=True)
-        result = build_first_party_packages(
+        result = build_fp_plugins(
             output_dir=output_dir,
             catalog_path=catalog_path,
             private_key_path=private_key_path,

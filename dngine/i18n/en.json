@@ -106,5 +106,11 @@
   "workflow.warning.name": "Enter a workflow name before saving or running it.",
   "workflow.saved.title": "Workflow saved",
   "workflow.saved.body": "The workflow was saved successfully.",
-  "workflow.run_failed.title": "Workflow failed"
+  "workflow.run_failed.title": "Workflow failed",
+  "plugins.status.with_contract": "{status} · {contract}",
+  "plugins.contract.detail": "Contract: {status}",
+  "plugins.contract.sdk_valid": "SDK Valid",
+  "plugins.contract.sdk_invalid": "SDK Invalid",
+  "plugins.contract.legacy_contract": "Legacy Contract",
+  "plugins.contract.advanced_contract": "Advanced Contract"
 }

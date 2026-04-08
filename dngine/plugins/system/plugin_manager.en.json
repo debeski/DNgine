@@ -1,0 +1,6 @@
+{
+  "plugin.name": "Plugin Manager",
+  "plugin.description": "Install, inspect, trust, enable, hide, import, and export plugins and signed packages.",
+  "title": "Plugin Manager",
+  "description": "Install, inspect, trust, enable, hide, import, and export plugins and signed packages from one place."
+}

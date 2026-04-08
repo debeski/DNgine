@@ -27,8 +27,9 @@ from dngine.core.page_style import (
     section_title_style,
     tinted_card_style,
 )
-from dngine.core.plugin_api import QtPlugin, bind_tr
+from dngine.core.plugin_api import bind_tr
 from dngine.core.widgets import width_breakpoint
+from dngine.sdk import AdvancedPagePlugin
 
 
 def _mix_hex(first: str, second: str, ratio: float) -> str:
@@ -43,7 +44,7 @@ def _mix_hex(first: str, second: str, ratio: float) -> str:
     return QColor(red, green, blue).name()
 
 
-class DashHubPlugin(QtPlugin):
+class DashHubPlugin(AdvancedPagePlugin):
     plugin_id = "dash_hub"
     name = "Dash Hub"
     description = "A live dashboard for toolkit activity, health signals, and useful next actions."
@@ -59,7 +60,7 @@ class DashHubPlugin(QtPlugin):
         },
     }
 
-    def create_widget(self, services) -> QWidget:
+    def build_advanced_widget(self, services) -> QWidget:
         return DashHubPage(services, self.plugin_id)
 
 

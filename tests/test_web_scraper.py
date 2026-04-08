@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from dngine.core.commands import CommandRegistry
 from dngine.core.plugin_manager import _parse_plugin_specs
-from first_party_packages.web_dev.plugins.web_scraper import WebScraperPlugin, scrape_web_pages
+from fp_plugins.web_dev.plugins.web_scraper import WebScraperPlugin, scrape_web_pages
 
 
 PAGE_ONE = """
@@ -304,7 +304,7 @@ class WebScraperTests(unittest.TestCase):
 
     def test_plugin_spec_is_discoverable(self) -> None:
         project_root = Path(__file__).resolve().parents[1]
-        plugins_root = project_root / "first_party_packages" / "web_dev" / "plugins"
+        plugins_root = project_root / "fp_plugins" / "web_dev" / "plugins"
         plugin_file = plugins_root / "web_scraper.py"
         specs = _parse_plugin_specs(plugin_file, plugins_root, source_type="imported")
         self.assertEqual(len(specs), 1)

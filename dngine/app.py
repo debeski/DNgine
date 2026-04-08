@@ -40,8 +40,9 @@ from PySide6.QtWidgets import (
 )
 
 from dngine.core.confirm_dialog import confirm_action, confirm_action_with_option
-from dngine.core.first_party_packages import fallback_plugin_label, is_optional_first_party_plugin, package_group_for_plugin
+from dngine.core.fp_plugins import fallback_plugin_label, is_optional_first_party_plugin, package_group_for_plugin
 from dngine.core.icon_registry import icon_from_name
+from dngine.core.i18n import apply_widget_direction
 from dngine.core.page_style import apply_semantic_class
 from dngine.core.plugin_manager import PluginSpec
 from dngine.core.services import AppServices
@@ -1859,7 +1860,10 @@ class DNgineWindow(QMainWindow):
 
     def open_command_center_section(self, section_id: str) -> None:
         section = str(section_id or "general").strip().lower()
-        if section not in {"general", "plugins", "quick_access", "shortcuts"}:
+        if section == "plugins":
+            self.open_plugin_manager()
+            return
+        if section not in {"general", "quick_access", "shortcuts"}:
             section = "general"
         self._pending_command_center_section = section
         self.open_plugin("command_center")
@@ -1867,10 +1871,11 @@ class DNgineWindow(QMainWindow):
             settings_page = self._plugin_content_widget("command_center")
             if self._open_command_center_section_on_widget(settings_page, section):
                 self._pending_command_center_section = None
-        self._sync_system_toolbar_selection("plugin_manager" if section == "plugins" else "command_center")
+        self._sync_system_toolbar_selection("command_center")
 
     def open_plugin_manager(self) -> None:
-        self.open_command_center_section("plugins")
+        self.open_plugin("plugin_manager")
+        self._sync_system_toolbar_selection("plugin_manager")
 
     def open_command_center(self) -> None:
         self.open_command_center_section("general")
@@ -2268,16 +2273,23 @@ class DNgineWindow(QMainWindow):
         return self.style().standardIcon(pixmap)
 
     def _handle_language_change(self) -> None:
+        direction = self.services.i18n.layout_direction()
         self._apply_shell_texts()
         current_plugin_id = self.current_plugin_id
         self.refresh_sidebar()
-        self.search_results_popup.setLayoutDirection(self.services.i18n.layout_direction())
-        self.search_results_list.setLayoutDirection(self.services.i18n.layout_direction())
+        self.search_results_popup.setLayoutDirection(direction)
+        self.search_results_list.setLayoutDirection(direction)
         if self.search_input.text().strip():
             self._apply_filter(self.search_input.text())
         else:
             self._hide_search_results_popup()
         if current_plugin_id is not None and current_plugin_id in self.plugin_by_id:
+            page_index = self.page_indices.get(current_plugin_id)
+            if page_index is not None:
+                page = self.page_stack.widget(page_index)
+                widget = page.widget() if isinstance(page, QScrollArea) else page
+                if isinstance(widget, QWidget):
+                    apply_widget_direction(widget, direction)
             if current_plugin_id not in SYSTEM_TOOLBAR_PLUGIN_IDS:
                 self._select_plugin_item(current_plugin_id)
             spec = self.plugin_by_id.get(current_plugin_id)

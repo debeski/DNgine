@@ -3,7 +3,15 @@ from __future__ import annotations
 
 DASHBOARD_PLUGIN_ID = "dash_hub"
 INSPECTOR_PLUGIN_ID = "dev_lab"
-SYSTEM_TOOLBAR_PLUGIN_IDS = (DASHBOARD_PLUGIN_ID, "clip_snip", "workflow_studio", "command_center", "about_info", INSPECTOR_PLUGIN_ID)
+SYSTEM_TOOLBAR_PLUGIN_IDS = (
+    DASHBOARD_PLUGIN_ID,
+    "clip_snip",
+    "workflow_studio",
+    "plugin_manager",
+    "command_center",
+    "about_info",
+    INSPECTOR_PLUGIN_ID,
+)
 SYSTEM_COMPONENT_PLUGIN_IDS = frozenset(SYSTEM_TOOLBAR_PLUGIN_IDS)
 NON_SIDEBAR_PLUGIN_IDS = frozenset(SYSTEM_TOOLBAR_PLUGIN_IDS)
 UNSCROLLED_PLUGIN_IDS = frozenset()
